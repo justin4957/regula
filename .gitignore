@@ -1,5 +1,5 @@
-# Binaries
-regula
+# Binaries (built artifacts, not source directories)
+/regula
 *.exe
 *.exe~
 *.dll
