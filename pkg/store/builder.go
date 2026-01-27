@@ -24,6 +24,7 @@ type BuildStats struct {
 	DefinitionTriples int `json:"definition_triples"`
 	ReferenceTriples  int `json:"reference_triples"`
 	SemanticTriples   int `json:"semantic_triples"`
+	TermUsageTriples  int `json:"term_usage_triples"`
 	Articles          int `json:"articles"`
 	Chapters          int `json:"chapters"`
 	Sections          int `json:"sections"`
@@ -32,6 +33,7 @@ type BuildStats struct {
 	References        int `json:"references"`
 	Rights            int `json:"rights"`
 	Obligations       int `json:"obligations"`
+	TermUsages        int `json:"term_usages"`
 }
 
 // NewGraphBuilder creates a new GraphBuilder with the given store and base URI.
@@ -757,6 +759,109 @@ func (b *GraphBuilder) BuildWithSemantics(
 		for _, ann := range annotations {
 			b.buildSemanticAnnotation(ann, stats)
 		}
+	}
+
+	stats.TotalTriples = b.store.Count()
+	return stats, nil
+}
+
+// buildTermUsage builds triples for a term usage relationship.
+func (b *GraphBuilder) buildTermUsage(usage *extract.TermUsage, stats *BuildStats) {
+	articleURI := b.articleURI(usage.ArticleNum)
+	termURI := b.definitionURI(usage.NormalizedTerm)
+
+	// Link article to the term it uses
+	b.store.Add(articleURI, PropUsesTerm, termURI)
+
+	// Also add a more specific usage node for detailed tracking
+	usageURI := fmt.Sprintf("%s%s:TermUsage:%d:%s", b.baseURI, b.regID, usage.ArticleNum, b.normalizeTerm(usage.NormalizedTerm))
+	b.store.Add(usageURI, RDFType, "reg:TermUsage")
+	b.store.Add(usageURI, "reg:usesTermRef", termURI)
+	b.store.Add(usageURI, "reg:inArticle", articleURI)
+	b.store.Add(usageURI, "reg:matchCount", itoa(usage.Count))
+	b.store.Add(usageURI, PropPartOf, articleURI)
+
+	stats.TermUsageTriples += 6
+}
+
+// BuildComplete builds the complete relationship graph with all extractors.
+func (b *GraphBuilder) BuildComplete(
+	doc *extract.Document,
+	defExtractor *extract.DefinitionExtractor,
+	refExtractor *extract.ReferenceExtractor,
+	resolver *extract.ReferenceResolver,
+	semExtractor *extract.SemanticExtractor,
+) (*BuildStats, error) {
+	if doc == nil {
+		return nil, fmt.Errorf("document is nil")
+	}
+
+	stats := &BuildStats{}
+
+	// Determine regulation ID
+	b.regID = b.extractRegID(doc.Identifier)
+
+	// Build basic structure
+	b.buildRegulation(doc, stats)
+
+	if doc.Preamble != nil {
+		b.buildPreamble(doc.Preamble, stats)
+	}
+
+	for _, chapter := range doc.Chapters {
+		b.buildChapter(chapter, stats)
+	}
+
+	// Build definitions
+	var definitions []*extract.DefinedTerm
+	if defExtractor != nil {
+		definitions = defExtractor.ExtractDefinitions(doc)
+		for _, def := range definitions {
+			b.buildDefinedTerm(def, stats)
+		}
+	} else {
+		for _, def := range doc.Definitions {
+			b.buildDefinition(def, stats)
+		}
+	}
+
+	// Build references with resolution if resolver provided
+	if refExtractor != nil {
+		refs := refExtractor.ExtractFromDocument(doc)
+
+		if resolver != nil {
+			// Index the document for resolution
+			resolver.IndexDocument(doc)
+
+			// Resolve and build each reference
+			resolved := resolver.ResolveAll(refs)
+			for _, res := range resolved {
+				b.buildResolvedReference(res, stats)
+			}
+		} else {
+			// Fall back to basic reference building
+			for _, ref := range refs {
+				b.buildReference(ref, stats)
+			}
+		}
+	}
+
+	// Build semantic annotations
+	if semExtractor != nil {
+		annotations := semExtractor.ExtractFromDocument(doc)
+		for _, ann := range annotations {
+			b.buildSemanticAnnotation(ann, stats)
+		}
+	}
+
+	// Build term usage edges
+	if len(definitions) > 0 {
+		usageExtractor := extract.NewTermUsageExtractor(definitions)
+		usages := usageExtractor.ExtractFromDocument(doc)
+		for _, usage := range usages {
+			b.buildTermUsage(usage, stats)
+		}
+		stats.TermUsages = len(usages)
 	}
 
 	stats.TotalTriples = b.store.Count()
