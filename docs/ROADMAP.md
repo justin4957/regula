@@ -1,542 +1,567 @@
 # Regula Development Roadmap
 
-## Goal
-Build an MVP of an automated regulation mapper that can ingest dense regulatory text and produce an auditable, queryable, simulatable program.
+## MVP Definition
 
-## Timeline Overview
+**Goal**: A working system that can ingest a single regulation (GDPR), extract its structure, store it as a queryable graph, and answer basic compliance questions.
 
-| Phase | Focus | Duration | Status |
-|-------|-------|----------|--------|
-| 0 | Foundation & Setup | 1 week | In Progress |
-| 1 | Core Type System | 2 weeks | Pending |
-| 2 | RDF Store & Queries | 1 week | Pending |
-| 3 | Extraction Pipeline | 2 weeks | Pending |
-| 4 | Analysis & Impact | 1 week | Pending |
-| 5 | Simulation Engine | 1 week | Pending |
-| 6 | MVP Integration | 1 week | Pending |
+### MVP Success Criteria (All Must Pass)
 
-**Total to MVP: ~9 weeks**
+| Criteria | Validation Test |
+|----------|-----------------|
+| **Ingest** | `regula ingest gdpr.txt` completes without error, extracts ≥50 provisions |
+| **Query** | `regula query "SELECT ?p WHERE { ?p rdf:type reg:Provision }"` returns results in <100ms |
+| **Cross-refs** | ≥80% of internal cross-references correctly resolved (manual audit of 20 samples) |
+| **Impact** | `regula impact --provision "GDPR:Art17"` identifies Art 7, 12, 13, 14 as related |
+| **Simulate** | `regula simulate consent-withdrawal.yaml` produces compliance report with correct obligations |
+| **Audit** | Every query/simulation result includes traceable provenance to source provisions |
 
----
-
-## Phase 0: Foundation & Setup (Week 1)
-
-### Goals
-- [x] Create repository structure
-- [x] Define architecture
-- [x] Document roadmap
-- [ ] Set up Go module and dependencies
-- [ ] Port core type definitions from lex-sim
-- [ ] Establish testing infrastructure
-
-### Tasks
-
-#### 0.1 Repository Setup
+### MVP Demo Script
 ```bash
-regula/
-├── go.mod
-├── go.sum
-├── README.md
-├── Makefile
-├── .gitignore
-├── cmd/regula/main.go
-├── pkg/
-├── internal/
-├── examples/
-└── docs/
+# 1. Initialize project
+regula init gdpr-demo
+
+# 2. Ingest GDPR text
+regula ingest --source regulations/gdpr.txt
+
+# 3. Verify extraction
+regula query "SELECT (COUNT(?p) as ?count) WHERE { ?p rdf:type reg:Provision }"
+# Expected: ?count = 99 (GDPR has 99 articles)
+
+# 4. Query specific provisions
+regula query "SELECT ?p ?title WHERE { ?p reg:requires reg:Consent . ?p reg:title ?title }"
+# Expected: Articles 6, 7, 8, 9 (consent-related)
+
+# 5. Impact analysis
+regula impact --provision "GDPR:Art17" --depth 2
+# Expected: Shows Art 7(3), Art 19, Art 12 as directly affected
+
+# 6. Compliance simulation
+regula simulate --scenario examples/gdpr/consent-withdrawal.yaml
+# Expected: Compliance report with obligations, timelines, applicable provisions
+
+# 7. Audit trail
+regula audit --decision "simulation-001"
+# Expected: Full provenance chain from conclusion to source articles
 ```
 
-#### 0.2 Dependencies
-- `github.com/spf13/cobra` - CLI framework
-- `gopkg.in/yaml.v3` - Configuration
-- `github.com/stretchr/testify` - Testing
+---
 
-#### 0.3 Core Type Stubs
-Create interface definitions for all major types to establish contracts.
+## Milestone Overview
+
+| Milestone | Focus | Duration | Validation Gate |
+|-----------|-------|----------|-----------------|
+| M1 | Real Data Foundation | 2 weeks | Parse GDPR, extract 50+ provisions |
+| M2 | Queryable Graph | 2 weeks | SPARQL queries return correct results |
+| M3 | Extraction Pipeline | 2 weeks | 80% cross-reference accuracy |
+| M4 | Analysis Engine | 1 week | Impact analysis matches manual review |
+| M5 | Simulation MVP | 1 week | Scenario evaluation produces valid report |
+| M6 | Integration & Polish | 1 week | Full demo script passes |
+
+**Total: 9 weeks to MVP**
+
+---
+
+## Milestone 1: Real Data Foundation (Weeks 1-2)
+
+### Goal
+Get real GDPR text into the system and prove we can parse regulatory structure.
+
+### Validation Test
+```bash
+# Parse GDPR and output structure
+regula ingest --source testdata/gdpr.txt --output-structure
+
+# Expected output:
+# Parsed: 99 articles
+# Chapters: 11
+# Sections: 22
+# Definitions found: 26 (Article 4)
+# Cross-references detected: 150+
+```
+
+### Issues
+
+#### M1.1: Obtain and prepare GDPR test data
+- Download official GDPR text (EUR-Lex)
+- Clean and normalize formatting
+- Create `testdata/gdpr.txt` and `testdata/gdpr-expected.json`
+- **Acceptance**: File exists, UTF-8 encoded, sections clearly delimited
+
+#### M1.2: Implement basic document parser
+- Parse article/section boundaries
+- Extract article numbers and titles
+- Handle nested structure (Chapter > Section > Article > Paragraph)
+- **Acceptance**: `go test ./pkg/extract/... -run TestParseGDPR` passes
+
+#### M1.3: Implement provision extraction
+- Extract provision text content
+- Identify paragraph and point numbering
+- Preserve original formatting/numbering
+- **Acceptance**: Round-trip test (parse → serialize → parse) matches
+
+#### M1.4: Implement definition extraction
+- Parse "Article 4 - Definitions" structure
+- Extract term → definition mappings
+- Handle nested definitions
+- **Acceptance**: All 26 GDPR definitions extracted correctly
+
+#### M1.5: Implement cross-reference detection
+- Regex patterns for internal refs ("Article 17", "paragraph 1", etc.)
+- Detect external refs ("Directive 95/46/EC")
+- Store as unresolved references
+- **Acceptance**: ≥90% of references detected (manual audit of 50 samples)
 
 ### Deliverables
-- [ ] Compiling Go project with CLI skeleton
-- [ ] Type interface definitions
-- [ ] Initial test suite structure
+- [ ] `testdata/gdpr.txt` - Source text
+- [ ] `testdata/gdpr-expected.json` - Expected parse output
+- [ ] `pkg/extract/parser.go` - Document parser
+- [ ] `pkg/extract/parser_test.go` - Parser tests with GDPR
+- [ ] Parsing accuracy report
 
 ---
 
-## Phase 1: Core Type System (Weeks 2-3)
+## Milestone 2: Queryable Graph (Weeks 3-4)
 
-### Goals
-Port the lex-sim type system from Crisp to Go, focusing on:
-- Jurisdiction modeling
-- Provision structure
-- Authority chains
-- Temporal validity
+### Goal
+Store extracted provisions in RDF triple store, query with SPARQL.
 
-### Tasks
+### Validation Test
+```bash
+# Load GDPR into graph
+regula ingest --source testdata/gdpr.txt
 
-#### 1.1 Jurisdiction Types (`pkg/types/jurisdiction.go`)
+# Query provisions
+regula query "SELECT ?article ?title WHERE {
+  ?article rdf:type reg:Article .
+  ?article reg:title ?title
+} ORDER BY ?article LIMIT 10"
 
-**From Crisp:**
-```crisp
-type Country = Country {
-  name : String,
-  iso_code : String,
-  legal_system : LegalSystem
-}
+# Expected: First 10 GDPR articles with titles
+
+# Query definitions
+regula query "SELECT ?term ?definition WHERE {
+  ?term rdf:type reg:DefinedTerm .
+  ?term reg:definition ?definition
+}"
+
+# Expected: 26 definitions from Article 4
 ```
 
-**To Go:**
-```go
-type Country struct {
-    Name       string
-    ISOCode    string
-    LegalSystem LegalSystem
-}
+### Issues
 
-type LegalSystem int
-const (
-    CommonLaw LegalSystem = iota
-    CivilLaw
-    ReligiousLaw
-    CustomaryLaw
-    MixedLaw
-)
-```
+#### M2.1: Port triple store from GraphFS
+- Adapt `internal/store/store.go` from GraphFS
+- Implement SPO, POS, OSP indexes
+- Add thread-safe operations
+- **Acceptance**: Benchmark inserts 10,000 triples/sec
 
-**Types to port:**
-- [ ] `Country`, `State`, `Municipality`
-- [ ] `SupranationalBody` (EU, UN, WTO, etc.)
-- [ ] `Court`, `CourtLevel`, `CourtHierarchy`
-- [ ] `LegalSystem`, `LegalTradition`
+#### M2.2: Define regulation RDF schema
+- Create `pkg/store/schema.go` with predicates
+- Document ontology in `docs/ONTOLOGY.md`
+- Include: reg:Article, reg:Section, reg:DefinedTerm, reg:references, etc.
+- **Acceptance**: Schema covers all provision types
 
-#### 1.2 Provision Types (`pkg/types/provision.go`)
+#### M2.3: Implement graph builder
+- Convert extracted provisions to RDF triples
+- Generate URIs for provisions (e.g., `<GDPR:Art17>`)
+- Link definitions to their defining provisions
+- **Acceptance**: GDPR produces ~5000 triples
 
-**From Crisp:**
-```crisp
-type Provision = Provision {
-  id : ProvisionId,
-  number : ProvisionNumber,
-  title : Option String,
-  text : LegalText,
-  effective_date : Date,
-  jurisdiction : Jurisdiction
-}
-```
+#### M2.4: Port SPARQL parser from GraphFS
+- Basic SELECT queries
+- WHERE clause with triple patterns
+- FILTER expressions
+- **Acceptance**: All example queries in tests pass
 
-**To Go:**
-```go
-type Provision struct {
-    ID            ProvisionID
-    Number        ProvisionNumber
-    Title         *string
-    Text          LegalText
-    EffectiveDate time.Time
-    ExpiryDate    *time.Time
-    Jurisdiction  Jurisdiction
-    References    []CrossReference
-    Definitions   []DefinedTerm
-}
-```
+#### M2.5: Implement query executor
+- Query planning
+- Index selection
+- Result formatting (table, JSON, CSV)
+- **Acceptance**: Queries complete in <100ms for GDPR-sized graph
 
-**Types to port:**
-- [ ] `Provision`, `ProvisionID`, `ProvisionNumber`
-- [ ] `Section`, `Subsection`, `Paragraph`, `Clause`
-- [ ] `Act`, `Regulation`, `Directive`
-- [ ] `Schedule`, `Annex`, `Appendix`
-- [ ] `LegalText`, `CrossReference`, `DefinedTerm`
-- [ ] `Amendment`, `AmendmentRecord`
-- [ ] `Commencement`, `CommencementRule`
-- [ ] `Repeal`, `RepealRecord`, `SavingsClause`
-
-#### 1.3 Authority Types (`pkg/types/authority.go`)
-
-**From Crisp:**
-```crisp
-type Authority = Authority {
-  holder : AuthorityHolder,
-  action : AuthorityAction,
-  scope : AuthorityScope,
-  source : AuthoritySource,
-  delegation_chain : List DelegationRecord
-}
-```
-
-**To Go:**
-```go
-type Authority struct {
-    Holder          AuthorityHolder
-    Action          AuthorityAction
-    Scope           AuthorityScope
-    Source          AuthoritySource
-    DelegationChain []DelegationRecord
-    Restrictions    []Restriction
-}
-```
-
-**Types to port:**
-- [ ] `Authority`, `AuthorityHolder`, `AuthorityAction`
-- [ ] `AuthorityScope`, `AuthoritySource`
-- [ ] `DelegationRecord`, `DelegationChain`
-- [ ] `Restriction`, `ScopeLimitation`
-- [ ] `Institution`, `Office`, `Committee`
-
-#### 1.4 Temporal Types (`pkg/types/temporal.go`)
-
-**Types to port:**
-- [ ] `TemporalRange`, `ValidityPeriod`
-- [ ] `AsOf`, `Between`, `Current`, `Historical`
-- [ ] `SupersessionRecord`
-- [ ] `AmendmentTimeline`
-
-#### 1.5 Precedent Types (`pkg/types/precedent.go`)
-
-**Types to port:**
-- [ ] `Precedent`, `CaseDecision`
-- [ ] `Citation`, `CitationFormat`
-- [ ] `Holding`, `RatioDecidendi`, `ObiterDictum`
-- [ ] `PrecedentRelationship` (Follows, Distinguishes, Overrules, etc.)
-- [ ] `BindingForce` (Mandatory, Persuasive, Foreign)
-
-#### 1.6 Proof Types (`pkg/types/proof.go`)
-
-**From Crisp:**
-```crisp
-type Proof a where
-  BindsOn : Court -> Court -> Proof (BindsOn higher lower)
-  HasJurisdiction : Court -> Matter -> Proof (HasJurisdiction court matter)
-  IsGoodLaw : Citation -> Date -> Proof (IsGoodLaw citation date)
-```
-
-**To Go (using interfaces):**
-```go
-type Proof interface {
-    Verify() error
-    ProofType() string
-}
-
-type BindsOnProof struct {
-    HigherCourt Court
-    LowerCourt  Court
-}
-
-func (p BindsOnProof) Verify() error {
-    // Verify hierarchical relationship
-}
-```
+#### M2.6: Add query CLI command
+- `regula query <sparql>` execution
+- `regula query --template <name>` for common queries
+- Output format flags
+- **Acceptance**: Demo queries work end-to-end
 
 ### Deliverables
-- [ ] Complete type system in `pkg/types/`
-- [ ] Unit tests for all types
-- [ ] Type validation functions
-- [ ] JSON/YAML serialization
+- [ ] `pkg/store/triple.go` - Triple type
+- [ ] `pkg/store/store.go` - Triple store with indexes
+- [ ] `pkg/store/schema.go` - RDF schema
+- [ ] `pkg/query/parser.go` - SPARQL parser
+- [ ] `pkg/query/executor.go` - Query execution
+- [ ] `docs/ONTOLOGY.md` - Schema documentation
+- [ ] Query performance benchmarks
 
 ---
 
-## Phase 2: RDF Store & Queries (Week 4)
+## Milestone 3: Extraction Pipeline (Weeks 5-6)
 
-### Goals
-Port GraphFS triple store and adapt for regulation domain.
+### Goal
+Resolve cross-references and build complete provision graph with relationships.
 
-### Tasks
+### Validation Test
+```bash
+# Check cross-reference resolution
+regula validate --check references
 
-#### 2.1 Triple Store (`pkg/store/`)
-- [ ] Port `Triple` type from GraphFS
-- [ ] Port `TripleStore` with SPO/POS/OSP indexes
-- [ ] Add regulation-specific predicates
-- [ ] Thread-safe operations
+# Expected output:
+# Total references: 156
+# Resolved: 142 (91%)
+# Unresolved: 14 (9%)
+#   - External: 8 (Directive 95/46/EC, etc.)
+#   - Ambiguous: 6 (require manual review)
 
-#### 2.2 Regulation Predicates (`pkg/store/predicates.go`)
-```go
-const (
-    // Core relationships
-    RDFType        = "rdf:type"
-    RegAmends      = "reg:amends"
-    RegSupersedes  = "reg:supersedes"
-    RegReferences  = "reg:references"
-    RegDelegatesTo = "reg:delegatesTo"
+# Query resolved references
+regula query "SELECT ?from ?to WHERE {
+  ?from reg:references ?to .
+  ?to reg:title ?title
+} LIMIT 10"
 
-    // Temporal
-    RegValidFrom   = "reg:validFrom"
-    RegValidUntil  = "reg:validUntil"
-
-    // Authority
-    RegGrantsRight    = "reg:grantsRight"
-    RegImposesObligation = "reg:imposesObligation"
-    RegRequires       = "reg:requires"
-
-    // Hierarchy
-    RegPartOf      = "reg:partOf"
-    RegContains    = "reg:contains"
-)
+# Expected: Shows which articles reference which
 ```
 
-#### 2.3 SPARQL Engine (`pkg/query/sparql.go`)
-- [ ] Port SPARQL parser from GraphFS
-- [ ] SELECT, WHERE, FILTER support
-- [ ] Query optimization
-- [ ] Result streaming
+### Issues
 
-#### 2.4 Query Templates (`pkg/query/templates.go`)
-Pre-built queries for common regulation questions:
-```go
-var QueryTemplates = map[string]string{
-    "provisions-requiring-consent": `
-        SELECT ?provision ?text WHERE {
-            ?provision rdf:type reg:Provision .
-            ?provision reg:requires reg:Consent .
-            ?provision reg:text ?text .
-        }
-    `,
-    "amendments-since": `
-        SELECT ?amendment ?target ?date WHERE {
-            ?amendment rdf:type reg:Amendment .
-            ?amendment reg:amends ?target .
-            ?amendment reg:effectiveDate ?date .
-            FILTER(?date > "%s")
-        }
-    `,
-}
-```
+#### M3.1: Implement reference resolver
+- Parse reference patterns ("Article 17", "Article 17(1)(a)")
+- Resolve to provision URIs
+- Handle ambiguous references
+- **Acceptance**: ≥85% resolution rate on GDPR
+
+#### M3.2: Implement LLM-assisted extraction (optional)
+- Structured prompts for complex extractions
+- Validate LLM outputs against schema
+- Human review queue for uncertain results
+- **Acceptance**: LLM improves resolution by ≥5%
+
+#### M3.3: Build provision relationship graph
+- Add `reg:references` edges
+- Add `reg:definedIn` edges (terms to definitions)
+- Add `reg:partOf` edges (article to chapter)
+- **Acceptance**: Graph visualization shows connected structure
+
+#### M3.4: Implement obligation/right extraction
+- Identify obligation language ("shall", "must")
+- Identify right language ("right to", "entitled to")
+- Tag provisions with `reg:imposesObligation`, `reg:grantsRight`
+- **Acceptance**: Manual audit confirms ≥80% accuracy on 20 samples
+
+#### M3.5: Add validation command
+- `regula validate` checks graph consistency
+- Reports unresolved references
+- Reports orphan provisions
+- **Acceptance**: GDPR passes validation with documented exceptions
 
 ### Deliverables
-- [ ] Working triple store
-- [ ] SPARQL query engine
-- [ ] CLI `query` command
-- [ ] Query template library
+- [ ] `pkg/extract/resolver.go` - Reference resolution
+- [ ] `pkg/extract/semantic.go` - Obligation/right extraction
+- [ ] `pkg/extract/validate.go` - Validation checks
+- [ ] Reference resolution accuracy report
+- [ ] Graph visualization of GDPR structure
 
 ---
 
-## Phase 3: Extraction Pipeline (Weeks 5-6)
+## Milestone 4: Analysis Engine (Week 7)
 
-### Goals
-Build the pipeline to extract structured data from regulatory text.
+### Goal
+Analyze impact of regulatory changes and detect conflicts.
 
-### Tasks
+### Validation Test
+```bash
+# Impact analysis for Article 17 (Right to Erasure)
+regula impact --provision "GDPR:Art17" --depth 2
 
-#### 3.1 Document Parser (`pkg/extract/parser.go`)
-- [ ] PDF text extraction
-- [ ] XML/HTML parsing (legislative markup)
-- [ ] Plain text handling
-- [ ] Structure detection (sections, subsections)
+# Expected output:
+# Direct Impact (references Art 17):
+#   - GDPR:Art19 (Notification obligation)
+#   - GDPR:Art12 (Transparent communication)
+#
+# Provisions Art 17 references:
+#   - GDPR:Art6 (Lawfulness of processing)
+#   - GDPR:Art9 (Special categories)
+#   - GDPR:Art17(3) (Exceptions)
+#
+# Transitive Impact (depth 2):
+#   - GDPR:Art7 (Conditions for consent) via Art6
+#   - ...
+#
+# Risk Assessment: MEDIUM
+# Reason: Art 17 is referenced by 2 provisions, references 5 provisions
 
-#### 3.2 Semantic Extractor (`pkg/extract/semantic.go`)
-LLM-assisted extraction:
-```go
-type ExtractionPrompt struct {
-    SystemPrompt string
-    Document     string
-    Schema       string  // JSON schema for output
-}
-
-type ExtractedProvision struct {
-    Number      string
-    Title       string
-    Text        string
-    References  []string
-    Definitions []DefinedTermExtract
-    Obligations []string
-    Rights      []string
-}
+# Verify against manual analysis
+diff <(regula impact --provision "GDPR:Art17" --format json) testdata/art17-impact-expected.json
 ```
 
-**Extraction tasks:**
-- [ ] Provision boundaries
-- [ ] Cross-references (internal and external)
-- [ ] Defined terms
-- [ ] Obligations and rights
-- [ ] Authority delegations
-- [ ] Temporal conditions
+### Issues
 
-#### 3.3 Cross-Reference Resolver (`pkg/extract/resolver.go`)
-- [ ] Parse reference patterns ("Article 17", "Section 5(2)(a)")
-- [ ] Resolve internal references
-- [ ] Resolve external references (other acts)
-- [ ] Handle ambiguous references
+#### M4.1: Port graph algorithms from GraphFS
+- Topological sort
+- Transitive closure
+- Shortest path
+- Strongly connected components (circular refs)
+- **Acceptance**: All algorithms have tests with known graphs
 
-#### 3.4 Validation Layer (`pkg/extract/validate.go`)
-- [ ] Schema validation
-- [ ] Consistency checks
-- [ ] Human review queue for uncertain extractions
+#### M4.2: Implement impact analysis
+- Direct impact (provisions referencing target)
+- Reverse impact (provisions target references)
+- Transitive impact (configurable depth)
+- **Acceptance**: Art 17 analysis matches manual review
+
+#### M4.3: Implement risk assessment
+- Score based on reference count, centrality
+- Categorize: LOW, MEDIUM, HIGH, CRITICAL
+- Generate recommendations
+- **Acceptance**: Risk levels are defensible (documented rationale)
+
+#### M4.4: Add conflict detection
+- Detect contradictory obligations
+- Detect overlapping definitions
+- Report potential conflicts
+- **Acceptance**: No false positives on GDPR (internally consistent)
+
+#### M4.5: Add impact CLI command
+- `regula impact --provision <id>`
+- `regula impact --change amend|repeal|add`
+- Output formats: text, JSON, graph
+- **Acceptance**: Demo commands work correctly
 
 ### Deliverables
-- [ ] Working extraction pipeline
-- [ ] CLI `ingest` command
-- [ ] Extraction quality metrics
-- [ ] Human review interface (CLI)
+- [ ] `pkg/analysis/algorithms.go` - Graph algorithms
+- [ ] `pkg/analysis/impact.go` - Impact analysis
+- [ ] `pkg/analysis/conflict.go` - Conflict detection
+- [ ] `testdata/art17-impact-expected.json` - Expected results
+- [ ] Impact analysis validation report
 
 ---
 
-## Phase 4: Analysis & Impact (Week 7)
+## Milestone 5: Simulation MVP (Week 8)
 
-### Goals
-Build analysis tools for understanding regulatory relationships.
+### Goal
+Evaluate compliance scenarios against the regulation graph.
 
-### Tasks
+### Validation Test
+```bash
+# Run consent withdrawal scenario
+regula simulate --scenario examples/gdpr/consent-withdrawal.yaml
 
-#### 4.1 Dependency Graph (`pkg/analysis/dependency.go`)
-- [ ] Port graph algorithms from GraphFS
-- [ ] Topological sort of provisions
-- [ ] Strongly connected components (circular dependencies)
-- [ ] Shortest path between provisions
+# Expected output:
+# Scenario: Consent Withdrawal
+#
+# Applicable Provisions:
+#   - GDPR:Art7(3) - Right to withdraw consent [DIRECT]
+#   - GDPR:Art17(1) - Right to erasure [TRIGGERED]
+#   - GDPR:Art12(3) - Response timeline [PROCEDURAL]
+#
+# Obligations for DataController:
+#   - Cease processing: without undue delay
+#   - Acknowledge withdrawal: within 1 month
+#   - Complete erasure: within 1 month
+#
+# Compliance Status: REQUIRES_ACTION
+#
+# Timeline:
+#   Day 0: Withdrawal received
+#   Day 1-3: Cease processing (recommended)
+#   Day 30: Acknowledge withdrawal (required)
+#   Day 30: Complete erasure (required)
+#
+# Exceptions Available:
+#   - GDPR:Art17(3)(b) - Legal obligation to retain
+#   - GDPR:Art17(3)(e) - Legal claims
 
-#### 4.2 Impact Analysis (`pkg/analysis/impact.go`)
-```go
-type ImpactAnalysis struct {
-    TargetProvision ProvisionID
-    ChangeType      ChangeType  // Amend, Repeal, Add
-    DirectImpact    []ProvisionID
-    TransitiveImpact []ProvisionID
-    RiskLevel       RiskLevel
-    Recommendations []string
-}
+# Verify key obligations are identified
+regula simulate --scenario examples/gdpr/consent-withdrawal.yaml --format json | \
+  jq '.obligations[] | select(.type == "acknowledge_withdrawal")'
+# Expected: Shows 1 month deadline
 ```
 
-- [ ] Direct impact (provisions referencing target)
-- [ ] Transitive impact (provisions affected transitively)
-- [ ] Risk assessment
-- [ ] Conflict detection
+### Issues
 
-#### 4.3 Conflict Detection (`pkg/analysis/conflict.go`)
-- [ ] Contradictory provisions
-- [ ] Overlapping jurisdiction
-- [ ] Temporal conflicts
-- [ ] Authority conflicts
+#### M5.1: Define scenario schema
+- YAML schema for scenarios
+- Entities, triggers, expected outcomes
+- JSON Schema for validation
+- **Acceptance**: Schema documented, examples validate
+
+#### M5.2: Implement scenario parser
+- Parse scenario YAML
+- Validate against schema
+- Create internal scenario model
+- **Acceptance**: All example scenarios parse correctly
+
+#### M5.3: Implement provision matcher
+- Match scenario conditions to provisions
+- Score relevance (DIRECT, TRIGGERED, RELATED)
+- Handle entity type matching
+- **Acceptance**: Consent scenario finds Art 7, 17, 12
+
+#### M5.4: Implement obligation extractor
+- Extract obligations from matched provisions
+- Parse deadline language ("without undue delay", "within 1 month")
+- Identify responsible parties
+- **Acceptance**: Correct obligations for consent scenario
+
+#### M5.5: Implement compliance evaluator
+- Evaluate scenario against obligations
+- Generate compliance status
+- Identify gaps and risks
+- **Acceptance**: Produces actionable compliance report
+
+#### M5.6: Add simulate CLI command
+- `regula simulate --scenario <file>`
+- Output formats: report, JSON
+- Verbose mode for debugging
+- **Acceptance**: Demo scenario works end-to-end
 
 ### Deliverables
-- [ ] CLI `impact` command
-- [ ] CLI `conflicts` command
-- [ ] Impact visualization
+- [ ] `pkg/simulate/schema.go` - Scenario schema
+- [ ] `pkg/simulate/parser.go` - Scenario parser
+- [ ] `pkg/simulate/matcher.go` - Provision matching
+- [ ] `pkg/simulate/evaluator.go` - Compliance evaluation
+- [ ] `examples/gdpr/consent-withdrawal.yaml` - Test scenario
+- [ ] `examples/gdpr/data-breach.yaml` - Additional scenario
+- [ ] Simulation accuracy report
 
 ---
 
-## Phase 5: Simulation Engine (Week 8)
+## Milestone 6: Integration & Polish (Week 9)
 
-### Goals
-Enable "what-if" scenario evaluation against the regulation graph.
+### Goal
+Integrate all components, add audit trails, polish for demo.
 
-### Tasks
+### Validation Test
+```bash
+# Full end-to-end test script
+./scripts/e2e-test.sh
 
-#### 5.1 Scenario Definition (`pkg/simulate/scenario.go`)
-```yaml
-# consent-withdrawal.yaml
-scenario: "User withdraws consent for data processing"
-given:
-  - entity: "DataSubject"
-    action: "withdraws"
-    object: "Consent"
-    context:
-      data_type: "personal_data"
-      processing_purpose: "marketing"
-when:
-  - trigger: "consent_withdrawal_received"
-then:
-  - check: "obligations_triggered"
-  - check: "rights_applicable"
-  - check: "timeline_requirements"
+# Expected: All steps pass
+# Step 1: Init project ✓
+# Step 2: Ingest GDPR ✓
+# Step 3: Validate extraction ✓
+# Step 4: Run queries ✓
+# Step 5: Impact analysis ✓
+# Step 6: Simulate scenario ✓
+# Step 7: Generate audit trail ✓
+#
+# MVP Validation: PASSED
+# - Provisions extracted: 99/99 ✓
+# - Query response time: 45ms ✓
+# - Cross-ref accuracy: 91% ✓
+# - Impact analysis: matches expected ✓
+# - Simulation: correct obligations ✓
+# - Audit trail: complete ✓
 ```
 
-#### 5.2 Scenario Evaluator (`pkg/simulate/evaluate.go`)
-- [ ] Parse scenario YAML
-- [ ] Query regulation graph for applicable provisions
-- [ ] Evaluate conditions
-- [ ] Generate compliance report
+### Issues
 
-#### 5.3 Compliance Report (`pkg/simulate/report.go`)
-```go
-type ComplianceReport struct {
-    Scenario        string
-    ApplicableProvisions []ProvisionID
-    Obligations     []Obligation
-    Rights          []Right
-    Deadlines       []Deadline
-    RiskAreas       []RiskArea
-    Recommendations []string
-}
-```
+#### M6.1: Implement audit trail
+- Track all operations with timestamps
+- Link results to source provisions
+- Store reasoning chain
+- **Acceptance**: Every result traceable to source
 
-### Deliverables
-- [ ] CLI `simulate` command
-- [ ] Scenario YAML schema
-- [ ] Compliance report generation
+#### M6.2: Implement provenance queries
+- `regula audit --decision <id>`
+- Show full reasoning chain
+- Export as JSON, W3C PROV format
+- **Acceptance**: Audit command produces complete trail
 
----
+#### M6.3: Create E2E test script
+- Automated test of full demo flow
+- Validate all MVP criteria
+- Report pass/fail for each criterion
+- **Acceptance**: Script runs in CI
 
-## Phase 6: MVP Integration (Week 9)
+#### M6.4: Performance optimization
+- Profile slow operations
+- Add caching where needed
+- Target: full GDPR in <5s, queries <100ms
+- **Acceptance**: Performance targets met
 
-### Goals
-Integrate all components into a working end-to-end system.
+#### M6.5: Documentation and examples
+- User guide with examples
+- API documentation
+- Troubleshooting guide
+- **Acceptance**: New user can run demo in 10 minutes
 
-### Tasks
-
-#### 6.1 CLI Polish
-- [ ] Consistent command structure
-- [ ] Help documentation
-- [ ] Shell completions
-- [ ] Output formatting (table, JSON, YAML)
-
-#### 6.2 End-to-End Example
-Create complete GDPR example:
-- [ ] Ingest GDPR text
-- [ ] Extract provisions
-- [ ] Build regulation graph
-- [ ] Run example queries
-- [ ] Perform impact analysis
-- [ ] Simulate consent withdrawal scenario
-
-#### 6.3 Documentation
-- [ ] User guide
-- [ ] API documentation
-- [ ] Example walkthroughs
-
-#### 6.4 Testing
-- [ ] Integration tests
-- [ ] Example validation
-- [ ] Performance benchmarks
+#### M6.6: MVP demo recording
+- Record demo video
+- Write blog post / README update
+- Prepare for feedback collection
+- **Acceptance**: Demo materials ready
 
 ### Deliverables
-- [ ] Working MVP with GDPR example
-- [ ] Complete documentation
-- [ ] Demo video/walkthrough
+- [ ] `pkg/audit/trail.go` - Audit trail
+- [ ] `pkg/audit/provenance.go` - Provenance queries
+- [ ] `scripts/e2e-test.sh` - E2E test script
+- [ ] `docs/USER_GUIDE.md` - User documentation
+- [ ] Performance benchmark report
+- [ ] Demo video / materials
 
 ---
 
-## Post-MVP Phases
+## Testing Strategy
 
-### Phase 7: Web Interface
-- GraphQL API
-- Web dashboard
-- Interactive graph explorer
+### Test Levels
 
-### Phase 8: Advanced Extraction
-- Multi-document correlation
-- Historical version tracking
-- Amendment auto-detection
+| Level | Purpose | Location | Run Frequency |
+|-------|---------|----------|---------------|
+| Unit | Test individual functions | `*_test.go` | Every commit |
+| Integration | Test component interactions | `test/integration/` | Every PR |
+| E2E | Test full workflows | `scripts/e2e-test.sh` | Daily / Release |
+| Validation | Test against real data | `test/validation/` | Weekly |
 
-### Phase 9: Multi-Jurisdiction
-- Cross-jurisdictional mapping
-- Equivalence detection
-- Conflict resolution
+### Test Data
 
-### Phase 10: Production Hardening
-- Database persistence (PostgreSQL)
-- Authentication/authorization
-- Audit logging
-- Performance optimization
+| Data | Source | Purpose |
+|------|--------|---------|
+| `testdata/gdpr.txt` | EUR-Lex | Primary test regulation |
+| `testdata/gdpr-expected.json` | Manual | Expected parse output |
+| `testdata/art17-impact-expected.json` | Manual | Expected impact analysis |
+| `examples/gdpr/*.yaml` | Manual | Simulation scenarios |
+
+### Validation Audits
+
+Each milestone includes manual validation:
+
+1. **Extraction Audit** (M1, M3)
+   - Sample 20 random provisions
+   - Verify text matches source
+   - Check cross-references resolved correctly
+
+2. **Query Audit** (M2)
+   - Run 10 standard queries
+   - Verify results manually
+   - Check performance metrics
+
+3. **Impact Audit** (M4)
+   - Select 5 key provisions
+   - Manual impact analysis
+   - Compare to tool output
+
+4. **Simulation Audit** (M5)
+   - Run 3 scenarios
+   - Expert review of obligations
+   - Verify completeness
 
 ---
 
-## Success Metrics
+## Issue Labels
 
-### MVP Success Criteria
-1. **Ingest**: Can process a 100+ page regulation PDF
-2. **Extract**: >80% accuracy on provision boundary detection
-3. **Query**: <100ms response for typical SPARQL queries
-4. **Impact**: Correctly identifies direct and transitive dependencies
-5. **Simulate**: Evaluates basic compliance scenarios
-
-### Quality Gates
-- All tests passing
-- Documentation complete
-- Example workflows functional
-- Code review completed
+| Label | Description |
+|-------|-------------|
+| `milestone:M1` - `milestone:M6` | Milestone association |
+| `type:feature` | New functionality |
+| `type:bug` | Bug fix |
+| `type:test` | Test coverage |
+| `type:docs` | Documentation |
+| `priority:critical` | Blocks milestone |
+| `priority:high` | Important for milestone |
+| `priority:medium` | Should have |
+| `priority:low` | Nice to have |
+| `validation:required` | Needs manual validation |
 
 ---
 
@@ -544,31 +569,21 @@ Create complete GDPR example:
 
 | Risk | Mitigation |
 |------|------------|
-| LLM extraction accuracy | Human review queue, iterative prompts |
-| Complex reference patterns | Extensible parser, pattern library |
-| Performance at scale | Efficient indexes, query optimization |
-| Legal domain complexity | Start with single regulation (GDPR) |
+| LLM extraction unreliable | Rule-based fallback, human review queue |
+| GDPR text formatting varies | Multiple parser strategies, normalization |
+| Cross-reference patterns complex | Iterative pattern library, manual override |
+| Performance issues at scale | Early profiling, index optimization |
+| Scope creep | Strict MVP criteria, defer enhancements |
 
 ---
 
-## Getting Started
+## Post-MVP Roadmap
 
-```bash
-# Clone repository
-git clone <repo-url>
-cd regula
+After MVP validation, potential enhancements:
 
-# Install dependencies
-go mod download
-
-# Run tests
-go test ./...
-
-# Build CLI
-go build -o regula ./cmd/regula
-
-# Try example
-./regula init gdpr-example
-./regula ingest --source examples/gdpr/gdpr.txt
-./regula query "SELECT ?p WHERE { ?p rdf:type reg:Provision }"
-```
+1. **Multi-regulation support** - Ingest additional regulations
+2. **Web interface** - GraphQL API, dashboard
+3. **Historical analysis** - Track regulation changes over time
+4. **Team features** - Multi-user, review workflows
+5. **Integration APIs** - Connect to compliance systems
+6. **Advanced simulation** - Multi-party scenarios, conflict resolution
