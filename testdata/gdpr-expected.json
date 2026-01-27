@@ -1,0 +1,559 @@
+{
+  "regulation": "GDPR",
+  "full_name": "Regulation (EU) 2016/679",
+  "statistics": {
+    "chapters": 11,
+    "articles": 99,
+    "definitions": 26
+  },
+  "chapters": [
+    {
+      "number": "I",
+      "title": "General provisions"
+    },
+    {
+      "number": "II",
+      "title": "Principles"
+    },
+    {
+      "number": "III",
+      "title": "Rights of the data subject"
+    },
+    {
+      "number": "IV",
+      "title": "Controller and processor"
+    },
+    {
+      "number": "V",
+      "title": "Transfers of personal data to third countries or international"
+    },
+    {
+      "number": "VI",
+      "title": "Independent supervisory authorities"
+    },
+    {
+      "number": "VII",
+      "title": "Cooperation and consistency"
+    },
+    {
+      "number": "VIII",
+      "title": "Remedies, liability and penalties"
+    },
+    {
+      "number": "IX",
+      "title": "Provisions relating to specific processing situations"
+    },
+    {
+      "number": "X",
+      "title": "Delegated acts and implementing acts"
+    },
+    {
+      "number": "XI",
+      "title": "Final provisions"
+    }
+  ],
+  "articles": [
+    {
+      "number": 1,
+      "title": "Subject-matter and objectives"
+    },
+    {
+      "number": 2,
+      "title": "Material scope"
+    },
+    {
+      "number": 3,
+      "title": "Territorial scope"
+    },
+    {
+      "number": 4,
+      "title": "Definitions"
+    },
+    {
+      "number": 5,
+      "title": "Principles relating to processing of personal data"
+    },
+    {
+      "number": 6,
+      "title": "Lawfulness of processing"
+    },
+    {
+      "number": 7,
+      "title": "Conditions for consent"
+    },
+    {
+      "number": 8,
+      "title": "Conditions applicable to child's consent in relation to information"
+    },
+    {
+      "number": 9,
+      "title": "Processing of special categories of personal data"
+    },
+    {
+      "number": 10,
+      "title": "Processing of personal data relating to criminal convictions and"
+    },
+    {
+      "number": 11,
+      "title": "Processing which does not require identification"
+    },
+    {
+      "number": 12,
+      "title": "Transparent information, communication and modalities for the exercise"
+    },
+    {
+      "number": 13,
+      "title": "Information to be provided where personal data are collected from the"
+    },
+    {
+      "number": 14,
+      "title": "Information to be provided where personal data have not been obtained"
+    },
+    {
+      "number": 15,
+      "title": "Right of access by the data subject"
+    },
+    {
+      "number": 16,
+      "title": "Right to rectification"
+    },
+    {
+      "number": 17,
+      "title": "Right to erasure (‘right to be forgotten’)"
+    },
+    {
+      "number": 18,
+      "title": "Right to restriction of processing"
+    },
+    {
+      "number": 19,
+      "title": "Notification obligation regarding rectification or erasure of personal"
+    },
+    {
+      "number": 20,
+      "title": "Right to data portability"
+    },
+    {
+      "number": 21,
+      "title": "Right to object"
+    },
+    {
+      "number": 22,
+      "title": "Automated individual decision-making, including profiling"
+    },
+    {
+      "number": 23,
+      "title": "Restrictions"
+    },
+    {
+      "number": 24,
+      "title": "Responsibility of the controller"
+    },
+    {
+      "number": 25,
+      "title": "Data protection by design and by default"
+    },
+    {
+      "number": 26,
+      "title": "Joint controllers"
+    },
+    {
+      "number": 27,
+      "title": "Representatives of controllers or processors not established in the"
+    },
+    {
+      "number": 28,
+      "title": "Processor"
+    },
+    {
+      "number": 29,
+      "title": "Processing under the authority of the controller or processor"
+    },
+    {
+      "number": 30,
+      "title": "Records of processing activities"
+    },
+    {
+      "number": 31,
+      "title": "Cooperation with the supervisory authority"
+    },
+    {
+      "number": 32,
+      "title": "Security of processing"
+    },
+    {
+      "number": 33,
+      "title": "Notification of a personal data breach to the supervisory authority"
+    },
+    {
+      "number": 34,
+      "title": "Communication of a personal data breach to the data subject"
+    },
+    {
+      "number": 35,
+      "title": "Data protection impact assessment"
+    },
+    {
+      "number": 36,
+      "title": "Prior consultation"
+    },
+    {
+      "number": 37,
+      "title": "Designation of the data protection officer"
+    },
+    {
+      "number": 38,
+      "title": "Position of the data protection officer"
+    },
+    {
+      "number": 39,
+      "title": "Tasks of the data protection officer"
+    },
+    {
+      "number": 40,
+      "title": "Codes of conduct"
+    },
+    {
+      "number": 41,
+      "title": "Monitoring of approved codes of conduct"
+    },
+    {
+      "number": 42,
+      "title": "Certification"
+    },
+    {
+      "number": 43,
+      "title": "Certification bodies"
+    },
+    {
+      "number": 44,
+      "title": "General principle for transfers"
+    },
+    {
+      "number": 45,
+      "title": "Transfers on the basis of an adequacy decision"
+    },
+    {
+      "number": 46,
+      "title": "Transfers subject to appropriate safeguards"
+    },
+    {
+      "number": 47,
+      "title": "Binding corporate rules"
+    },
+    {
+      "number": 48,
+      "title": "Transfers or disclosures not authorised by Union law"
+    },
+    {
+      "number": 49,
+      "title": "Derogations for specific situations"
+    },
+    {
+      "number": 50,
+      "title": "International cooperation for the protection of personal data"
+    },
+    {
+      "number": 51,
+      "title": "Supervisory authority"
+    },
+    {
+      "number": 52,
+      "title": "Independence"
+    },
+    {
+      "number": 53,
+      "title": "General conditions for the members of the supervisory authority"
+    },
+    {
+      "number": 54,
+      "title": "Rules on the establishment of the supervisory authority"
+    },
+    {
+      "number": 55,
+      "title": "Competence"
+    },
+    {
+      "number": 56,
+      "title": "Competence of the lead supervisory authority"
+    },
+    {
+      "number": 57,
+      "title": "Tasks"
+    },
+    {
+      "number": 58,
+      "title": "Powers"
+    },
+    {
+      "number": 59,
+      "title": "Activity reports"
+    },
+    {
+      "number": 60,
+      "title": "Cooperation between the lead supervisory authority and the other"
+    },
+    {
+      "number": 61,
+      "title": "Mutual assistance"
+    },
+    {
+      "number": 62,
+      "title": "Joint operations of supervisory authorities"
+    },
+    {
+      "number": 63,
+      "title": "Consistency mechanism"
+    },
+    {
+      "number": 64,
+      "title": "Opinion of the Board"
+    },
+    {
+      "number": 65,
+      "title": "Dispute resolution by the Board"
+    },
+    {
+      "number": 66,
+      "title": "Urgency procedure"
+    },
+    {
+      "number": 67,
+      "title": "Exchange of information"
+    },
+    {
+      "number": 68,
+      "title": "European Data Protection Board"
+    },
+    {
+      "number": 69,
+      "title": "Independence"
+    },
+    {
+      "number": 70,
+      "title": "Tasks of the Board"
+    },
+    {
+      "number": 71,
+      "title": "Reports"
+    },
+    {
+      "number": 72,
+      "title": "Procedure"
+    },
+    {
+      "number": 73,
+      "title": "Chair"
+    },
+    {
+      "number": 74,
+      "title": "Tasks of the Chair"
+    },
+    {
+      "number": 75,
+      "title": "Secretariat"
+    },
+    {
+      "number": 76,
+      "title": "Confidentiality"
+    },
+    {
+      "number": 77,
+      "title": "Right to lodge a complaint with a supervisory authority"
+    },
+    {
+      "number": 78,
+      "title": "Right to an effective judicial remedy against a supervisory authority"
+    },
+    {
+      "number": 79,
+      "title": "Right to an effective judicial remedy against a controller or processor"
+    },
+    {
+      "number": 80,
+      "title": "Representation of data subjects"
+    },
+    {
+      "number": 81,
+      "title": "Suspension of proceedings"
+    },
+    {
+      "number": 82,
+      "title": "Right to compensation and liability"
+    },
+    {
+      "number": 83,
+      "title": "General conditions for imposing administrative fines"
+    },
+    {
+      "number": 84,
+      "title": "Penalties"
+    },
+    {
+      "number": 85,
+      "title": "Processing and freedom of expression and information"
+    },
+    {
+      "number": 86,
+      "title": "Processing and public access to official documents"
+    },
+    {
+      "number": 87,
+      "title": "Processing of the national identification number"
+    },
+    {
+      "number": 88,
+      "title": "Processing in the context of employment"
+    },
+    {
+      "number": 89,
+      "title": "Safeguards and derogations relating to processing for archiving purposes"
+    },
+    {
+      "number": 90,
+      "title": "Obligations of secrecy"
+    },
+    {
+      "number": 91,
+      "title": "Existing data protection rules of churches and religious associations"
+    },
+    {
+      "number": 92,
+      "title": "Exercise of the delegation"
+    },
+    {
+      "number": 93,
+      "title": "Committee procedure"
+    },
+    {
+      "number": 94,
+      "title": "Repeal of Directive 95/46/EC"
+    },
+    {
+      "number": 95,
+      "title": "Relationship with Directive 2002/58/EC"
+    },
+    {
+      "number": 96,
+      "title": "Relationship with previously concluded Agreements"
+    },
+    {
+      "number": 97,
+      "title": "Commission reports"
+    },
+    {
+      "number": 98,
+      "title": "Review of other Union legal acts on data protection"
+    },
+    {
+      "number": 99,
+      "title": "Entry into force and application"
+    }
+  ],
+  "definitions": [
+    {
+      "number": 1,
+      "term": "personal data"
+    },
+    {
+      "number": 2,
+      "term": "processing"
+    },
+    {
+      "number": 3,
+      "term": "restriction of processing"
+    },
+    {
+      "number": 4,
+      "term": "profiling"
+    },
+    {
+      "number": 5,
+      "term": "pseudonymisation"
+    },
+    {
+      "number": 6,
+      "term": "filing system"
+    },
+    {
+      "number": 7,
+      "term": "controller"
+    },
+    {
+      "number": 8,
+      "term": "processor"
+    },
+    {
+      "number": 9,
+      "term": "recipient"
+    },
+    {
+      "number": 10,
+      "term": "third party"
+    },
+    {
+      "number": 11,
+      "term": "consent"
+    },
+    {
+      "number": 12,
+      "term": "personal data breach"
+    },
+    {
+      "number": 13,
+      "term": "genetic data"
+    },
+    {
+      "number": 14,
+      "term": "biometric data"
+    },
+    {
+      "number": 15,
+      "term": "data concerning health"
+    },
+    {
+      "number": 16,
+      "term": "main establishment"
+    },
+    {
+      "number": 17,
+      "term": "representative"
+    },
+    {
+      "number": 18,
+      "term": "enterprise"
+    },
+    {
+      "number": 19,
+      "term": "group of undertakings"
+    },
+    {
+      "number": 20,
+      "term": "binding corporate rules"
+    },
+    {
+      "number": 21,
+      "term": "supervisory authority"
+    },
+    {
+      "number": 22,
+      "term": "supervisory authority concerned"
+    },
+    {
+      "number": 23,
+      "term": "cross-border processing"
+    },
+    {
+      "number": 24,
+      "term": "relevant and reasoned objection"
+    },
+    {
+      "number": 25,
+      "term": "information society service"
+    },
+    {
+      "number": 26,
+      "term": "international organisation"
+    }
+  ]
+}
