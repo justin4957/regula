@@ -10,6 +10,7 @@ import (
 	"github.com/coolbeans/regula/pkg/analysis"
 	"github.com/coolbeans/regula/pkg/extract"
 	"github.com/coolbeans/regula/pkg/query"
+	"github.com/coolbeans/regula/pkg/simulate"
 	"github.com/coolbeans/regula/pkg/store"
 	"github.com/coolbeans/regula/pkg/validate"
 	"github.com/spf13/cobra"
@@ -47,6 +48,7 @@ It ingests regulatory documents and produces:
 	rootCmd.AddCommand(queryCmd())
 	rootCmd.AddCommand(validateCmd())
 	rootCmd.AddCommand(impactCmd())
+	rootCmd.AddCommand(matchCmd())
 	rootCmd.AddCommand(simulateCmd())
 	rootCmd.AddCommand(auditCmd())
 	rootCmd.AddCommand(exportCmd())
@@ -783,6 +785,119 @@ Examples:
 	cmd.Flags().StringP("source", "s", "", "Source document to analyze")
 	cmd.Flags().StringP("format", "f", "text", "Output format (text, json, table)")
 	cmd.Flags().String("base-uri", "https://regula.dev/regulations/", "Base URI for the graph")
+
+	return cmd
+}
+
+func matchCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "match",
+		Short: "Match a scenario to applicable provisions",
+		Long: `Match a compliance scenario to applicable provisions in the regulation.
+
+Finds provisions that are:
+  - DIRECT: Directly applicable (grants relevant rights or imposes relevant obligations)
+  - TRIGGERED: Triggered by direct provisions (referenced by or references direct matches)
+  - RELATED: Related by keywords
+
+Built-in scenarios:
+  consent_withdrawal  - Data subject withdraws consent
+  access_request     - Data subject requests access to data
+  erasure_request    - Data subject requests erasure of data
+  data_breach        - Personal data breach handling
+
+Examples:
+  regula match --scenario consent_withdrawal --source gdpr.txt
+  regula match --scenario access_request --source gdpr.txt --format json
+  regula match --scenario data_breach --source gdpr.txt --format table`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			scenarioName, _ := cmd.Flags().GetString("scenario")
+			source, _ := cmd.Flags().GetString("source")
+			formatStr, _ := cmd.Flags().GetString("format")
+			baseURI, _ := cmd.Flags().GetString("base-uri")
+			listScenarios, _ := cmd.Flags().GetBool("list-scenarios")
+
+			// List available scenarios
+			if listScenarios {
+				fmt.Println("Available scenarios:")
+				for name, s := range simulate.PredefinedScenarios {
+					fmt.Printf("  %-20s %s\n", name, s.Description)
+				}
+				return nil
+			}
+
+			if scenarioName == "" {
+				return fmt.Errorf("--scenario flag is required\nUse --list-scenarios to see available scenarios")
+			}
+
+			if source == "" {
+				return fmt.Errorf("--source flag is required")
+			}
+
+			// Get scenario
+			scenario, ok := simulate.PredefinedScenarios[scenarioName]
+			if !ok {
+				return fmt.Errorf("unknown scenario: %s\nUse --list-scenarios to see available scenarios", scenarioName)
+			}
+
+			// Parse document
+			file, err := os.Open(source)
+			if err != nil {
+				return fmt.Errorf("failed to open source: %w", err)
+			}
+			defer file.Close()
+
+			parser := extract.NewParser()
+			doc, err := parser.Parse(file)
+			if err != nil {
+				return fmt.Errorf("failed to parse document: %w", err)
+			}
+
+			// Build graph
+			ts := store.NewTripleStore()
+			builder := store.NewGraphBuilder(ts, baseURI)
+
+			defExtractor := extract.NewDefinitionExtractor()
+			refExtractor := extract.NewReferenceExtractor()
+			semExtractor := extract.NewSemanticExtractor()
+			resolver := extract.NewReferenceResolver(baseURI, "GDPR")
+			resolver.IndexDocument(doc)
+
+			_, err = builder.BuildComplete(doc, defExtractor, refExtractor, resolver, semExtractor)
+			if err != nil {
+				return fmt.Errorf("failed to build graph: %w", err)
+			}
+
+			// Extract semantic annotations
+			annotations := semExtractor.ExtractFromDocument(doc)
+
+			// Create matcher and match
+			matcher := simulate.NewProvisionMatcher(ts, baseURI, annotations, doc)
+			result := matcher.Match(scenario)
+
+			// Output result
+			switch formatStr {
+			case "json":
+				data, err := result.ToJSON()
+				if err != nil {
+					return fmt.Errorf("failed to serialize result: %w", err)
+				}
+				fmt.Println(string(data))
+			case "table":
+				fmt.Println(result.FormatTable())
+			default:
+				fmt.Println(result.String())
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringP("scenario", "S", "", "Scenario name (consent_withdrawal, access_request, etc.)")
+	cmd.Flags().StringP("source", "s", "", "Source document to analyze")
+	cmd.Flags().StringP("format", "f", "text", "Output format (text, json, table)")
+	cmd.Flags().String("base-uri", "https://regula.dev/regulations/", "Base URI for the graph")
+	cmd.Flags().Bool("list-scenarios", false, "List available scenarios")
 
 	return cmd
 }
