@@ -1,0 +1,30 @@
+{
+  "target_uri": "https://regula.dev/regulations/GDPR:Art17",
+  "target_label": "Right to erasure ('right to be forgotten')",
+  "max_depth": 2,
+  "expected_direct_incoming": [
+    "Art11 - Processing which does not require identification",
+    "Art12 - Transparent information, communication and modalities",
+    "Art19 - Notification obligation regarding rectification or erasure",
+    "Art70 - Tasks of the Board"
+  ],
+  "expected_direct_outgoing": [
+    "Art6 - Lawfulness of processing",
+    "Art9 - Processing of special categories of personal data",
+    "Art21 - Right to object",
+    "Art89 - Safeguards and derogations"
+  ],
+  "acceptance_criteria": {
+    "art19_references_art17": true,
+    "art17_references_art6": true,
+    "art17_references_art9": true,
+    "transitive_closure_computed": true,
+    "performance_under_1s": true
+  },
+  "notes": [
+    "Art19 references Art17 for notification obligation regarding erasure",
+    "Art17 references Art6 for lawfulness conditions",
+    "Art17 references Art9 for special category data exceptions",
+    "Transitive impact (depth 2) includes Articles 5, 7, 8 via Art6"
+  ]
+}
