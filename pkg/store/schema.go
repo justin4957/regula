@@ -309,6 +309,25 @@ const (
 	PropExtractedAt = "reg:extractedAt"
 )
 
+// Resolution Properties - Reference resolution tracking.
+const (
+	// PropResolutionStatus indicates the resolution outcome.
+	// Values: "resolved", "partial", "ambiguous", "not_found", "external"
+	PropResolutionStatus = "reg:resolutionStatus"
+
+	// PropResolutionConfidence indicates confidence in resolution (0.0-1.0).
+	PropResolutionConfidence = "reg:resolutionConfidence"
+
+	// PropResolutionReason explains the resolution decision.
+	PropResolutionReason = "reg:resolutionReason"
+
+	// PropResolvedTarget is the resolved target URI.
+	PropResolvedTarget = "reg:resolvedTarget"
+
+	// PropAlternativeTarget lists alternative resolution targets.
+	PropAlternativeTarget = "reg:alternativeTarget"
+)
+
 // Common Right and Obligation types.
 const (
 	// Right types

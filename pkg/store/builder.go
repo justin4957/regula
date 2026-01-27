@@ -512,6 +512,128 @@ func (b *GraphBuilder) buildReference(ref *extract.Reference, stats *BuildStats)
 	stats.ReferenceTriples += 7 // type, text, identifier, offset, length, partOf, belongsTo
 }
 
+// BuildWithResolver builds the graph using a reference resolver for enhanced resolution tracking.
+func (b *GraphBuilder) BuildWithResolver(
+	doc *extract.Document,
+	defExtractor *extract.DefinitionExtractor,
+	refExtractor *extract.ReferenceExtractor,
+	resolver *extract.ReferenceResolver,
+) (*BuildStats, error) {
+	if doc == nil {
+		return nil, fmt.Errorf("document is nil")
+	}
+
+	stats := &BuildStats{}
+
+	// Determine regulation ID
+	b.regID = b.extractRegID(doc.Identifier)
+
+	// Build basic structure
+	b.buildRegulation(doc, stats)
+
+	if doc.Preamble != nil {
+		b.buildPreamble(doc.Preamble, stats)
+	}
+
+	for _, chapter := range doc.Chapters {
+		b.buildChapter(chapter, stats)
+	}
+
+	// Build rich definitions if extractor provided
+	if defExtractor != nil {
+		definitions := defExtractor.ExtractDefinitions(doc)
+		for _, def := range definitions {
+			b.buildDefinedTerm(def, stats)
+		}
+	} else {
+		for _, def := range doc.Definitions {
+			b.buildDefinition(def, stats)
+		}
+	}
+
+	// Build references with resolution if resolver provided
+	if refExtractor != nil {
+		refs := refExtractor.ExtractFromDocument(doc)
+
+		if resolver != nil {
+			// Index the document for resolution
+			resolver.IndexDocument(doc)
+
+			// Resolve and build each reference
+			resolved := resolver.ResolveAll(refs)
+			for _, res := range resolved {
+				b.buildResolvedReference(res, stats)
+			}
+		} else {
+			// Fall back to basic reference building
+			for _, ref := range refs {
+				b.buildReference(ref, stats)
+			}
+		}
+	}
+
+	stats.TotalTriples = b.store.Count()
+	return stats, nil
+}
+
+// buildResolvedReference builds a reference with resolution metadata.
+func (b *GraphBuilder) buildResolvedReference(res *extract.ResolvedReference, stats *BuildStats) {
+	ref := res.Original
+	uri := b.referenceURI(ref.SourceArticle, ref.TextOffset)
+	sourceURI := b.articleURI(ref.SourceArticle)
+	regURI := b.regulationURI()
+
+	// Basic reference properties
+	b.store.Add(uri, RDFType, ClassReference)
+	b.store.Add(uri, PropText, ref.RawText)
+	b.store.Add(uri, PropIdentifier, ref.Identifier)
+	b.store.Add(uri, PropSourceOffset, itoa(ref.TextOffset))
+	b.store.Add(uri, PropSourceLength, itoa(ref.TextLength))
+	b.store.Add(uri, PropPartOf, sourceURI)
+	b.store.Add(uri, PropBelongsTo, regURI)
+
+	// Resolution metadata
+	b.store.Add(uri, PropResolutionStatus, string(res.Status))
+	b.store.Add(uri, PropResolutionConfidence, fmt.Sprintf("%.2f", res.Confidence))
+	if res.Reason != "" {
+		b.store.Add(uri, PropResolutionReason, res.Reason)
+	}
+
+	// Link to resolved target(s)
+	if res.TargetURI != "" {
+		b.store.Add(uri, PropResolvedTarget, res.TargetURI)
+
+		// Create direct reference link for resolved internal references
+		if res.Status == extract.ResolutionResolved || res.Status == extract.ResolutionPartial {
+			b.store.Add(sourceURI, PropReferences, res.TargetURI)
+			b.store.Add(res.TargetURI, PropReferencedBy, sourceURI)
+		}
+	}
+
+	// For range references, link to all targets
+	for _, targetURI := range res.TargetURIs {
+		b.store.Add(uri, PropResolvedTarget, targetURI)
+		b.store.Add(sourceURI, PropReferences, targetURI)
+		b.store.Add(targetURI, PropReferencedBy, sourceURI)
+	}
+
+	// Record alternative targets for ambiguous refs
+	for _, altURI := range res.AlternativeURIs {
+		b.store.Add(uri, PropAlternativeTarget, altURI)
+	}
+
+	// External references
+	if res.Status == extract.ResolutionExternal {
+		b.store.Add(uri, PropExternalRef, ref.Identifier)
+		if ref.ExternalDoc != "" {
+			b.store.Add(uri, "reg:externalDocType", ref.ExternalDoc)
+		}
+	}
+
+	stats.References++
+	stats.ReferenceTriples += 10 // base triples plus resolution metadata
+}
+
 // GetStore returns the underlying triple store.
 func (b *GraphBuilder) GetStore() *TripleStore {
 	return b.store
@@ -520,4 +642,14 @@ func (b *GraphBuilder) GetStore() *TripleStore {
 // GetRegulationURI returns the URI of the regulation.
 func (b *GraphBuilder) GetRegulationURI() string {
 	return b.regulationURI()
+}
+
+// GetRegID returns the regulation ID.
+func (b *GraphBuilder) GetRegID() string {
+	return b.regID
+}
+
+// GetBaseURI returns the base URI.
+func (b *GraphBuilder) GetBaseURI() string {
+	return b.baseURI
 }
