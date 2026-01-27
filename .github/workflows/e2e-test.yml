@@ -1,0 +1,51 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq bc
+
+      - name: Build regula
+        run: go build -o ./regula ./cmd/regula
+
+      - name: Run unit tests
+        run: go test ./... -v
+
+      - name: Run E2E tests
+        run: ./scripts/e2e-test.sh
+        env:
+          REGULA_BIN: ./regula
+          GDPR_FILE: testdata/gdpr.txt
+          CI: true
+
+      - name: Upload E2E report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-report
+          path: e2e-report.json
+
+      - name: Check E2E results
+        if: failure()
+        run: |
+          echo "E2E tests failed. Check the report for details."
+          cat e2e-report.json || true
