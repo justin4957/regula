@@ -135,14 +135,70 @@ regula/
 ## Quick Start
 
 ```bash
+# Build the CLI
+go build ./cmd/regula
+
+# Ingest a regulation document and display statistics
+./regula ingest --source testdata/gdpr.txt --stats
+
+# Output:
+# Ingesting regulation from: testdata/gdpr.txt
+#   1. Parsing document structure... done (11 chapters, 99 articles)
+#   2. Extracting defined terms... done (26 definitions)
+#   3. Identifying cross-references... done (255 references)
+#   4. Building knowledge graph... done (4226 triples)
+
+# Query the regulation graph with SPARQL
+./regula query --source testdata/gdpr.txt \
+  "SELECT ?article ?title WHERE { ?article rdf:type reg:Article . ?article reg:title ?title } LIMIT 5"
+
+# Use built-in query templates
+./regula query --source testdata/gdpr.txt --template definitions
+./regula query --source testdata/gdpr.txt --template chapters
+./regula query --source testdata/gdpr.txt --template references --limit 10
+
+# Output as JSON or CSV
+./regula query --source testdata/gdpr.txt --template articles --format json --limit 3
+./regula query --source testdata/gdpr.txt --template articles --format csv --limit 3
+
+# Show query execution time
+./regula query --source testdata/gdpr.txt --template articles --timing
+```
+
+### Query Templates
+
+| Template | Description |
+|----------|-------------|
+| `articles` | List all articles with titles |
+| `definitions` | List all defined terms with their definitions |
+| `chapters` | List chapters with article counts |
+| `references` | Show cross-references between articles |
+| `rights` | Find articles that grant rights |
+| `recitals` | List all recitals |
+| `article-refs` | Find references from a specific article |
+| `search` | Search articles by keyword in title |
+
+### Example Queries
+
+```bash
+# Find all articles mentioning "right" in the title
+./regula query --source testdata/gdpr.txt \
+  "SELECT ?article ?title WHERE { ?article rdf:type reg:Article . ?article reg:title ?title . FILTER(CONTAINS(?title, \"Right\")) }"
+
+# Find articles that reference other articles
+./regula query --source testdata/gdpr.txt \
+  "SELECT ?from ?to WHERE { ?from reg:references ?to . ?to rdf:type reg:Article } LIMIT 20"
+
+# List all defined terms
+./regula query --source testdata/gdpr.txt \
+  "SELECT ?term ?text WHERE { ?term rdf:type reg:DefinedTerm . ?term reg:term ?text }"
+```
+
+## Future Commands (Planned)
+
+```bash
 # Initialize a regulation project
 regula init gdpr-analysis
-
-# Ingest a regulation document
-regula ingest --source gdpr.pdf --format pdf
-
-# Query the regulation graph
-regula query "SELECT ?provision WHERE { ?provision reg:requires reg:Consent }"
 
 # Analyze impact of a change
 regula impact --provision "GDPR:Art17" --change "remove"
@@ -158,7 +214,14 @@ regula audit --decision "data-deletion-request-123"
 
 See [ROADMAP.md](docs/ROADMAP.md) for detailed development phases.
 
-**Current Phase**: Phase 0 - Foundation Setup
+**Current Phase**: Phase 2 - Knowledge Graph (Complete)
+
+### Completed Milestones
+- **M1.1-1.5**: Core type system (jurisdiction, provision, authority, temporal, proof types)
+- **M2.1-2.3**: Document parser, definition extractor, reference extractor
+- **M2.4**: RDF triple store with SPO/POS/OSP indexes
+- **M2.5**: SPARQL query parser and executor with query planning
+- **M2.6**: CLI with ingest and query commands
 
 ## License
 
