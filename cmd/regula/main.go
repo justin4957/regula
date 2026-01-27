@@ -11,6 +11,7 @@ import (
 	"github.com/coolbeans/regula/pkg/extract"
 	"github.com/coolbeans/regula/pkg/query"
 	"github.com/coolbeans/regula/pkg/store"
+	"github.com/coolbeans/regula/pkg/validate"
 	"github.com/spf13/cobra"
 )
 
@@ -576,23 +577,26 @@ func saveGraph(ts *store.TripleStore, path string) error {
 func validateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "validate",
-		Short: "Validate reference resolution",
-		Long: `Validate reference resolution and report statistics.
+		Short: "Validate graph consistency and extraction quality",
+		Long: `Validate graph consistency and report extraction quality metrics.
 
-Checks cross-reference resolution accuracy and reports:
-  - Resolution rate for internal references
-  - Confidence distribution
-  - Unresolved references with reasons
+Checks:
+  - Reference resolution accuracy
+  - Graph connectivity (orphan provisions)
+  - Definition coverage (term usage)
+  - Semantic extraction (rights/obligations)
 
 Example:
   regula validate --source gdpr.txt
-  regula validate --source gdpr.txt --check references
-  regula validate --source gdpr.txt --format json`,
+  regula validate --source gdpr.txt --threshold 0.85
+  regula validate --source gdpr.txt --format json
+  regula validate --source gdpr.txt --check references`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			source, _ := cmd.Flags().GetString("source")
 			checkType, _ := cmd.Flags().GetString("check")
 			formatStr, _ := cmd.Flags().GetString("format")
 			baseURI, _ := cmd.Flags().GetString("base-uri")
+			threshold, _ := cmd.Flags().GetFloat64("threshold")
 
 			if source == "" {
 				return fmt.Errorf("--source flag is required")
@@ -616,6 +620,10 @@ Example:
 				return fmt.Errorf("failed to parse document: %w", err)
 			}
 
+			// Extract definitions
+			defExtractor := extract.NewDefinitionExtractor()
+			definitions := defExtractor.ExtractDefinitions(doc)
+
 			// Extract references
 			refExtractor := extract.NewReferenceExtractor()
 			refs := refExtractor.ExtractFromDocument(doc)
@@ -627,27 +635,59 @@ Example:
 			// Resolve all references
 			resolved := resolver.ResolveAll(refs)
 
-			// Generate report
-			report := extract.GenerateReport(resolved)
+			// Extract term usages
+			usageExtractor := extract.NewTermUsageExtractor(definitions)
+			usages := usageExtractor.ExtractFromDocument(doc)
 
-			// Handle different checks
-			if checkType == "references" || checkType == "" {
+			// Extract semantics
+			semExtractor := extract.NewSemanticExtractor()
+			annotations := semExtractor.ExtractFromDocument(doc)
+
+			// Build graph for connectivity check
+			ts := store.NewTripleStore()
+			builder := store.NewGraphBuilder(ts, baseURI)
+			_, err = builder.BuildComplete(doc, defExtractor, refExtractor, resolver, semExtractor)
+			if err != nil {
+				return fmt.Errorf("failed to build graph: %w", err)
+			}
+
+			// Handle legacy check type for backwards compatibility
+			if checkType == "references" {
+				report := extract.GenerateReport(resolved)
 				if formatStr == "json" {
 					encoder := json.NewEncoder(os.Stdout)
 					encoder.SetIndent("", "  ")
 					return encoder.Encode(report)
 				}
-
-				// Print text report
 				fmt.Println(report.String())
-
-				// Pass/fail based on 85% target
 				if report.ResolutionRate >= 0.85 {
 					fmt.Printf("Status: PASS (resolution rate %.1f%% >= 85%%)\n", report.ResolutionRate*100)
 				} else {
 					fmt.Printf("Status: FAIL (resolution rate %.1f%% < 85%%)\n", report.ResolutionRate*100)
 					return fmt.Errorf("resolution rate below 85%% target")
 				}
+				return nil
+			}
+
+			// Full validation
+			validator := validate.NewValidator(threshold)
+			result := validator.Validate(doc, resolved, definitions, usages, annotations, ts)
+
+			// Output result
+			if formatStr == "json" {
+				data, err := result.ToJSON()
+				if err != nil {
+					return fmt.Errorf("failed to serialize result: %w", err)
+				}
+				fmt.Println(string(data))
+			} else {
+				fmt.Println(result.String())
+			}
+
+			// Return error if validation failed
+			if result.Status == validate.StatusFail {
+				return fmt.Errorf("validation failed: overall score %.1f%% below threshold %.1f%%",
+					result.OverallScore*100, result.Threshold*100)
 			}
 
 			return nil
@@ -655,9 +695,10 @@ Example:
 	}
 
 	cmd.Flags().StringP("source", "s", "", "Source document path")
-	cmd.Flags().String("check", "references", "What to check (references)")
+	cmd.Flags().String("check", "all", "What to check (all, references)")
 	cmd.Flags().StringP("format", "f", "text", "Output format (text, json)")
 	cmd.Flags().String("base-uri", "https://regula.dev/regulations/", "Base URI for the graph")
+	cmd.Flags().Float64("threshold", 0.80, "Pass/fail threshold (0.0-1.0)")
 
 	return cmd
 }
