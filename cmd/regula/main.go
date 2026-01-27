@@ -44,6 +44,7 @@ It ingests regulatory documents and produces:
 	rootCmd.AddCommand(initCmd())
 	rootCmd.AddCommand(ingestCmd())
 	rootCmd.AddCommand(queryCmd())
+	rootCmd.AddCommand(validateCmd())
 	rootCmd.AddCommand(impactCmd())
 	rootCmd.AddCommand(simulateCmd())
 	rootCmd.AddCommand(auditCmd())
@@ -459,6 +460,95 @@ func saveGraph(ts *store.TripleStore, path string) error {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(data)
+}
+
+func validateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "validate",
+		Short: "Validate reference resolution",
+		Long: `Validate reference resolution and report statistics.
+
+Checks cross-reference resolution accuracy and reports:
+  - Resolution rate for internal references
+  - Confidence distribution
+  - Unresolved references with reasons
+
+Example:
+  regula validate --source gdpr.txt
+  regula validate --source gdpr.txt --check references
+  regula validate --source gdpr.txt --format json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			source, _ := cmd.Flags().GetString("source")
+			checkType, _ := cmd.Flags().GetString("check")
+			formatStr, _ := cmd.Flags().GetString("format")
+			baseURI, _ := cmd.Flags().GetString("base-uri")
+
+			if source == "" {
+				return fmt.Errorf("--source flag is required")
+			}
+
+			// Check if file exists
+			if _, err := os.Stat(source); os.IsNotExist(err) {
+				return fmt.Errorf("source file not found: %s", source)
+			}
+
+			// Parse document
+			file, err := os.Open(source)
+			if err != nil {
+				return fmt.Errorf("failed to open source: %w", err)
+			}
+			defer file.Close()
+
+			parser := extract.NewParser()
+			doc, err := parser.Parse(file)
+			if err != nil {
+				return fmt.Errorf("failed to parse document: %w", err)
+			}
+
+			// Extract references
+			refExtractor := extract.NewReferenceExtractor()
+			refs := refExtractor.ExtractFromDocument(doc)
+
+			// Create resolver and index document
+			resolver := extract.NewReferenceResolver(baseURI, "GDPR")
+			resolver.IndexDocument(doc)
+
+			// Resolve all references
+			resolved := resolver.ResolveAll(refs)
+
+			// Generate report
+			report := extract.GenerateReport(resolved)
+
+			// Handle different checks
+			if checkType == "references" || checkType == "" {
+				if formatStr == "json" {
+					encoder := json.NewEncoder(os.Stdout)
+					encoder.SetIndent("", "  ")
+					return encoder.Encode(report)
+				}
+
+				// Print text report
+				fmt.Println(report.String())
+
+				// Pass/fail based on 85% target
+				if report.ResolutionRate >= 0.85 {
+					fmt.Printf("Status: PASS (resolution rate %.1f%% >= 85%%)\n", report.ResolutionRate*100)
+				} else {
+					fmt.Printf("Status: FAIL (resolution rate %.1f%% < 85%%)\n", report.ResolutionRate*100)
+					return fmt.Errorf("resolution rate below 85%% target")
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringP("source", "s", "", "Source document path")
+	cmd.Flags().String("check", "references", "What to check (references)")
+	cmd.Flags().StringP("format", "f", "text", "Output format (text, json)")
+	cmd.Flags().String("base-uri", "https://regula.dev/regulations/", "Base URI for the graph")
+
+	return cmd
 }
 
 func impactCmd() *cobra.Command {
