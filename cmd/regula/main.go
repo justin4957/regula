@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
+	"github.com/coolbeans/regula/pkg/analysis"
 	"github.com/coolbeans/regula/pkg/extract"
 	"github.com/coolbeans/regula/pkg/query"
 	"github.com/coolbeans/regula/pkg/store"
@@ -709,56 +709,80 @@ func impactCmd() *cobra.Command {
 		Short: "Analyze impact of regulatory changes",
 		Long: `Analyze the impact of changes to a provision.
 
-Example:
-  regula impact --provision "GDPR:Art17" --change amend`,
+Performs comprehensive impact analysis including:
+  - Direct impact: provisions that reference the target
+  - Reverse impact: provisions the target references
+  - Transitive impact: configurable depth traversal
+
+Examples:
+  regula impact --provision "Art17" --source gdpr.txt
+  regula impact --provision "GDPR:Art17" --depth 2 --source gdpr.txt
+  regula impact --provision "Art17" --direction incoming --source gdpr.txt
+  regula impact --provision "Art17" --format json --source gdpr.txt`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			provision, _ := cmd.Flags().GetString("provision")
-			change, _ := cmd.Flags().GetString("change")
 			source, _ := cmd.Flags().GetString("source")
+			depth, _ := cmd.Flags().GetInt("depth")
+			directionStr, _ := cmd.Flags().GetString("direction")
+			formatStr, _ := cmd.Flags().GetString("format")
+			baseURI, _ := cmd.Flags().GetString("base-uri")
 
 			if provision == "" {
 				return fmt.Errorf("--provision flag is required")
 			}
 
+			if source == "" {
+				return fmt.Errorf("--source flag is required")
+			}
+
 			// Load graph if source specified
-			if source != "" {
+			if !graphLoaded || graphPath != source {
 				if err := loadAndIngest(source); err != nil {
 					return err
 				}
 			}
 
-			if !graphLoaded {
-				return fmt.Errorf("no graph loaded. Run 'regula ingest --source <file>' first")
+			// Parse direction
+			var direction analysis.ImpactDirection
+			switch directionStr {
+			case "incoming":
+				direction = analysis.DirectionIncoming
+			case "outgoing":
+				direction = analysis.DirectionOutgoing
+			case "both":
+				direction = analysis.DirectionBoth
+			default:
+				return fmt.Errorf("invalid direction: %s (use incoming, outgoing, or both)", directionStr)
 			}
 
-			fmt.Printf("Analyzing impact of %s to %s\n", change, provision)
+			// Create analyzer and run analysis
+			analyzer := analysis.NewImpactAnalyzer(tripleStore, baseURI)
+			result := analyzer.AnalyzeByID(provision, depth, direction)
 
-			// Find what references this provision
-			queryStr := fmt.Sprintf(`SELECT ?article ?title WHERE {
-  ?article reg:references ?target .
-  ?article reg:title ?title .
-  FILTER(CONTAINS(?target, "%s"))
-}`, strings.TrimPrefix(provision, "GDPR:"))
-
-			result, err := executor.ExecuteString(queryStr)
-			if err != nil {
-				return fmt.Errorf("query error: %w", err)
-			}
-
-			fmt.Printf("\nArticles referencing %s: %d\n", provision, result.Count)
-			if result.Count > 0 {
+			// Output result
+			switch formatStr {
+			case "json":
+				data, err := result.ToJSON()
+				if err != nil {
+					return fmt.Errorf("failed to serialize result: %w", err)
+				}
+				fmt.Println(string(data))
+			case "table":
 				fmt.Println(result.FormatTable())
+			default:
+				fmt.Println(result.String())
 			}
 
-			fmt.Println("\nNote: Full impact analysis (transitive dependencies, risk assessment) coming in Phase 4")
 			return nil
 		},
 	}
 
-	cmd.Flags().StringP("provision", "p", "", "Provision ID to analyze")
-	cmd.Flags().StringP("change", "c", "amend", "Type of change (amend, repeal, add)")
-	cmd.Flags().IntP("depth", "d", 3, "Transitive dependency depth")
+	cmd.Flags().StringP("provision", "p", "", "Provision ID to analyze (e.g., Art17, GDPR:Art17)")
+	cmd.Flags().IntP("depth", "d", 2, "Transitive dependency depth (1=direct only)")
+	cmd.Flags().StringP("direction", "D", "both", "Direction of analysis (incoming, outgoing, both)")
 	cmd.Flags().StringP("source", "s", "", "Source document to analyze")
+	cmd.Flags().StringP("format", "f", "text", "Output format (text, json, table)")
+	cmd.Flags().String("base-uri", "https://regula.dev/regulations/", "Base URI for the graph")
 
 	return cmd
 }
