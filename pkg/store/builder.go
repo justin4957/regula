@@ -23,12 +23,15 @@ type BuildStats struct {
 	RecitalTriples    int `json:"recital_triples"`
 	DefinitionTriples int `json:"definition_triples"`
 	ReferenceTriples  int `json:"reference_triples"`
+	SemanticTriples   int `json:"semantic_triples"`
 	Articles          int `json:"articles"`
 	Chapters          int `json:"chapters"`
 	Sections          int `json:"sections"`
 	Recitals          int `json:"recitals"`
 	Definitions       int `json:"definitions"`
 	References        int `json:"references"`
+	Rights            int `json:"rights"`
+	Obligations       int `json:"obligations"`
 }
 
 // NewGraphBuilder creates a new GraphBuilder with the given store and base URI.
@@ -632,6 +635,132 @@ func (b *GraphBuilder) buildResolvedReference(res *extract.ResolvedReference, st
 
 	stats.References++
 	stats.ReferenceTriples += 10 // base triples plus resolution metadata
+}
+
+// buildSemanticAnnotation builds triples for a semantic annotation (right or obligation).
+func (b *GraphBuilder) buildSemanticAnnotation(ann *extract.SemanticAnnotation, stats *BuildStats) {
+	articleURI := b.articleURI(ann.ArticleNum)
+	regURI := b.regulationURI()
+
+	switch ann.Type {
+	case extract.SemanticRight:
+		// Create right URI
+		rightURI := fmt.Sprintf("%s%s:Right:%d:%s", b.baseURI, b.regID, ann.ArticleNum, ann.RightType)
+
+		b.store.Add(rightURI, RDFType, ClassRight)
+		b.store.Add(rightURI, "reg:rightType", string(ann.RightType))
+		b.store.Add(rightURI, PropText, ann.MatchedText)
+		b.store.Add(rightURI, "reg:confidence", fmt.Sprintf("%.2f", ann.Confidence))
+		b.store.Add(rightURI, PropPartOf, articleURI)
+		b.store.Add(rightURI, PropBelongsTo, regURI)
+
+		// Link article to right
+		b.store.Add(articleURI, PropGrantsRight, rightURI)
+
+		// Beneficiary
+		if ann.Beneficiary != extract.EntityUnspecified {
+			b.store.Add(rightURI, "reg:beneficiary", string(ann.Beneficiary))
+		}
+
+		// Context
+		if ann.Context != "" {
+			b.store.Add(rightURI, "reg:context", ann.Context)
+		}
+
+		stats.Rights++
+		stats.SemanticTriples += 8
+
+	case extract.SemanticObligation, extract.SemanticProhibition:
+		// Create obligation URI
+		obligURI := fmt.Sprintf("%s%s:Obligation:%d:%s", b.baseURI, b.regID, ann.ArticleNum, ann.ObligationType)
+
+		b.store.Add(obligURI, RDFType, ClassObligation)
+		b.store.Add(obligURI, "reg:obligationType", string(ann.ObligationType))
+		b.store.Add(obligURI, PropText, ann.MatchedText)
+		b.store.Add(obligURI, "reg:confidence", fmt.Sprintf("%.2f", ann.Confidence))
+		b.store.Add(obligURI, PropPartOf, articleURI)
+		b.store.Add(obligURI, PropBelongsTo, regURI)
+
+		// Link article to obligation
+		b.store.Add(articleURI, PropImposesObligation, obligURI)
+
+		// Duty bearer
+		if ann.DutyBearer != extract.EntityUnspecified {
+			b.store.Add(obligURI, "reg:dutyBearer", string(ann.DutyBearer))
+		}
+
+		// Mark if prohibition
+		if ann.Type == extract.SemanticProhibition {
+			b.store.Add(obligURI, "reg:isProhibition", "true")
+		}
+
+		// Context
+		if ann.Context != "" {
+			b.store.Add(obligURI, "reg:context", ann.Context)
+		}
+
+		stats.Obligations++
+		stats.SemanticTriples += 9
+	}
+}
+
+// BuildWithSemantics builds the graph including semantic extraction.
+func (b *GraphBuilder) BuildWithSemantics(
+	doc *extract.Document,
+	defExtractor *extract.DefinitionExtractor,
+	refExtractor *extract.ReferenceExtractor,
+	semExtractor *extract.SemanticExtractor,
+) (*BuildStats, error) {
+	if doc == nil {
+		return nil, fmt.Errorf("document is nil")
+	}
+
+	stats := &BuildStats{}
+
+	// Determine regulation ID
+	b.regID = b.extractRegID(doc.Identifier)
+
+	// Build basic structure
+	b.buildRegulation(doc, stats)
+
+	if doc.Preamble != nil {
+		b.buildPreamble(doc.Preamble, stats)
+	}
+
+	for _, chapter := range doc.Chapters {
+		b.buildChapter(chapter, stats)
+	}
+
+	// Build definitions
+	if defExtractor != nil {
+		definitions := defExtractor.ExtractDefinitions(doc)
+		for _, def := range definitions {
+			b.buildDefinedTerm(def, stats)
+		}
+	} else {
+		for _, def := range doc.Definitions {
+			b.buildDefinition(def, stats)
+		}
+	}
+
+	// Build references
+	if refExtractor != nil {
+		refs := refExtractor.ExtractFromDocument(doc)
+		for _, ref := range refs {
+			b.buildReference(ref, stats)
+		}
+	}
+
+	// Build semantic annotations
+	if semExtractor != nil {
+		annotations := semExtractor.ExtractFromDocument(doc)
+		for _, ann := range annotations {
+			b.buildSemanticAnnotation(ann, stats)
+		}
+	}
+
+	stats.TotalTriples = b.store.Count()
+	return stats, nil
 }
 
 // GetStore returns the underlying triple store.
