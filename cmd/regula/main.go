@@ -389,11 +389,13 @@ var queryTemplates = map[string]QueryTemplate{
 }
 
 func printTemplates() {
-	fmt.Println("Available query templates:\n")
+	fmt.Println("Available query templates:")
+	fmt.Println()
 	for name, tmpl := range queryTemplates {
 		fmt.Printf("  %-15s %s\n", name, tmpl.Description)
 	}
-	fmt.Println("\nUsage: regula query --template <name>")
+	fmt.Println()
+	fmt.Println("Usage: regula query --template <name>")
 }
 
 func loadAndIngest(source string) error {
