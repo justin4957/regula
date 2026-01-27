@@ -48,6 +48,7 @@ It ingests regulatory documents and produces:
 	rootCmd.AddCommand(impactCmd())
 	rootCmd.AddCommand(simulateCmd())
 	rootCmd.AddCommand(auditCmd())
+	rootCmd.AddCommand(exportCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -157,11 +158,19 @@ Example:
 			semStats := extract.CalculateSemanticStats(semantics)
 			fmt.Printf("done (%d rights, %d obligations)\n", semStats.Rights, semStats.Obligations)
 
-			// Step 5: Build knowledge graph
-			fmt.Print("  5. Building knowledge graph... ")
+			// Step 5: Resolve references
+			fmt.Print("  5. Resolving cross-references... ")
+			resolver := extract.NewReferenceResolver(baseURI, "GDPR")
+			resolver.IndexDocument(doc)
+			resolved := resolver.ResolveAll(references)
+			report := extract.GenerateReport(resolved)
+			fmt.Printf("done (%.0f%% resolved)\n", report.ResolutionRate*100)
+
+			// Step 6: Build complete knowledge graph
+			fmt.Print("  6. Building knowledge graph... ")
 			tripleStore = store.NewTripleStore()
 			builder := store.NewGraphBuilder(tripleStore, baseURI)
-			stats, err := builder.BuildWithSemantics(doc, defExtractor, refExtractor, semExtractor)
+			stats, err := builder.BuildComplete(doc, defExtractor, refExtractor, resolver, semExtractor)
 			if err != nil {
 				return fmt.Errorf("failed to build graph: %w", err)
 			}
@@ -187,6 +196,7 @@ Example:
 				fmt.Printf("  References:       %d\n", stats.References)
 				fmt.Printf("  Rights:           %d\n", stats.Rights)
 				fmt.Printf("  Obligations:      %d\n", stats.Obligations)
+				fmt.Printf("  Term usages:      %d\n", stats.TermUsages)
 			}
 
 			// Save graph if output specified
@@ -423,6 +433,67 @@ var queryTemplates = map[string]QueryTemplate{
   FILTER(CONTAINS(?title, "erasure"))
 }`,
 	},
+	"term-usage": {
+		Name:        "term-usage",
+		Description: "Find which articles use defined terms",
+		Query: `SELECT ?article ?term WHERE {
+  ?article reg:usesTerm ?termUri .
+  ?termUri reg:term ?term .
+} ORDER BY ?term LIMIT 50`,
+	},
+	"term-articles": {
+		Name:        "term-articles",
+		Description: "Find articles using a specific term (default: personal data)",
+		Query: `SELECT ?article ?title WHERE {
+  ?article reg:usesTerm ?termUri .
+  ?termUri reg:normalizedTerm "personal data" .
+  ?article reg:title ?title .
+} ORDER BY ?article`,
+	},
+	"article-terms": {
+		Name:        "article-terms",
+		Description: "Find all terms used in Article 17",
+		Query: `SELECT ?term WHERE {
+  ?article reg:usesTerm ?termUri .
+  ?termUri reg:term ?term .
+  FILTER(CONTAINS(?article, "Art17"))
+}`,
+	},
+	"hierarchy": {
+		Name:        "hierarchy",
+		Description: "Show document hierarchy (chapters contain articles)",
+		Query: `SELECT ?chapter ?chapterTitle ?article ?articleTitle WHERE {
+  ?chapter rdf:type reg:Chapter .
+  ?chapter reg:title ?chapterTitle .
+  ?chapter reg:contains ?article .
+  ?article rdf:type reg:Article .
+  ?article reg:title ?articleTitle .
+} ORDER BY ?chapter ?article LIMIT 30`,
+	},
+	"most-referenced": {
+		Name:        "most-referenced",
+		Description: "Find the most referenced articles",
+		Query: `SELECT ?target WHERE {
+  ?source reg:references ?target .
+} ORDER BY ?target`,
+	},
+	"definition-links": {
+		Name:        "definition-links",
+		Description: "Show terms and their defining articles",
+		Query: `SELECT ?term ?article WHERE {
+  ?termUri rdf:type reg:DefinedTerm .
+  ?termUri reg:term ?term .
+  ?termUri reg:definedIn ?article .
+} ORDER BY ?term`,
+	},
+	"bidirectional": {
+		Name:        "bidirectional",
+		Description: "Show bidirectional reference relationships",
+		Query: `SELECT ?source ?target WHERE {
+  ?source reg:references ?target .
+  ?target reg:referencedBy ?source .
+} LIMIT 20`,
+	},
 }
 
 func printTemplates() {
@@ -448,14 +519,17 @@ func loadAndIngest(source string) error {
 		return fmt.Errorf("failed to parse document: %w", err)
 	}
 
+	baseURI := "https://regula.dev/regulations/"
 	tripleStore = store.NewTripleStore()
-	builder := store.NewGraphBuilder(tripleStore, "https://regula.dev/regulations/")
+	builder := store.NewGraphBuilder(tripleStore, baseURI)
 
 	defExtractor := extract.NewDefinitionExtractor()
 	refExtractor := extract.NewReferenceExtractor()
 	semExtractor := extract.NewSemanticExtractor()
+	resolver := extract.NewReferenceResolver(baseURI, "GDPR")
+	resolver.IndexDocument(doc)
 
-	_, err = builder.BuildWithSemantics(doc, defExtractor, refExtractor, semExtractor)
+	_, err = builder.BuildComplete(doc, defExtractor, refExtractor, resolver, semExtractor)
 	if err != nil {
 		return fmt.Errorf("failed to build graph: %w", err)
 	}
@@ -710,6 +784,121 @@ Example:
 
 	cmd.Flags().StringP("decision", "d", "", "Decision ID to audit")
 	cmd.Flags().StringP("output", "o", "text", "Output format (text, json, prov)")
+
+	return cmd
+}
+
+func exportCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "export",
+		Short: "Export the relationship graph for visualization",
+		Long: `Export the regulation relationship graph in various formats.
+
+Supported formats:
+  - json: JSON graph format with nodes and edges
+  - dot:  DOT format for Graphviz visualization
+  - summary: Relationship statistics and summary
+
+Example:
+  regula export --source gdpr.txt --format json --output graph.json
+  regula export --source gdpr.txt --format dot --output graph.dot
+  regula export --source gdpr.txt --format summary`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			source, _ := cmd.Flags().GetString("source")
+			formatStr, _ := cmd.Flags().GetString("format")
+			output, _ := cmd.Flags().GetString("output")
+			relationsOnly, _ := cmd.Flags().GetBool("relations-only")
+
+			if source == "" {
+				return fmt.Errorf("--source flag is required")
+			}
+
+			// Load and ingest if needed
+			if !graphLoaded || graphPath != source {
+				if err := loadAndIngest(source); err != nil {
+					return err
+				}
+			}
+
+			switch formatStr {
+			case "json":
+				var export *store.GraphExport
+				if relationsOnly {
+					export = store.ExportRelationshipSubgraph(tripleStore)
+				} else {
+					export = store.ExportGraph(tripleStore)
+				}
+
+				data, err := export.ToJSON()
+				if err != nil {
+					return fmt.Errorf("failed to serialize graph: %w", err)
+				}
+
+				if output != "" {
+					if err := os.WriteFile(output, data, 0644); err != nil {
+						return fmt.Errorf("failed to write file: %w", err)
+					}
+					fmt.Printf("Graph exported to: %s\n", output)
+					fmt.Printf("  Nodes: %d\n", export.Stats.TotalNodes)
+					fmt.Printf("  Edges: %d\n", export.Stats.TotalEdges)
+				} else {
+					fmt.Println(string(data))
+				}
+
+			case "dot":
+				export := store.ExportRelationshipSubgraph(tripleStore)
+				dotContent := export.ToDOT()
+
+				if output != "" {
+					if err := os.WriteFile(output, []byte(dotContent), 0644); err != nil {
+						return fmt.Errorf("failed to write file: %w", err)
+					}
+					fmt.Printf("DOT graph exported to: %s\n", output)
+					fmt.Println("\nTo visualize with Graphviz:")
+					fmt.Printf("  dot -Tpng %s -o graph.png\n", output)
+					fmt.Printf("  dot -Tsvg %s -o graph.svg\n", output)
+				} else {
+					fmt.Println(dotContent)
+				}
+
+			case "summary":
+				summary := store.CalculateRelationshipSummary(tripleStore)
+
+				fmt.Println("Relationship Graph Summary")
+				fmt.Println("==========================")
+				fmt.Printf("\nTotal relationships: %d\n\n", summary.TotalRelationships)
+
+				fmt.Println("Relationship Types:")
+				for relType, count := range summary.RelationshipCounts {
+					fmt.Printf("  %-25s %d\n", relType, count)
+				}
+
+				if len(summary.MostReferencedArticles) > 0 {
+					fmt.Println("\nMost Referenced Articles:")
+					for _, arc := range summary.MostReferencedArticles {
+						fmt.Printf("  Article %d: %d incoming references\n", arc.ArticleNum, arc.Count)
+					}
+				}
+
+				if len(summary.MostReferencingArticles) > 0 {
+					fmt.Println("\nArticles With Most Outgoing References:")
+					for _, arc := range summary.MostReferencingArticles {
+						fmt.Printf("  Article %d: %d outgoing references\n", arc.ArticleNum, arc.Count)
+					}
+				}
+
+			default:
+				return fmt.Errorf("unknown format: %s (use json, dot, or summary)", formatStr)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringP("source", "s", "", "Source document path")
+	cmd.Flags().StringP("format", "f", "summary", "Output format (json, dot, summary)")
+	cmd.Flags().StringP("output", "o", "", "Output file path")
+	cmd.Flags().Bool("relations-only", true, "Export only relationship edges (default: true)")
 
 	return cmd
 }
