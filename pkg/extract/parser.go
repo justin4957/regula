@@ -74,8 +74,9 @@ type Paragraph struct {
 
 // Point represents a lettered point within a paragraph (a), (b), etc.
 type Point struct {
-	Letter string `json:"letter"`
-	Text   string `json:"text"`
+	Letter    string      `json:"letter"`
+	Text      string      `json:"text"`
+	SubPoints []*SubPoint `json:"sub_points,omitempty"`
 }
 
 // Definition represents a defined term from Article 4 or similar.
@@ -301,14 +302,37 @@ func (p *Parser) parseMainBody(doc *Document, lines []string) {
 
 			num, _ := strconv.Atoi(m[1])
 
-			// Get article title (next non-empty line)
-			title := ""
-			for j := i + 1; j < len(lines) && j < i+5; j++ {
-				if lines[j] != "" {
-					title = lines[j]
+			// Get article title - collect lines until we hit content or a blank after title
+			var titleLines []string
+			sawBlankAfterTitle := false
+			for j := i + 1; j < len(lines); j++ {
+				if lines[j] == "" {
+					if len(titleLines) > 0 {
+						sawBlankAfterTitle = true
+					}
+					continue // Skip blank lines
+				}
+				// Stop when we hit a paragraph number (e.g., "1.   text" or "1.\u00a0\u00a0\u00a0text")
+				if startsWithParagraphNumber(lines[j]) {
 					break
 				}
+				// Stop when we hit a definition/point number (e.g., "(1) " or "(a) ")
+				if startsWithPointOrDefinition(lines[j]) {
+					break
+				}
+				// Stop when we hit another structural element
+				if p.articlePattern.MatchString(lines[j]) ||
+					p.sectionPattern.MatchString(lines[j]) ||
+					p.chapterPattern.MatchString(lines[j]) {
+					break
+				}
+				// If we saw a blank after collecting title, this is body text, not title
+				if sawBlankAfterTitle {
+					break
+				}
+				titleLines = append(titleLines, lines[j])
 			}
+			title := strings.Join(titleLines, " ")
 
 			currentArticle = &Article{
 				Number: num,
@@ -320,8 +344,8 @@ func (p *Parser) parseMainBody(doc *Document, lines []string) {
 
 		// Accumulate article text
 		if currentArticle != nil && line != "" {
-			// Skip the title line
-			if line != currentArticle.Title {
+			// Skip lines that are part of the title
+			if !strings.Contains(currentArticle.Title, line) {
 				if articleText.Len() > 0 {
 					articleText.WriteString("\n")
 				}
@@ -466,4 +490,63 @@ func (d *Document) AllArticles() []*Article {
 		}
 	}
 	return articles
+}
+
+// startsWithPointOrDefinition checks if a line starts with a point or definition number
+// like "(1) " or "(a) ".
+func startsWithPointOrDefinition(line string) bool {
+	if len(line) < 4 {
+		return false
+	}
+	if line[0] != '(' {
+		return false
+	}
+	// Check for (digit) or (letter) followed by space
+	closeIdx := strings.Index(line, ")")
+	if closeIdx < 2 || closeIdx > 4 { // e.g., "(1)" or "(26)" or "(a)"
+		return false
+	}
+	if closeIdx+1 >= len(line) {
+		return false
+	}
+	// Should have space after closing paren
+	return line[closeIdx+1] == ' '
+}
+
+// startsWithParagraphNumber checks if a line starts with a paragraph number
+// like "1.   " or "1.\u00a0\u00a0\u00a0" (with non-breaking spaces).
+func startsWithParagraphNumber(line string) bool {
+	if len(line) < 3 {
+		return false
+	}
+	// Check for digit followed by period followed by whitespace
+	i := 0
+	for i < len(line) && line[i] >= '0' && line[i] <= '9' {
+		i++
+	}
+	if i == 0 || i >= len(line) {
+		return false
+	}
+	if line[i] != '.' {
+		return false
+	}
+	i++
+	if i >= len(line) {
+		return false
+	}
+	// Check for at least 2 whitespace chars (regular space or non-breaking space \u00a0)
+	whitespaceCount := 0
+	for i < len(line) {
+		if line[i] == ' ' || line[i] == '\u00a0' {
+			whitespaceCount++
+			i++
+		} else if len(line) >= i+2 && line[i:i+2] == "\u00a0" {
+			// UTF-8 encoding of non-breaking space
+			whitespaceCount++
+			i += 2
+		} else {
+			break
+		}
+	}
+	return whitespaceCount >= 2
 }
