@@ -150,11 +150,18 @@ Example:
 			references := refExtractor.ExtractFromDocument(doc)
 			fmt.Printf("done (%d references)\n", len(references))
 
-			// Step 4: Build knowledge graph
-			fmt.Print("  4. Building knowledge graph... ")
+			// Step 4: Extract rights and obligations
+			fmt.Print("  4. Extracting rights/obligations... ")
+			semExtractor := extract.NewSemanticExtractor()
+			semantics := semExtractor.ExtractFromDocument(doc)
+			semStats := extract.CalculateSemanticStats(semantics)
+			fmt.Printf("done (%d rights, %d obligations)\n", semStats.Rights, semStats.Obligations)
+
+			// Step 5: Build knowledge graph
+			fmt.Print("  5. Building knowledge graph... ")
 			tripleStore = store.NewTripleStore()
 			builder := store.NewGraphBuilder(tripleStore, baseURI)
-			stats, err := builder.BuildWithExtractors(doc, defExtractor, refExtractor)
+			stats, err := builder.BuildWithSemantics(doc, defExtractor, refExtractor, semExtractor)
 			if err != nil {
 				return fmt.Errorf("failed to build graph: %w", err)
 			}
@@ -178,6 +185,8 @@ Example:
 				fmt.Printf("  Recitals:         %d\n", stats.Recitals)
 				fmt.Printf("  Definitions:      %d\n", stats.Definitions)
 				fmt.Printf("  References:       %d\n", stats.References)
+				fmt.Printf("  Rights:           %d\n", stats.Rights)
+				fmt.Printf("  Obligations:      %d\n", stats.Obligations)
 			}
 
 			// Save graph if output specified
@@ -355,11 +364,38 @@ var queryTemplates = map[string]QueryTemplate{
 	"rights": {
 		Name:        "rights",
 		Description: "Find articles that grant rights",
-		Query: `SELECT ?article ?title ?right WHERE {
+		Query: `SELECT ?article ?title ?right ?rightType WHERE {
   ?article rdf:type reg:Article .
   ?article reg:title ?title .
   ?article reg:grantsRight ?right .
+  ?right reg:rightType ?rightType .
 } ORDER BY ?article`,
+	},
+	"obligations": {
+		Name:        "obligations",
+		Description: "Find articles that impose obligations",
+		Query: `SELECT ?article ?title ?oblig ?obligType WHERE {
+  ?article rdf:type reg:Article .
+  ?article reg:title ?title .
+  ?article reg:imposesObligation ?oblig .
+  ?oblig reg:obligationType ?obligType .
+} ORDER BY ?article`,
+	},
+	"right-types": {
+		Name:        "right-types",
+		Description: "List distinct right types found",
+		Query: `SELECT DISTINCT ?rightType WHERE {
+  ?right rdf:type reg:Right .
+  ?right reg:rightType ?rightType .
+}`,
+	},
+	"obligation-types": {
+		Name:        "obligation-types",
+		Description: "List distinct obligation types found",
+		Query: `SELECT DISTINCT ?obligType WHERE {
+  ?oblig rdf:type reg:Obligation .
+  ?oblig reg:obligationType ?obligType .
+}`,
 	},
 	"recitals": {
 		Name:        "recitals",
@@ -417,8 +453,9 @@ func loadAndIngest(source string) error {
 
 	defExtractor := extract.NewDefinitionExtractor()
 	refExtractor := extract.NewReferenceExtractor()
+	semExtractor := extract.NewSemanticExtractor()
 
-	_, err = builder.BuildWithExtractors(doc, defExtractor, refExtractor)
+	_, err = builder.BuildWithSemantics(doc, defExtractor, refExtractor, semExtractor)
 	if err != nil {
 		return fmt.Errorf("failed to build graph: %w", err)
 	}
