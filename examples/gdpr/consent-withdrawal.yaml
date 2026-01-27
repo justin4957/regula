@@ -1,0 +1,183 @@
+# Example Scenario: Consent Withdrawal under GDPR
+#
+# This scenario demonstrates how Regula evaluates compliance
+# when a data subject withdraws consent for data processing.
+
+scenario:
+  name: "Consent Withdrawal"
+  description: "User exercises right to withdraw consent under GDPR Article 7(3)"
+  version: "1.0"
+  regulation: "GDPR"
+
+# Initial state - what exists before the trigger event
+given:
+  - entity: DataSubject
+    id: "user-123"
+    attributes:
+      consent_given: true
+      consent_date: "2023-01-15"
+      data_categories:
+        - "email"
+        - "name"
+        - "preferences"
+        - "browsing_history"
+      processing_purposes:
+        - "marketing"
+        - "analytics"
+        - "personalization"
+
+  - entity: DataController
+    id: "company-456"
+    attributes:
+      name: "Example Corp"
+      established_in: "EU"
+      dpo_appointed: true
+      processing_purposes:
+        - "marketing"
+        - "analytics"
+        - "personalization"
+      processors:
+        - "analytics-provider-789"
+        - "email-service-012"
+
+  - entity: DataProcessor
+    id: "analytics-provider-789"
+    attributes:
+      name: "Analytics Co"
+      processing_agreement: true
+      data_categories:
+        - "browsing_history"
+
+  - entity: DataProcessor
+    id: "email-service-012"
+    attributes:
+      name: "Email Service Inc"
+      processing_agreement: true
+      data_categories:
+        - "email"
+        - "name"
+
+# Trigger event - what happens
+when:
+  action: withdraw_consent
+  actor: DataSubject
+  target: DataController
+  timestamp: "2024-01-20T14:30:00Z"
+  parameters:
+    scope: "all"  # Withdrawing all consent
+    method: "online_portal"
+    verification_method: "email_confirmation"
+
+# Expected outcomes - what should happen
+then:
+  # Applicable provisions that should be identified
+  - check: applicable_provisions
+    expect:
+      - id: "GDPR:Art7(3)"
+        description: "Right to withdraw consent"
+        relevance: "direct"
+      - id: "GDPR:Art17"
+        description: "Right to erasure"
+        relevance: "triggered"
+      - id: "GDPR:Art28(3)(g)"
+        description: "Processor obligation to delete on termination"
+        relevance: "transitive"
+
+  # Obligations triggered for data controller
+  - check: obligations_triggered
+    for: DataController
+    expect:
+      - type: cease_processing
+        description: "Cease processing data for withdrawn purposes"
+        deadline: "without undue delay"
+        deadline_max_days: null
+
+      - type: notify_processors
+        description: "Notify data processors of consent withdrawal"
+        deadline: "without undue delay"
+        deadline_max_days: null
+
+      - type: acknowledge_withdrawal
+        description: "Acknowledge the withdrawal to data subject"
+        deadline: "1 month"
+        deadline_max_days: 30
+        extensible: true
+        extension_conditions:
+          - "complex request"
+          - "high volume of requests"
+        max_extension_days: 60
+
+  # Obligations for data processors
+  - check: obligations_triggered
+    for: DataProcessor
+    expect:
+      - type: cease_processing
+        description: "Cease processing on controller instruction"
+        deadline: "as instructed by controller"
+
+      - type: delete_or_return
+        description: "Delete or return personal data"
+        deadline: "on termination of services"
+
+  # Timeline requirements
+  - check: timeline
+    expect:
+      - action: acknowledge_withdrawal
+        deadline: "1 month from receipt"
+        provision: "GDPR:Art12(3)"
+
+      - action: complete_erasure
+        deadline: "without undue delay"
+        max_days: 30
+        provision: "GDPR:Art17(1)"
+
+      - action: notify_third_parties
+        deadline: "without undue delay"
+        provision: "GDPR:Art17(2)"
+        condition: "if data was made public"
+
+  # Rights that remain applicable
+  - check: rights_applicable
+    for: DataSubject
+    expect:
+      - right: "information"
+        description: "Right to be informed about withdrawal processing"
+        provision: "GDPR:Art12-14"
+
+      - right: "access"
+        description: "Right to access data before deletion"
+        provision: "GDPR:Art15"
+
+      - right: "rectification"
+        description: "Right to correct data before deletion"
+        provision: "GDPR:Art16"
+
+  # Compliance status checks
+  - check: compliance_status
+    expect:
+      compliant_if:
+        - "Consent withdrawal acknowledged within 1 month"
+        - "Processing ceased without undue delay"
+        - "Processors notified"
+        - "Erasure completed or justified exception applies"
+
+      exceptions_available:
+        - id: "GDPR:Art17(3)(b)"
+          description: "Legal obligation to retain"
+          applies_when: "data required for legal compliance"
+
+        - id: "GDPR:Art17(3)(e)"
+          description: "Legal claims"
+          applies_when: "data needed for legal claims"
+
+# Expected compliance report structure
+output:
+  format: "compliance_report"
+  sections:
+    - summary
+    - applicable_provisions
+    - triggered_obligations
+    - timeline_requirements
+    - risk_areas
+    - recommendations
+    - audit_trail
