@@ -1,0 +1,144 @@
+{
+  "metadata": {
+    "corpus_id": "intl-uncitral",
+    "jurisdiction": "INTL",
+    "short_name": "UNCITRAL Model Law",
+    "generated_at": "2026-01-28T21:08:07Z"
+  },
+  "statistics": {
+    "chapters": 3,
+    "sections": 0,
+    "articles": 15,
+    "definitions": 6,
+    "recitals": 0
+  },
+  "document": {
+    "title": "UNCITRAL MODEL LAW ON ELECTRONIC COMMERCE",
+    "type": "act",
+    "identifier": "",
+    "preamble": {
+      "recitals": []
+    },
+    "chapters": [
+      {
+        "number": "I",
+        "title": "General provisions",
+        "articles": [
+          {
+            "number": 1,
+            "title": "Sphere of application",
+            "text": "This Law applies to any kind of information in the form of a data message used in the context of commercial activities."
+          },
+          {
+            "number": 2,
+            "title": "Definitions",
+            "text": "For the purposes of this Law:\n(1) 'data message' means information generated, sent, received or stored by electronic, optical or similar means including, but not limited to, electronic data interchange (EDI), electronic mail, telegram, telex or telecopy.\n(2) 'electronic data interchange' means the electronic transfer from computer to computer of information using an agreed standard to structure the information.\n(3) 'originator' means a person by whom, or on whose behalf, the data message purports to have been sent or generated prior to storage, if any, but does not include a person acting as an intermediary with respect to that data message.\n(4) 'addressee' means a person who is intended by the originator to receive the data message, but does not include a person acting as an intermediary with respect to that data message.\n(5) 'intermediary' means a person who, on behalf of another person, sends, receives or stores that data message or provides other services with respect to that data message.\n(6) 'information system' means a system for generating, sending, receiving, storing or otherwise processing data messages."
+          },
+          {
+            "number": 3,
+            "title": "Interpretation",
+            "text": "1. In the interpretation of this Law, regard is to be had to its international origin and to the need to promote uniformity in its application and the observance of good faith.\n2. Questions concerning matters governed by this Law which are not expressly settled in it are to be settled in conformity with the general principles on which this Law is based."
+          },
+          {
+            "number": 4,
+            "title": "Variation by agreement",
+            "text": "1. As between parties involved in generating, sending, receiving, storing or otherwise processing data messages, and except as otherwise provided, the provisions of chapter III may be varied by agreement.\n2. Nothing in this article affects any right that may exist to modify by agreement any rule of law referred to in chapter II."
+          }
+        ]
+      },
+      {
+        "number": "II",
+        "title": "Application of legal requirements to data messages",
+        "articles": [
+          {
+            "number": 5,
+            "title": "Legal recognition of data messages",
+            "text": "Information shall not be denied legal effect, validity or enforceability solely on the grounds that it is in the form of a data message.\nArticle 5 bis\nIncorporation by reference\nInformation shall not be denied legal effect, validity or enforceability solely on the grounds that it is not contained in the data message purporting to give rise to such legal effect, but is merely referred to in that data message."
+          },
+          {
+            "number": 6,
+            "title": "Writing",
+            "text": "1. Where the law requires information to be in writing, that requirement is met by a data message if the information contained therein is accessible so as to be usable for subsequent reference.\n2. Paragraph 1 applies whether the requirement therein is in the form of an obligation or whether the law simply provides consequences for the information not being in writing.\n3. The provisions of this article do not apply to the following: contracts for the sale of goods, negotiable instruments, documents of title, or other situations as may be excluded by the enacting State."
+          },
+          {
+            "number": 7,
+            "title": "Signature",
+            "text": "1. Where the law requires a signature of a person, that requirement is met in relation to a data message if:\n(a) a method is used to identify that person and to indicate that person's approval of the information contained in the data message; and\n(b) that method is as reliable as was appropriate for the purpose for which the data message was generated or communicated, in the light of all the circumstances, including any relevant agreement.\n2. Paragraph 1 applies whether the requirement therein is in the form of an obligation or whether the law simply provides consequences for the absence of a signature.\n3. The provisions of this article do not apply to the following: contracts for the sale of goods, negotiable instruments, documents of title, or other situations as may be excluded by the enacting State."
+          },
+          {
+            "number": 8,
+            "title": "Original",
+            "text": "1. Where the law requires information to be presented or retained in its original form, that requirement is met by a data message if:\n(a) there exists a reliable assurance as to the integrity of the information from the time when it was first generated in its final form, as a data message or otherwise; and\n(b) where it is required that information be presented, that information is capable of being displayed to the person to whom it is to be presented.\n2. Paragraph 1 applies whether the requirement therein is in the form of an obligation or whether the law simply provides consequences for the information not being presented or retained in its original form.\n3. For the purposes of subparagraph (a) of paragraph 1:\n(a) the criteria for assessing integrity shall be whether the information has remained complete and unaltered, apart from the addition of any endorsement and any change which arises in the normal course of communication, storage and display; and\n(b) the standard of reliability required shall be assessed in the light of the purpose for which the information was generated and in the light of all the relevant circumstances."
+          },
+          {
+            "number": 9,
+            "title": "Admissibility and evidential weight of data messages",
+            "text": "1. In any legal proceedings, nothing in the application of the rules of evidence shall apply so as to deny the admissibility of a data message in evidence:\n(a) on the sole ground that it is a data message; or\n(b) if it is the best evidence that the person adducing it could reasonably be expected to obtain, on the ground that it is not in its original form.\n2. Information in the form of a data message shall be given due evidential weight. In assessing the evidential weight of a data message, regard shall be had to the reliability of the manner in which the data message was generated, stored or communicated, to the reliability of the manner in which the integrity of the information was maintained, to the manner in which its originator was identified, and to any other relevant factor."
+          },
+          {
+            "number": 10,
+            "title": "Retention of data messages",
+            "text": "1. Where the law requires that certain documents, records or information be retained, that requirement is met by retaining data messages, provided that the following conditions are satisfied:\n(a) the information contained therein is accessible so as to be usable for subsequent reference; and\n(b) the data message is retained in the format in which it was generated, sent or received, or in a format which can be demonstrated to represent accurately the information generated, sent or received; and\n(c) such information, if any, is retained as enables the identification of the origin and destination of a data message and the date and time when it was sent or received.\n2. An obligation to retain documents, records or information in accordance with paragraph 1 does not extend to any information the sole purpose of which is to enable the message to be sent or received.\n3. A person may satisfy the requirement referred to in paragraph 1 by using the services of any other person, provided that the conditions set forth in subparagraphs (a), (b) and (c) of paragraph 1 are met."
+          }
+        ]
+      },
+      {
+        "number": "III",
+        "title": "Communication of data messages",
+        "articles": [
+          {
+            "number": 11,
+            "title": "Formation and validity of contracts",
+            "text": "1. In the context of contract formation, unless otherwise agreed by the parties, an offer and the acceptance of an offer may be expressed by means of data messages. Where a data message is used in the formation of a contract, that contract shall not be denied validity or enforceability on the sole ground that a data message was used for that purpose.\n2. The provisions of this article do not apply to the following: contracts for the sale of goods, negotiable instruments, documents of title, or other situations as may be excluded by the enacting State."
+          },
+          {
+            "number": 12,
+            "title": "Recognition by parties of data messages",
+            "text": "1. As between the originator and the addressee of a data message, a declaration of will or other statement shall not be denied legal effect, validity or enforceability solely on the grounds that it is in the form of a data message.\n2. The provisions of this article do not apply to the following: contracts for the sale of goods, negotiable instruments, documents of title, or other situations as may be excluded by the enacting State."
+          },
+          {
+            "number": 13,
+            "title": "Attribution of data messages",
+            "text": "1. A data message is that of the originator if it was sent by the originator itself.\n2. As between the originator and the addressee, a data message is deemed to be that of the originator if it was sent:\n(a) by a person who had the authority to act on behalf of the originator in respect of that data message; or\n(b) by an information system programmed by, or on behalf of, the originator to operate automatically.\n3. As between the originator and the addressee, an addressee is entitled to regard a data message as being that of the originator, and to act on that assumption, if:\n(a) in order to ascertain whether the data message was that of the originator, the addressee properly applied a procedure previously agreed to by the originator for that purpose; or\n(b) the data message as received by the addressee resulted from the actions of a person whose relationship with the originator or with any agent of the originator enabled that person to gain access to a method used by the originator to identify data messages as its own.\n4. Paragraph 3 does not apply:\n(a) as of the time when the addressee has both received notice from the originator that the data message is not that of the originator, and had reasonable time to act accordingly; or\n(b) in a case within paragraph 3(b), at any time when the addressee knew or should have known, had it exercised reasonable care or used any agreed procedure, that the data message was not that of the originator.\n5. Where a data message is that of the originator or is deemed to be that of the originator, or the addressee is entitled to act on that assumption, then, as between the originator and the addressee, the addressee is entitled to regard the data message as received as being what the originator intended to send, and to act on that assumption. The addressee is not so entitled when it knew or should have known, had it exercised reasonable care or used any agreed procedure, that the transmission resulted in any error in the data message as received.\n6. The addressee is entitled to regard each data message received as a separate data message and to act on that assumption, except to the extent that it duplicates another data message and the addressee knew or should have known, had it exercised reasonable care or used any agreed procedure, that the data message was a duplicate."
+          },
+          {
+            "number": 14,
+            "title": "Acknowledgement of receipt",
+            "text": "1. Paragraphs 2 to 4 of this article apply where, on or before sending a data message, or by means of that data message, the originator has requested or has agreed with the addressee that receipt of the data message be acknowledged.\n2. Where the originator has not agreed with the addressee that the acknowledgement be given in a particular form or by a particular method, an acknowledgement may be given by any communication by the addressee, automated or otherwise, or any conduct of the addressee, sufficient to indicate to the originator that the data message has been received.\n3. Where the originator has stated that the data message is conditional on receipt of the acknowledgement, the data message is treated as though it has never been sent, until the acknowledgement is received.\n4. Where the originator has not stated that the data message is conditional on receipt of the acknowledgement, and the acknowledgement has not been received by the originator within the time specified or agreed or, if no time has been specified or agreed, within a reasonable time, the originator may give notice to the addressee stating that no acknowledgement has been received and specifying a reasonable time by which the acknowledgement must be received, and if the acknowledgement is not received within the time specified, the originator may, upon notice to the addressee, treat the data message as though it had never been sent, or exercise any other rights it may have.\n5. Where the originator receives the addressee's acknowledgement of receipt, it is presumed that the related data message was received by the addressee. That presumption does not imply that the data message corresponds to the message received.\n6. Where the received acknowledgement states that the related data message met technical requirements, either agreed upon or set forth in applicable standards, it is presumed that those requirements have been met.\n7. Except in so far as it relates to the sending or receipt of the data message, this article is not intended to deal with the legal consequences that may flow from that data message or from the acknowledgement of its receipt."
+          },
+          {
+            "number": 15,
+            "title": "Time and place of dispatch and receipt of data messages",
+            "text": "1. Unless otherwise agreed between the originator and the addressee, the dispatch of a data message occurs when it enters an information system outside the control of the originator or of the person who sent the data message on behalf of the originator.\n2. Unless otherwise agreed between the originator and the addressee, the time of receipt of a data message is determined as follows:\n(a) if the addressee has designated an information system for the purpose of receiving data messages, receipt occurs at the time when the data message enters the designated information system, or if the data message is sent to an information system of the addressee that is not the designated information system, at the time when the data message is retrieved by the addressee;\n(b) if the addressee has not designated an information system, receipt occurs when the data message enters an information system of the addressee.\n3. Paragraph 2 applies notwithstanding that the place where the information system is located may be different from the place where the data message is deemed to be received under paragraph 4.\n4. Unless otherwise agreed between the originator and the addressee, a data message is deemed to be dispatched at the place where the originator has its place of business, and is deemed to be received at the place where the addressee has its place of business. For the purposes of this paragraph:\n(a) if the originator or the addressee has more than one place of business, the place of business is that which has the closest relationship to the underlying transaction or, where there is no underlying transaction, the principal place of business;\n(b) if the originator or the addressee does not have a place of business, reference is to be made to its habitual residence.\n5. The provisions of this article do not apply to the following: contracts for the sale of goods, negotiable instruments, documents of title, or other situations as may be excluded by the enacting State."
+          }
+        ]
+      }
+    ],
+    "definitions": [
+      {
+        "number": 1,
+        "term": "data message"
+      },
+      {
+        "number": 2,
+        "term": "electronic data interchange"
+      },
+      {
+        "number": 3,
+        "term": "originator"
+      },
+      {
+        "number": 4,
+        "term": "addressee"
+      },
+      {
+        "number": 5,
+        "term": "intermediary"
+      },
+      {
+        "number": 6,
+        "term": "information system"
+      }
+    ]
+  }
+}

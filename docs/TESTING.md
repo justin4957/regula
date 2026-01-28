@@ -156,6 +156,61 @@ instead of "42 U.S.C. § 1320d"). These may show as unresolved internal referenc
 The semantic extraction and definition coverage are more reliable metrics for
 VCDPA validation.
 
+### Corpus Golden File Testing
+
+The test corpus at `testdata/corpus/` provides comprehensive golden file validation across 15 jurisdictions and 5 format families (EU Regulation, EU Directive, US State/Federal, UK Primary/Secondary, Generic/International).
+
+**Run corpus tests:**
+
+```bash
+# Validate parser output against golden files
+go test ./pkg/extract/... -run TestCorpusGoldenFiles -v
+
+# Regenerate golden files after parser changes
+go test ./pkg/extract/... -run TestCorpusGoldenFiles -update -v
+
+# Validate manifest integrity (source files exist, no duplicate IDs, minimum 10 entries)
+go test ./pkg/extract/... -run TestCorpusManifestIntegrity -v
+```
+
+**Corpus structure:**
+
+```
+testdata/corpus/
+  manifest.json          # Corpus metadata and entry list
+  SOURCES.md             # Provenance documentation
+  eu-gdpr/expected.json  # Golden file per jurisdiction
+  eu-eprivacy/source.txt # Source document (5 new documents)
+  ...
+```
+
+**Adding a new jurisdiction:**
+
+1. Add the source document to `testdata/corpus/<id>/source.txt` (or reference an existing `testdata/*.txt` file)
+2. Add an entry to `testdata/corpus/manifest.json` with metadata
+3. Generate the golden file: `go test ./pkg/extract/... -run TestCorpusGoldenFiles -update -v`
+4. Verify: `go test ./pkg/extract/... -run TestCorpusGoldenFiles -v`
+
+**Current corpus entries (15 jurisdictions):**
+
+| ID | Jurisdiction | Format | Chapters | Articles | Definitions | Recitals |
+|----|-------------|--------|----------|----------|-------------|----------|
+| `eu-gdpr` | EU | EU Regulation | 11 | 99 | 26 | 173 |
+| `eu-eprivacy` | EU | EU Directive | 5 | 21 | 8 | 8 |
+| `us-ca-ccpa` | US-CA | US State | 6 | 21 | 15 | 0 |
+| `us-va-vcdpa` | US-VA | US State | 7 | 11 | 20 | 0 |
+| `us-co-cpa` | US-CO | US State | 1 | 10 | 18 | 0 |
+| `us-ct-ctdpa` | US-CT | US State | 1 | 9 | 17 | 0 |
+| `us-ut-ucpa` | US-UT | US State | 4 | 7 | 13 | 0 |
+| `us-tx-tdpsa` | US-TX | US State | 1 | 7 | 18 | 0 |
+| `us-ia-icdpa` | US-IA | US State | 1 | 7 | 15 | 0 |
+| `us-hipaa` | US-Federal | US Federal | 2 | 0 | 0 | 0 |
+| `us-hipaa-cfr` | US-Federal | US CFR | 2 | 8 | 0 | 0 |
+| `gb-dpa2018` | GB | UK Primary | 9 | 21 | 4 | 0 |
+| `gb-si-example` | GB | UK SI | 4 | 9 | 5 | 0 |
+| `intl-uncitral` | INTL | Generic | 3 | 15 | 6 | 0 |
+| `au-privacy` | AU | Generic | 1 | 16 | 0 | 0 |
+
 ### Expected Output Files
 
 Expected outputs for comparison testing:
@@ -163,6 +218,7 @@ Expected outputs for comparison testing:
 | File | Description |
 |------|-------------|
 | `testdata/art17-impact-expected.json` | Expected impact analysis for Art 17 |
+| `testdata/corpus/*/expected.json` | Golden file corpus (15 jurisdictions) |
 
 ## Writing New Tests
 

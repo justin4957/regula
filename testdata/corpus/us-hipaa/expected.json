@@ -1,0 +1,30 @@
+{
+  "metadata": {
+    "corpus_id": "us-hipaa",
+    "jurisdiction": "US-Federal",
+    "short_name": "HIPAA",
+    "generated_at": "2026-01-28T21:08:07Z"
+  },
+  "statistics": {
+    "chapters": 2,
+    "sections": 0,
+    "articles": 0,
+    "definitions": 0,
+    "recitals": 0
+  },
+  "document": {
+    "title": "HEALTH INSURANCE PORTABILITY AND ACCOUNTABILITY ACT OF 1996",
+    "type": "act",
+    "identifier": "",
+    "chapters": [
+      {
+        "number": "1",
+        "title": "General Provisions and Definitions"
+      },
+      {
+        "number": "2",
+        "title": "Security and Electronic Signature Standards"
+      }
+    ]
+  }
+}

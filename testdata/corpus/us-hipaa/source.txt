@@ -1,0 +1,172 @@
+HEALTH INSURANCE PORTABILITY AND ACCOUNTABILITY ACT OF 1996
+
+TITLE II — PREVENTING HEALTH CARE FRAUD AND ABUSE; ADMINISTRATIVE SIMPLIFICATION
+
+SUBTITLE F — ADMINISTRATIVE SIMPLIFICATION
+
+CHAPTER 1
+General Provisions and Definitions
+
+Article 1
+Short Title and Purpose
+
+Section 1320d
+Definitions
+
+For purposes of this part:
+
+(1) 'code set' means any set of codes used for encoding data elements, such as tables of terms, medical concepts, medical diagnostic codes, or medical procedure codes.
+
+(2) 'health care clearinghouse' means a public or private entity that processes or facilitates the processing of nonstandard data elements of health information into standard data elements.
+
+(3) 'health care provider' means a provider of services as defined in section 1861(u), a provider of medical or other health services as defined in section 1861(s), and any other person furnishing health care services or supplies.
+
+(4) 'health information' means any information, whether oral or recorded in any form or medium, that is created or received by a health care provider, health plan, public health authority, employer, life insurer, school or university, or health care clearinghouse; and relates to the past, present, or future physical or mental health or condition of an individual, the provision of health care to an individual, or the past, present, or future payment for the provision of health care to an individual.
+
+(5) 'health plan' means an individual or group plan that provides, or pays the cost of, medical care as defined in section 2791(a)(2).
+
+(6) 'individually identifiable health information' means any information, including demographic information collected from an individual, that is created or received by a health care provider, health plan, employer, or health care clearinghouse; and relates to the past, present, or future physical or mental health or condition of an individual, the provision of health care to an individual, or the past, present, or future payment for the provision of health care to an individual, and that identifies the individual or with respect to which there is a reasonable basis to believe that the information can be used to identify the individual.
+
+(7) 'standard' means a standard adopted under section 1320d-1.
+
+(8) 'standard setting organization' means a standard setting organization accredited by the American National Standards Institute, including the National Council for Prescription Drug Programs, that develops standards for information transactions, data elements, or any other standard that is necessary to, or will facilitate, the implementation of this part.
+
+Section 1320d-1
+General Requirements for Adoption of Standards
+
+(a) Applicability. Any standard adopted under this part shall apply, in whole or in part, to the following persons:
+
+(1) A health plan.
+
+(2) A health care clearinghouse.
+
+(3) A health care provider who transmits any health information in electronic form in connection with a transaction referred to in section 1320d-2.
+
+(b) Reduction of costs. Any standard adopted under this part shall be consistent with the objective of reducing the administrative costs of providing and paying for health care.
+
+(c) Role of standard setting organizations.
+
+(1) In general. Except as provided in paragraph (2), any standard adopted under this part shall be a standard that has been developed, adopted, or modified by a standard setting organization.
+
+(2) Special rules.
+
+(A) If no standard setting organization has developed, adopted, or modified any standard relating to a standard that the Secretary is authorized or required under this part to adopt, the Secretary shall rely on the recommendations of the National Committee on Vital and Health Statistics established under section 306(k) of the Public Health Service Act.
+
+(B) If the Secretary determines that a standard adopted by a standard setting organization does not meet the requirements of subsection (b), the Secretary shall modify the standard where possible.
+
+Section 1320d-2
+Standards for Information Transactions and Data Elements
+
+(a) Standards for information transactions.
+
+(1) Health information transactions. The Secretary shall adopt standards for transactions, and data elements for such transactions, to enable health information to be exchanged electronically, that are appropriate for the following:
+
+(A) Health claims or equivalent encounter information.
+
+(B) Health claims attachments.
+
+(C) Enrollment and disenrollment in a health plan.
+
+(D) Eligibility for a health plan.
+
+(E) Health care payment and remittance advice.
+
+(F) Health plan premium payments.
+
+(G) First report of injury.
+
+(H) Health claim status.
+
+(I) Referral certification and authorization.
+
+(2) Consultation on standards for information transactions.
+
+(A) In general. The standards referred to in paragraph (1) shall be developed, adopted, or modified by a standard setting organization.
+
+(B) Limitation on role of Secretary. The Secretary may not adopt any standard under this subsection unless the Secretary has consulted with each of the following:
+
+(i) The National Uniform Billing Committee.
+
+(ii) The National Uniform Claim Committee.
+
+(iii) The Workgroup for Electronic Data Interchange.
+
+(iv) The American Dental Association.
+
+(b) Unique health identifiers.
+
+(1) In general. The Secretary shall adopt standards providing for a standard unique health identifier for each individual, employer, health plan, and health care provider for use in the health care system. In carrying out the preceding sentence for each health plan and health care provider, the Secretary shall take into account multiple uses for identifiers and multiple locations and specialty classifications for health care providers.
+
+(2) Use of identifiers. The standards adopted under paragraph (1) shall specify the purposes for which a unique health identifier may be used.
+
+CHAPTER 2
+Security and Electronic Signature Standards
+
+Article 2
+Security Standards
+
+Section 1320d-3
+Timetable for Adoption of Standards
+
+(a) Initial standards. The Secretary shall carry out section 1320d-1 not later than 18 months after the date of the enactment of the Health Insurance Portability and Accountability Act of 1996, except that standards relating to claims attachments shall be adopted not later than 30 months after such date.
+
+(b) Additions and modifications to standards.
+
+(1) In general. Except as provided in paragraph (2), the Secretary shall review the standards adopted under section 1320d-1 and shall adopt modifications to the standards (including additions to the standards), as determined appropriate, but not more frequently than once every 12 months. Any addition or modification to a standard shall be completed in a manner which minimizes the disruption and cost of compliance.
+
+(2) Special rules.
+
+(A) The Secretary shall ensure that procedures exist for the routine maintenance, testing, enhancement, and expansion of code sets and the modification of standards.
+
+(B) The Secretary shall expand or modify code sets as necessary to keep them current.
+
+Section 1320d-4
+Requirements
+
+(a) Conduct of transactions by plans.
+
+(1) In general. If a person desires to conduct a transaction referred to in section 1320d-2(a)(1) with a health plan as a standard transaction, the health plan may not refuse to conduct such transaction as a standard transaction. The plan may not delay such transaction, or otherwise adversely affect, or attempt to adversely affect, the person or the transaction on the ground that the transaction is a standard transaction.
+
+(2) Compliance cost. A health plan may not impose any penalty or other adverse consequence on a health care provider for the conduct of a standard transaction.
+
+(b) Compliance with standards.
+
+(1) Initial compliance.
+
+(A) Health plan. Not later than 24 months after the date on which an initial standard or implementation specification is adopted or established under sections 1320d-1 and 1320d-2, each health plan shall comply with the standard as adopted.
+
+(B) Small health plans. In the case of a small health plan, the Secretary shall provide for an additional 12-month period for compliance.
+
+(2) Testing of compliance. The Secretary shall provide for testing the compliance of health plans, health care clearinghouses, and health care providers with the standards adopted under this part.
+
+Section 1320d-5
+General Penalty for Failure to Comply with Requirements and Standards
+
+(a) General penalty.
+
+(1) In general. Except as provided in subsection (b), the Secretary shall impose on any person who violates a provision of this part a penalty of not more than $100 for each such violation, except that the total amount imposed on the person for all violations of an identical requirement or prohibition during a calendar year may not exceed $25,000.
+
+(2) Procedures. The provisions of section 1128A (other than subsections (a) and (b) and the second sentence of subsection (f)) shall apply to a civil money penalty under this subsection in the same manner as such provisions apply to a penalty or proceeding under section 1128A(a).
+
+(b) Limitations.
+
+(1) Offenses otherwise punishable. No penalty may be imposed under subsection (a) and no damages obtained under subsection (d) with respect to an act if a penalty has been imposed under section 1320d-6 with respect to such act.
+
+(2) Noncompliance not discovered. A penalty may not be imposed under subsection (a) with respect to a provision of this part if it is established to the satisfaction of the Secretary that the person liable for the penalty did not know, and by exercising reasonable diligence would not have known, that such person violated the provision.
+
+(3) Failures due to reasonable cause.
+
+(A) In general. Except as provided in subparagraph (B) or subsection (a)(1)(C), a penalty may not be imposed under subsection (a) if the failure to comply is corrected during the 30-day period beginning on the first date the person liable for the penalty knew, or by exercising reasonable diligence would have known, that the failure to comply occurred.
+
+(B) Extension of period.
+
+(i) No penalty shall be imposed under subsection (a) for a failure to comply if the failure to comply is due to reasonable cause and not to willful neglect.
+
+(ii) The Secretary may provide a reasonable extension of the 30-day period referred to in subparagraph (A) to the extent that the period, without an extension, would impose an undue hardship on the person liable for the penalty.
+
+Section 1320d-6
+Wrongful Disclosure of Individually Identifiable Health Information
+
+(a) Offense. A person who knowingly and in violation of this part uses or causes to be used a unique health identifier, or obtains individually identifiable health information relating to an individual, or discloses individually identifiable health information to another person, shall be punished as provided in subsection (b).
+
+(b) Penalties. A person described in subsection (a) shall be fined not more than $50,000, imprisoned not more than 1 year, or both. If the offense is committed under false pretenses, such person shall be fined not more than $100,000, imprisoned not more than 5 years, or both. If the offense is committed with intent to sell, transfer, or use individually identifiable health information for commercial advantage, personal gain, or malicious harm, such person shall be fined not more than $250,000, imprisoned not more than 10 years, or both.

@@ -1,0 +1,74 @@
+{
+  "metadata": {
+    "corpus_id": "us-hipaa-cfr",
+    "jurisdiction": "US-Federal",
+    "short_name": "45 CFR 164",
+    "generated_at": "2026-01-28T21:08:07Z"
+  },
+  "statistics": {
+    "chapters": 2,
+    "sections": 0,
+    "articles": 8,
+    "definitions": 0,
+    "recitals": 0
+  },
+  "document": {
+    "title": "TITLE 45 — PUBLIC WELFARE",
+    "type": "act",
+    "identifier": "Cal. Civ. Code Title 45",
+    "chapters": [
+      {
+        "number": "1",
+        "title": "General Administrative Requirements",
+        "articles": [
+          {
+            "number": 102,
+            "title": "Statutory Basis",
+            "text": "The provisions of this part are adopted pursuant to the Secretary's authority to prescribe standards, requirements, and implementation specifications under part C of title XI of the Social Security Act, section 264 of Public Law 104-191, and sections 13400-13424 of Public Law 111-5."
+          },
+          {
+            "number": 103,
+            "title": "Definitions",
+            "text": "As used in this part, the following terms have the following meanings:\n(1) 'breach' means the acquisition, access, use, or disclosure of protected health information in a manner not permitted under subpart E of this part which compromises the security or privacy of the protected health information.\n(2) 'business associate' means, with respect to a covered entity, a person who creates, receives, maintains, or transmits protected health information on behalf of the covered entity for a function or activity regulated by this subchapter, including claims processing or administration, data analysis, processing or administration, utilization review, quality assurance, patient safety activities, billing, benefit management, practice management, and repricing.\n(3) 'covered entity' means a health plan, a health care clearinghouse, or a health care provider who transmits any health information in electronic form in connection with a transaction covered by this subchapter.\n(4) 'designated record set' means a group of records maintained by or for a covered entity that is the medical records and billing records about individuals maintained by or for a covered health care provider, the enrollment, payment, claims adjudication, and case or medical management record systems maintained by or for a health plan, or used in whole or in part by or for the covered entity to make decisions about individuals.\n(5) 'disclosure' means the release, transfer, provision of, access to, or divulging in any manner of information outside the entity holding the information.\n(6) 'electronic media' means electronic storage material on which data is or may be recorded electronically, including memory devices in computers (hard drives) and any removable or transportable digital memory medium, such as magnetic tape or disk, optical disk, or digital memory card, or transmission media used to exchange information already in electronic storage media, including the Internet, extranet or intranet, leased lines, dial-up lines, private networks, and the physical movement of removable or transportable electronic storage media.\n(7) 'electronic protected health information' means individually identifiable health information that is transmitted by electronic media or maintained in electronic media.\n(8) 'health care operations' means any of the following activities of the covered entity to the extent that the activities are related to covered functions, including quality assessment and improvement activities, population-based activities relating to improving health or reducing health care costs, protocol development, case management and care coordination, contacting of health care providers and patients with information about treatment alternatives, and related functions.\n(9) 'individually identifiable health information' means information that is a subset of health information, including demographic information collected from an individual, and is created or received by a health care provider, health plan, employer, or health care clearinghouse, and relates to the past, present, or future physical or mental health or condition of an individual.\n(10) 'minimum necessary' means the minimum amount of protected health information necessary to accomplish the intended purpose of the use, disclosure, or request.\n(11) 'protected health information' means individually identifiable health information that is transmitted by electronic media, maintained in electronic media, or transmitted or maintained in any other form or medium, except for individually identifiable health information in education records covered by the Family Educational Rights and Privacy Act and employment records held by a covered entity in its role as employer."
+          }
+        ]
+      },
+      {
+        "number": "2",
+        "title": "Security Standards",
+        "articles": [
+          {
+            "number": 302,
+            "title": "Applicability",
+            "text": "A covered entity or business associate must comply with the applicable standards, implementation specifications, and requirements of this subpart with respect to electronic protected health information of the covered entity or business associate."
+          },
+          {
+            "number": 304,
+            "title": "Definitions",
+            "text": "As used in this subpart, the following terms have the following meanings:\n(1) 'access' means the ability or the means necessary to read, write, modify, or communicate data or information or otherwise use any system resource.\n(2) 'administrative safeguards' means administrative actions, and policies and procedures, to manage the selection, development, implementation, and maintenance of security measures to protect electronic protected health information and to manage the conduct of the covered entity's or business associate's workforce in relation to the protection of that information.\n(3) 'authentication' means the corroboration that a person is the one claimed.\n(4) 'availability' means the property that data or information is accessible and useable upon demand by an authorized person.\n(5) 'confidentiality' means the property that data or information is not made available or disclosed to unauthorized persons or processes.\n(6) 'integrity' means the property that data or information have not been altered or destroyed in an unauthorized manner.\n(7) 'physical safeguards' means physical measures, policies, and procedures to protect a covered entity's or business associate's electronic information systems and related buildings and equipment, from natural and environmental hazards, and unauthorized intrusion.\n(8) 'security incident' means the attempted or successful unauthorized access, use, disclosure, modification, or destruction of information or interference with system operations in an information system.\n(9) 'technical safeguards' means the technology and the policy and procedures for its use that protect electronic protected health information and control access to it."
+          },
+          {
+            "number": 306,
+            "title": "Security Standards: General Rules",
+            "text": "(a) General requirements. Covered entities and business associates must do the following:\n(1) Ensure the confidentiality, integrity, and availability of all electronic protected health information the covered entity or business associate creates, receives, maintains, or transmits.\n(2) Protect against any reasonably anticipated threats or hazards to the security or integrity of such information.\n(3) Protect against any reasonably anticipated uses or disclosures of such information that are not permitted or required under subpart E of this part.\n(4) Ensure compliance with this subpart by its workforce.\n(b) Flexibility of approach.\n(1) Covered entities and business associates may use any security measures that allow the covered entity or business associate to reasonably and appropriately implement the standards and implementation specifications as specified in this subpart.\n(2) In deciding which security measures to use, a covered entity or business associate must take into account the following factors:\n(i) The size, complexity, and capabilities of the covered entity or business associate.\n(ii) The covered entity's or business associate's technical infrastructure, hardware, and software security capabilities.\n(iii) The costs of security measures.\n(iv) The probability and criticality of potential risks to electronic protected health information."
+          },
+          {
+            "number": 308,
+            "title": "Administrative Safeguards",
+            "text": "(a) A covered entity or business associate must, in accordance with section 164.306:\n(1) Security management process. Implement policies and procedures to prevent, detect, contain, and correct security violations.\n(i) Risk analysis. Conduct an accurate and thorough assessment of the potential risks and vulnerabilities to the confidentiality, integrity, and availability of electronic protected health information held by the covered entity or business associate.\n(ii) Risk management. Implement security measures sufficient to reduce risks and vulnerabilities to a reasonable and appropriate level to comply with section 164.306(a).\n(iii) Sanction policy. Apply appropriate sanctions against workforce members who fail to comply with the security policies and procedures of the covered entity or business associate.\n(iv) Information system activity review. Implement procedures to regularly review records of information system activity, such as audit logs, access reports, and security incident tracking reports.\n(2) Assigned security responsibility. Identify the security official who is responsible for the development and implementation of the policies and procedures required by this subpart for the covered entity or business associate.\n(3) Workforce security. Implement policies and procedures to ensure that all members of its workforce have appropriate access to electronic protected health information, as provided under paragraph (a)(4) of this section, and to prevent those workforce members who do not have access under paragraph (a)(4) of this section from obtaining access to electronic protected health information.\n(4) Information access management. Implement policies and procedures for authorizing access to electronic protected health information that are consistent with the applicable requirements of subpart E of this part.\n(5) Security awareness and training.\n(i) Security reminders. Implement periodic security updates.\n(ii) Protection from malicious software. Implement procedures for guarding against, detecting, and reporting malicious software.\n(iii) Log-in monitoring. Implement procedures for monitoring log-in attempts and reporting discrepancies.\n(iv) Password management. Implement procedures for creating, changing, and safeguarding passwords."
+          },
+          {
+            "number": 310,
+            "title": "Physical Safeguards",
+            "text": "(a) Facility access controls. Implement policies and procedures to limit physical access to its electronic information systems and the facility or facilities in which they are housed, while ensuring that properly authorized access is allowed.\n(1) Contingency operations. Establish and implement as needed procedures that allow facility access in support of restoration of lost data under the disaster recovery plan and emergency mode operations plan in the event of an emergency.\n(2) Facility security plan. Implement policies and procedures to safeguard the facility and the equipment therein from unauthorized physical access, tampering, and theft.\n(3) Access control and validation procedures. Implement procedures to control and validate a person's access to facilities based on their role or function, including visitor control, and control of access to software programs for testing and revision.\n(4) Maintenance records. Implement policies and procedures to document repairs and modifications to the physical components of a facility which are related to security."
+          },
+          {
+            "number": 312,
+            "title": "Technical Safeguards",
+            "text": "(a) Access control. Implement technical policies and procedures for electronic information systems that maintain electronic protected health information to allow access only to those persons or software programs that have been granted access rights as specified in section 164.308(a)(4).\n(1) Unique user identification. Assign a unique name or number for identifying and tracking user identity.\n(2) Emergency access procedure. Establish and implement as needed procedures for obtaining necessary electronic protected health information during an emergency.\n(3) Automatic logoff. Implement electronic procedures that terminate an electronic session after a predetermined time of inactivity.\n(4) Encryption and decryption. Implement a mechanism to encrypt and decrypt electronic protected health information.\n(b) Audit controls. Implement hardware, software, or procedural mechanisms that record and examine activity in information systems that contain or use electronic protected health information.\n(c) Integrity.\n(1) Mechanism to authenticate electronic protected health information. Implement electronic mechanisms to corroborate that electronic protected health information has not been altered or destroyed in an unauthorized manner.\n(d) Person or entity authentication. Implement procedures to verify that a person or entity seeking access to electronic protected health information is the one claimed.\n(e) Transmission security. Implement technical security measures to guard against unauthorized access to electronic protected health information that is being transmitted over an electronic communications network.\n(1) Integrity controls. Implement security measures to ensure that electronically transmitted electronic protected health information is not improperly modified without detection until disposed of.\n(2) Encryption. Implement a mechanism to encrypt electronic protected health information whenever deemed appropriate."
+          }
+        ]
+      }
+    ]
+  }
+}
