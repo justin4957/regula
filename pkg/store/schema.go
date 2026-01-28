@@ -17,6 +17,12 @@ const (
 
 	// NamespaceDC is the Dublin Core namespace for metadata.
 	NamespaceDC = "http://purl.org/dc/terms/"
+
+	// NamespaceELI is the European Legislation Identifier ontology namespace.
+	NamespaceELI = "http://data.europa.eu/eli/ontology#"
+
+	// NamespaceFRBR is the Functional Requirements for Bibliographic Records namespace.
+	NamespaceFRBR = "http://purl.org/vocab/frbr/core#"
 )
 
 // Namespace prefixes for compact URI representation.
@@ -26,6 +32,8 @@ const (
 	PrefixRDFS = "rdfs:"
 	PrefixXSD  = "xsd:"
 	PrefixDC   = "dc:"
+	PrefixELI  = "eli:"
+	PrefixFRBR = "frbr:"
 )
 
 // RDF Standard Predicates.

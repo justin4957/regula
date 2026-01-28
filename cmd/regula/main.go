@@ -996,13 +996,15 @@ func exportCmd() *cobra.Command {
 		Long: `Export the regulation relationship graph in various formats.
 
 Supported formats:
-  - json: JSON graph format with nodes and edges
-  - dot:  DOT format for Graphviz visualization
+  - json:    JSON graph format with nodes and edges
+  - dot:     DOT format for Graphviz visualization
+  - turtle:  W3C Turtle (TTL) RDF serialization
   - summary: Relationship statistics and summary
 
 Example:
   regula export --source gdpr.txt --format json --output graph.json
   regula export --source gdpr.txt --format dot --output graph.dot
+  regula export --source gdpr.txt --format turtle --output graph.ttl
   regula export --source gdpr.txt --format summary`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			source, _ := cmd.Flags().GetString("source")
@@ -1062,6 +1064,20 @@ Example:
 					fmt.Println(dotContent)
 				}
 
+			case "turtle":
+				serializer := store.NewTurtleSerializer()
+				turtleOutput := serializer.Serialize(tripleStore)
+
+				if output != "" {
+					if err := os.WriteFile(output, []byte(turtleOutput), 0644); err != nil {
+						return fmt.Errorf("failed to write file: %w", err)
+					}
+					fmt.Printf("Turtle graph exported to: %s\n", output)
+					fmt.Printf("  Triples: %d\n", tripleStore.Count())
+				} else {
+					fmt.Print(turtleOutput)
+				}
+
 			case "summary":
 				summary := store.CalculateRelationshipSummary(tripleStore)
 
@@ -1089,7 +1105,7 @@ Example:
 				}
 
 			default:
-				return fmt.Errorf("unknown format: %s (use json, dot, or summary)", formatStr)
+				return fmt.Errorf("unknown format: %s (use json, dot, turtle, or summary)", formatStr)
 			}
 
 			return nil
@@ -1097,7 +1113,7 @@ Example:
 	}
 
 	cmd.Flags().StringP("source", "s", "", "Source document path")
-	cmd.Flags().StringP("format", "f", "summary", "Output format (json, dot, summary)")
+	cmd.Flags().StringP("format", "f", "summary", "Output format (json, dot, turtle, summary)")
 	cmd.Flags().StringP("output", "o", "", "Output file path")
 	cmd.Flags().Bool("relations-only", true, "Export only relationship edges (default: true)")
 
