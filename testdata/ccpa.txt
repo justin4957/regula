@@ -1,0 +1,415 @@
+CALIFORNIA CONSUMER PRIVACY ACT OF 2018
+
+TITLE 1.81.5. CALIFORNIA CONSUMER PRIVACY ACT OF 2018
+
+CHAPTER 1
+General Provisions
+
+Article 1
+Short Title and Definitions
+
+Section 1798.100
+Title
+
+This title may be cited as the California Consumer Privacy Act of 2018.
+
+Section 1798.105
+Legislative Intent
+
+(a) The Legislature finds and declares that California consumers should be able to exercise control over their personal information, and want to be certain that their privacy is being protected.
+
+(b) In order to protect consumer privacy and to encourage businesses to respect consumer privacy, this title grants consumers the following rights:
+
+(1) The right of Californians to know what personal information is being collected about them.
+
+(2) The right of Californians to know whether their personal information is sold or disclosed and to whom.
+
+(3) The right of Californians to say no to the sale of personal information.
+
+(4) The right of Californians to access their personal information.
+
+(5) The right of Californians to equal service and price, even if they exercise their privacy rights.
+
+Section 1798.110
+Definitions
+
+For purposes of this title:
+
+(a) 'Business' means:
+
+(1) A sole proprietorship, partnership, limited liability company, corporation, association, or other legal entity that is organized or operated for the profit or financial benefit of its shareholders or other owners that collects consumers' personal information or on the behalf of which that information is collected and that alone, or jointly with others, determines the purposes and means of the processing of consumers' personal information, that does business in the State of California, and that satisfies one or more of the following thresholds:
+
+(A) Has annual gross revenues in excess of twenty-five million dollars ($25,000,000), as adjusted pursuant to paragraph (5) of subdivision (a) of Section 1798.185.
+
+(B) Alone or in combination, annually buys, receives for the business's commercial purposes, sells, or shares for commercial purposes, alone or in combination, the personal information of 50,000 or more consumers, households, or devices.
+
+(C) Derives 50 percent or more of its annual revenues from selling consumers' personal information.
+
+(2) Any entity that controls or is controlled by a business as defined in paragraph (1) and that shares common branding with the business.
+
+(b) 'Business purpose' means the use of personal information for the business's or a service provider's operational purposes, or other notified purposes, provided that the use of personal information shall be reasonably necessary and proportionate to achieve the operational purpose for which the personal information was collected or processed or for another operational purpose that is compatible with the context in which the personal information was collected.
+
+(c) 'Collect,' 'collected,' or 'collection' means buying, renting, gathering, obtaining, receiving, or accessing any personal information pertaining to a consumer by any means.
+
+(d) 'Commercial purposes' means to advance a person's commercial or economic interests, such as by inducing another person to buy, rent, lease, join, subscribe to, provide, or exchange products, goods, property, information, or services, or enabling or effecting, directly or indirectly, a commercial transaction.
+
+(e) 'Consumer' means a natural person who is a California resident, as defined in Section 17014 of Title 18 of the California Code of Regulations, however identified, including by any unique identifier.
+
+(f) 'Deidentified' means information that cannot reasonably identify, relate to, describe, be capable of being associated with, or be linked, directly or indirectly, to a particular consumer, provided that a business that uses deidentified information:
+
+(1) Has implemented technical safeguards that prohibit reidentification of the consumer to whom the information may pertain.
+
+(2) Has implemented business processes that specifically prohibit reidentification of the information.
+
+(3) Has implemented business processes to prevent inadvertent release of deidentified information.
+
+(4) Makes no attempt to reidentify the information.
+
+(g) 'Device' means any physical object that is capable of connecting to the Internet, directly or indirectly, or to another device.
+
+(h) 'Homepage' means the introductory page of an Internet Web site and any Internet Web page where personal information is collected.
+
+(i) 'Infer' or 'inference' means the derivation of information, data, assumptions, or conclusions from facts, evidence, or another source of information or data.
+
+(j) 'Person' means an individual, proprietorship, firm, partnership, joint venture, syndicate, business trust, company, corporation, limited liability company, association, committee, and any other organization or group of persons acting in concert.
+
+(k) 'Personal information' means information that identifies, relates to, describes, is reasonably capable of being associated with, or could reasonably be linked, directly or indirectly, with a particular consumer or household. Personal information includes, but is not limited to, the following if it identifies, relates to, describes, is reasonably capable of being associated with, or could be reasonably linked, directly or indirectly, with a particular consumer or household:
+
+(1) Identifiers such as a real name, alias, postal address, unique personal identifier, online identifier, Internet Protocol address, email address, account name, social security number, driver's license number, passport number, or other similar identifiers.
+
+(2) Any categories of personal information described in subdivision (e) of Section 1798.80.
+
+(3) Characteristics of protected classifications under California or federal law.
+
+(4) Commercial information, including records of personal property, products or services purchased, obtained, or considered, or other purchasing or consuming histories or tendencies.
+
+(5) Biometric information.
+
+(6) Internet or other electronic network activity information, including, but not limited to, browsing history, search history, and information regarding a consumer's interaction with an Internet Web site, application, or advertisement.
+
+(7) Geolocation data.
+
+(8) Audio, electronic, visual, thermal, olfactory, or similar information.
+
+(9) Professional or employment-related information.
+
+(10) Education information, defined as information that is not publicly available personally identifiable information as defined in the Family Educational Rights and Privacy Act (20 U.S.C. Sec. 1232g; 34 C.F.R. Part 99).
+
+(11) Inferences drawn from any of the information identified in this subdivision to create a profile about a consumer reflecting the consumer's preferences, characteristics, psychological trends, predispositions, behavior, attitudes, intelligence, abilities, and aptitudes.
+
+(l) 'Probabilistic identifier' means the identification of a consumer or a device to a degree of certainty of more probable than not based on any categories of personal information included in, or similar to, the categories enumerated in the definition of personal information.
+
+(m) 'Processing' means any operation or set of operations that are performed on personal information or on sets of personal information, whether or not by automated means.
+
+(n) 'Pseudonymize' or 'pseudonymization' means the processing of personal information in a manner that renders the personal information no longer attributable to a specific consumer without the use of additional information, provided that the additional information is kept separately and is subject to technical and organizational measures to ensure that the personal information is not attributed to an identified or identifiable consumer.
+
+(o) 'Research' means scientific, systematic study and observation, including basic research or applied research that is in the public interest and that adheres to all other applicable ethics and privacy laws or studies conducted in the public interest in the area of public health.
+
+(p) 'Sell,' 'selling,' 'sale,' or 'sold' means selling, renting, releasing, disclosing, disseminating, making available, transferring, or otherwise communicating orally, in writing, or by electronic or other means, a consumer's personal information by the business to another business or a third party for monetary or other valuable consideration.
+
+(q) 'Service' or 'services' means work, labor, and services, including services furnished in connection with the sale or repair of goods.
+
+(r) 'Service provider' means a sole proprietorship, partnership, limited liability company, corporation, association, or other legal entity that is organized or operated for the profit or financial benefit of its shareholders or other owners, that processes information on behalf of a business and to which the business discloses a consumer's personal information for a business purpose pursuant to a written contract.
+
+(s) 'Third party' means a person who is not any of the following:
+
+(1) The business that collects personal information from consumers under this title.
+
+(2) A person to whom the business discloses a consumer's personal information for a business purpose pursuant to a written contract.
+
+(t) 'Unique identifier' or 'unique personal identifier' means a persistent identifier that can be used to recognize a consumer, a family, or a device that is linked to a consumer or family, over time and across different services.
+
+(u) 'Verifiable consumer request' means a request that is made by a consumer, by a consumer on behalf of the consumer's minor child, or by a natural person or a person registered with the Secretary of State, authorized by the consumer to act on the consumer's behalf, and that the business can reasonably verify.
+
+CHAPTER 2
+Consumer Rights
+
+Article 2
+Right to Know
+
+Section 1798.115
+Right to Know What Personal Information is Being Collected
+
+(a) A consumer shall have the right to request that a business that collects personal information about the consumer disclose to the consumer the following:
+
+(1) The categories of personal information it has collected about that consumer.
+
+(2) The categories of sources from which the personal information is collected.
+
+(3) The business or commercial purpose for collecting or selling personal information.
+
+(4) The categories of third parties with whom the business shares personal information.
+
+(5) The specific pieces of personal information it has collected about that consumer.
+
+(b) A business that collects personal information about a consumer shall disclose to the consumer, pursuant to paragraph (3) of subdivision (a) of Section 1798.130, the information specified in subdivision (a) upon receipt of a verifiable consumer request from the consumer.
+
+(c) A business that collects personal information about consumers shall disclose, pursuant to subparagraph (B) of paragraph (5) of subdivision (a) of Section 1798.130:
+
+(1) The categories of personal information it has collected about consumers.
+
+(2) The categories of sources from which the personal information is collected.
+
+(3) The business or commercial purpose for collecting or selling personal information.
+
+(4) The categories of third parties with whom the business shares personal information.
+
+(5) That a consumer has the right to request the specific pieces of personal information the business has collected about that consumer.
+
+(d) This section does not require a business to do the following:
+
+(1) Retain any personal information about a consumer collected for a single one-time transaction if, in the ordinary course of business, that information about the consumer is not retained.
+
+(2) Reidentify or otherwise link any data that, in the ordinary course of business, is not maintained in a manner that would be considered personal information.
+
+Section 1798.120
+Right to Know What Personal Information is Sold or Disclosed
+
+(a) A consumer shall have the right to request that a business that sells the consumer's personal information, or that discloses it for a business purpose, disclose to that consumer:
+
+(1) The categories of personal information that the business collected about the consumer.
+
+(2) The categories of personal information that the business sold about the consumer and the categories of third parties to whom the personal information was sold, by category or categories of personal information for each third party to whom the personal information was sold.
+
+(3) The categories of personal information that the business disclosed about the consumer for a business purpose.
+
+(b) A business that sells personal information about a consumer, or that discloses a consumer's personal information for a business purpose, shall disclose, pursuant to paragraph (4) of subdivision (a) of Section 1798.130, the information specified in subdivision (a) to the consumer upon receipt of a verifiable consumer request from the consumer.
+
+Article 3
+Right to Delete
+
+Section 1798.125
+Right to Request Deletion of Personal Information
+
+(a) A consumer shall have the right to request that a business delete any personal information about the consumer which the business has collected from the consumer.
+
+(b) A business that collects personal information about consumers shall disclose, pursuant to Section 1798.130, the consumer's rights to request the deletion of the consumer's personal information.
+
+(c) A business that receives a verifiable consumer request from a consumer to delete the consumer's personal information pursuant to subdivision (a) of this section shall delete the consumer's personal information from its records and direct any service providers to delete the consumer's personal information from their records.
+
+(d) A business or a service provider shall not be required to comply with a consumer's request to delete the consumer's personal information if it is necessary for the business or service provider to maintain the consumer's personal information in order to:
+
+(1) Complete the transaction for which the personal information was collected, provide a good or service requested by the consumer, or reasonably anticipated within the context of a business's ongoing business relationship with the consumer, or otherwise perform a contract between the business and the consumer.
+
+(2) Detect security incidents, protect against malicious, deceptive, fraudulent, or illegal activity; or prosecute those responsible for that activity.
+
+(3) Debug to identify and repair errors that impair existing intended functionality.
+
+(4) Exercise free speech, ensure the right of another consumer to exercise that consumer's right of free speech, or exercise another right provided for by law.
+
+(5) Comply with the California Electronic Communications Privacy Act pursuant to Chapter 3.6 (commencing with Section 1546) of Title 12 of Part 2 of the Penal Code.
+
+(6) Engage in public or peer-reviewed scientific, historical, or statistical research in the public interest that adheres to all other applicable ethics and privacy laws, when the business's deletion of the information is likely to render impossible or seriously impair the achievement of such research, if the consumer has provided informed consent.
+
+(7) To enable solely internal uses that are reasonably aligned with the expectations of the consumer based on the consumer's relationship with the business.
+
+(8) Comply with a legal obligation.
+
+(9) Otherwise use the consumer's personal information, internally, in a lawful manner that is compatible with the context in which the consumer provided the information.
+
+Article 4
+Right to Opt-Out
+
+Section 1798.130
+Right to Opt-Out of Sale of Personal Information
+
+(a) A consumer shall have the right, at any time, to direct a business that sells personal information about the consumer to third parties not to sell the consumer's personal information. This right may be referred to as the right to opt-out.
+
+(b) A business that sells consumers' personal information to third parties shall provide notice to consumers, pursuant to subdivision (a) of Section 1798.135, that this information may be sold and that consumers have the right to opt-out of the sale of their personal information.
+
+(c) A business that has received direction from a consumer not to sell the consumer's personal information or, in the case of a minor consumer's personal information has not received consent to sell the minor consumer's personal information, shall be prohibited, pursuant to paragraph (4) of subdivision (a) of Section 1798.135, from selling the consumer's personal information after its receipt of the consumer's direction, unless the consumer subsequently provides express authorization for the sale of the consumer's personal information.
+
+(d) Notwithstanding subdivision (a), a business shall not sell the personal information of consumers if the business has actual knowledge that the consumer is less than 16 years of age, unless the consumer, in the case of consumers between 13 and 16 years of age, or the consumer's parent or guardian, in the case of consumers who are less than 13 years of age, has affirmatively authorized the sale of the consumer's personal information.
+
+Article 5
+Right to Non-Discrimination
+
+Section 1798.135
+Right to Equal Service and Price
+
+(a) A business shall not discriminate against a consumer because the consumer exercised any of the consumer's rights under this title, including, but not limited to, by:
+
+(1) Denying goods or services to the consumer.
+
+(2) Charging different prices or rates for goods or services, including through the use of discounts or other benefits or imposing penalties.
+
+(3) Providing a different level or quality of goods or services to the consumer.
+
+(4) Suggesting that the consumer will receive a different price or rate for goods or services or a different level or quality of goods or services.
+
+(b) Nothing in this section prohibits a business from charging a consumer a different price or rate, or from providing a different level or quality of goods or services to the consumer, if that difference is reasonably related to the value provided to the business by the consumer's data.
+
+(c) A business may offer financial incentives, including payments to consumers as compensation, for the collection of personal information, the sale of personal information, or the deletion of personal information.
+
+(d) A business that offers any financial incentives pursuant to subdivision (c), shall notify consumers of the financial incentives pursuant to Section 1798.130.
+
+CHAPTER 3
+Business Obligations
+
+Article 6
+Notice Requirements
+
+Section 1798.140
+Notice at Collection
+
+(a) A business that collects a consumer's personal information shall, at or before the point of collection, inform consumers as to the categories of personal information to be collected and the purposes for which the categories of personal information shall be used.
+
+(b) A business shall not collect additional categories of personal information or use personal information collected for additional purposes without providing the consumer with notice consistent with this section.
+
+(c) A business shall provide the information specified in subdivision (a) in a form that is reasonably accessible to consumers.
+
+Section 1798.145
+Privacy Policy Requirements
+
+(a) A business that collects consumers' personal information shall make available to consumers a privacy policy that includes:
+
+(1) A description of a consumer's rights pursuant to Sections 1798.115, 1798.120, 1798.125, and 1798.130 and one or more designated methods for submitting requests.
+
+(2) For purposes of subdivision (c) of Section 1798.115, a list of the categories of personal information it has collected about consumers in the preceding 12 months by reference to the enumerated category or categories in subdivision (c) that most closely describe the personal information collected.
+
+(3) For purposes of paragraphs (1) and (2) of subdivision (c) of Section 1798.115, two separate lists:
+
+(A) A list of the categories of personal information it has sold about consumers in the preceding 12 months by reference to the enumerated category in subdivision (c) that most closely describes the personal information sold, or if the business has not sold consumers' personal information in the preceding 12 months, the business shall disclose that fact.
+
+(B) A list of the categories of personal information it has disclosed about consumers for a business purpose in the preceding 12 months by reference to the enumerated category or categories in subdivision (c) that most closely describe the personal information disclosed, or if the business has not disclosed consumers' personal information for a business purpose in the preceding 12 months, the business shall disclose that fact.
+
+(b) A business shall update the information required in subdivision (a) at least once every 12 months.
+
+Article 7
+Data Handling Requirements
+
+Section 1798.150
+Data Minimization
+
+(a) A business's collection, use, retention, and sharing of a consumer's personal information shall be reasonably necessary and proportionate to achieve the purposes for which the personal information was collected or processed, or for another disclosed purpose that is compatible with the context in which the personal information was collected, and not further processed in a manner that is incompatible with those purposes.
+
+(b) A business shall not collect personal information beyond what is necessary for the stated purpose at the time of collection.
+
+Section 1798.155
+Data Security Requirements
+
+(a) A business that collects consumers' personal information shall implement and maintain reasonable security procedures and practices appropriate to the nature of the information to protect the personal information from unauthorized access, destruction, use, modification, or disclosure.
+
+(b) A business that discloses personal information to a service provider or contractor shall require by contract that the service provider or contractor implement and maintain reasonable security procedures and practices.
+
+Section 1798.160
+Data Breach Notification
+
+(a) Any business that is required to issue a security breach notification pursuant to Section 1798.82 shall, if the breach exposed personal information as defined in subdivision (h) of Section 1798.81.5, also submit a copy of that notification to the Attorney General.
+
+(b) The notification shall include the categories of personal information compromised, the number of California residents affected, and the measures taken in response to the breach.
+
+CHAPTER 4
+Enforcement
+
+Article 8
+Civil Penalties
+
+Section 1798.165
+Civil Penalties for Violations
+
+(a) Any business or service provider that violates this title shall be liable for a civil penalty of not more than two thousand five hundred dollars ($2,500) for each violation, or seven thousand five hundred dollars ($7,500) for each intentional violation, which shall be assessed and recovered in a civil action brought in the name of the people of the State of California by the Attorney General.
+
+(b) Any civil penalties collected pursuant to this section shall be deposited in the Consumer Privacy Fund.
+
+Section 1798.170
+Private Right of Action
+
+(a) Any consumer whose nonencrypted and nonredacted personal information, as defined in subparagraph (A) of paragraph (1) of subdivision (d) of Section 1798.81.5, is subject to an unauthorized access and exfiltration, theft, or disclosure as a result of the business's violation of the duty to implement and maintain reasonable security procedures and practices appropriate to the nature of the information to protect the personal information may institute a civil action for any of the following:
+
+(1) To recover damages in an amount not less than one hundred dollars ($100) and not greater than seven hundred and fifty dollars ($750) per consumer per incident or actual damages, whichever is greater.
+
+(2) Injunctive or declaratory relief.
+
+(3) Any other relief the court deems proper.
+
+(b) In assessing the amount of statutory damages, the court shall consider any one or more of the relevant circumstances presented by any of the parties to the case, including, but not limited to, the nature and seriousness of the misconduct, the number of violations, the persistence of the misconduct, the length of time over which the misconduct occurred, the willfulness of the defendant's misconduct, and the defendant's assets, liabilities, and net worth.
+
+Article 9
+Attorney General Enforcement
+
+Section 1798.175
+Attorney General Authority
+
+(a) The Attorney General may adopt regulations to further the purposes of this title, including regulations governing:
+
+(1) The methods for submitting requests pursuant to Section 1798.115.
+
+(2) Business practices for ensuring that personal information is collected only for the purposes for which it will be used, consistent with Section 1798.150.
+
+(3) Business practices to ensure that personal information is retained only for as long as necessary to fulfill the purposes for which it was collected.
+
+(4) Business practices to ensure compliance with the security requirements of Section 1798.155.
+
+(b) The Attorney General shall solicit broad public participation in the rulemaking process and shall hold at least one public hearing prior to the adoption of any regulations.
+
+Section 1798.180
+Enforcement Actions
+
+(a) The Attorney General shall have the exclusive authority to enforce this title.
+
+(b) Prior to initiating any action for a violation of this title, the Attorney General shall provide the business with 30 days' written notice identifying the specific provisions of this title the Attorney General alleges have been or are being violated.
+
+(c) If the business fails to cure the noticed violations within 30 days and the Attorney General determines that the business continues to be in violation of this title, the Attorney General may bring a civil action.
+
+CHAPTER 5
+Exemptions and Preemption
+
+Article 10
+Exemptions
+
+Section 1798.185
+Exemptions
+
+(a) This title shall not apply to personal information that is collected, processed, sold, or disclosed pursuant to:
+
+(1) The federal Gramm-Leach-Bliley Act (Public Law 106-102) and implementing regulations.
+
+(2) The federal Health Insurance Portability and Accountability Act of 1996 (Public Law 104-191) and implementing regulations.
+
+(3) The federal Fair Credit Reporting Act (15 U.S.C. Sec. 1681 et seq.) and implementing regulations.
+
+(4) The Driver's Privacy Protection Act of 1994 (18 U.S.C. Sec. 2721 et seq.).
+
+(b) This title shall not apply to information collected as part of a clinical trial subject to the Federal Policy for the Protection of Human Subjects.
+
+(c) The obligations imposed on businesses by this title shall not restrict a business's ability to:
+
+(1) Comply with federal, state, or local laws.
+
+(2) Comply with a civil, criminal, or regulatory inquiry, investigation, subpoena, or summons by federal, state, or local authorities.
+
+(3) Cooperate with law enforcement agencies concerning conduct or activity that the business, service provider, or third party reasonably and in good faith believes may violate federal, state, or local law.
+
+(4) Exercise or defend legal claims.
+
+(5) Collect, use, retain, sell, or disclose consumer information that is deidentified or in the aggregate consumer information.
+
+Section 1798.190
+Relationship to Other Laws
+
+(a) The provisions of this title are not exclusive.
+
+(b) Nothing in this title shall be construed to prevent a consumer from pursuing any other remedies available to the consumer under any other law.
+
+(c) This title is a matter of statewide concern and supersedes and preempts all rules, regulations, codes, ordinances, and other laws adopted by a city, county, city and county, municipality, or local agency regarding the collection and sale of consumers' personal information by a business.
+
+CHAPTER 6
+Operative Dates
+
+Article 11
+Effective Date
+
+Section 1798.195
+Operative Date
+
+(a) This title shall become operative on January 1, 2020.
+
+(b) The Attorney General shall not bring an enforcement action under this title until July 1, 2020.
+
+Section 1798.198
+Amendments
+
+(a) The Legislature may amend this title by a majority vote of both houses of the Legislature to further the purposes of this title.
+
+(b) Any amendments to this title enacted after January 1, 2020, shall be consistent with and further the purposes and intent of this title.
