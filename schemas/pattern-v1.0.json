@@ -1,0 +1,317 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/justin4957/regula/schemas/pattern-v1.0.json",
+  "title": "Regula Pattern Definition Schema",
+  "description": "Schema for defining legislative document format detection and parsing patterns",
+  "type": "object",
+  "required": ["name", "format_id", "version", "detection"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Human-readable name for this format pattern",
+      "minLength": 1,
+      "examples": ["United States Code", "EU Directive", "UK Statutory Instrument"]
+    },
+    "format_id": {
+      "type": "string",
+      "description": "Unique identifier for this format (lowercase, hyphen-separated)",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "minLength": 1,
+      "examples": ["usc", "eu-directive", "uk-si"]
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version of this pattern definition",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "examples": ["1.0.0", "2.1.0"]
+    },
+    "jurisdiction": {
+      "type": "string",
+      "description": "Jurisdiction code (ISO 3166-1 alpha-2, with optional subdivision)",
+      "examples": ["US", "US-CA", "EU", "GB", "INT"]
+    },
+    "detection": {
+      "$ref": "#/$defs/detection_config"
+    },
+    "structure": {
+      "$ref": "#/$defs/structure_config"
+    },
+    "definitions": {
+      "$ref": "#/$defs/definition_config"
+    },
+    "references": {
+      "$ref": "#/$defs/reference_config"
+    }
+  },
+  "$defs": {
+    "detection_config": {
+      "type": "object",
+      "description": "Configuration for format detection using weighted indicators",
+      "required": ["required_indicators"],
+      "properties": {
+        "required_indicators": {
+          "type": "array",
+          "description": "Indicators that must match for format detection (at least one required)",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/indicator"
+          }
+        },
+        "optional_indicators": {
+          "type": "array",
+          "description": "Indicators that increase confidence but are not required",
+          "items": {
+            "$ref": "#/$defs/indicator"
+          }
+        },
+        "negative_indicators": {
+          "type": "array",
+          "description": "Indicators that decrease confidence (use negative weights)",
+          "items": {
+            "$ref": "#/$defs/negative_indicator"
+          }
+        }
+      }
+    },
+    "indicator": {
+      "type": "object",
+      "description": "A pattern indicator with positive weight",
+      "required": ["pattern", "weight"],
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "Regular expression pattern (Go/RE2 syntax)",
+          "minLength": 1
+        },
+        "weight": {
+          "type": "integer",
+          "description": "Positive weight for this indicator (higher = more significant)",
+          "minimum": 1,
+          "maximum": 100
+        }
+      }
+    },
+    "negative_indicator": {
+      "type": "object",
+      "description": "A pattern indicator with negative weight",
+      "required": ["pattern", "weight"],
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "Regular expression pattern (Go/RE2 syntax)",
+          "minLength": 1
+        },
+        "weight": {
+          "type": "integer",
+          "description": "Negative weight for this indicator (reduces confidence)",
+          "minimum": -100,
+          "maximum": -1
+        }
+      }
+    },
+    "structure_config": {
+      "type": "object",
+      "description": "Configuration for parsing document structure",
+      "properties": {
+        "hierarchy": {
+          "type": "array",
+          "description": "Structural elements ordered from highest to lowest level",
+          "items": {
+            "$ref": "#/$defs/hierarchy_level"
+          }
+        },
+        "preamble": {
+          "$ref": "#/$defs/preamble_config"
+        }
+      }
+    },
+    "hierarchy_level": {
+      "type": "object",
+      "description": "Definition of a structural level in the document hierarchy",
+      "required": ["type", "pattern"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Type of structural element",
+          "enum": [
+            "title",
+            "part",
+            "chapter",
+            "subchapter",
+            "division",
+            "section",
+            "subsection",
+            "article",
+            "paragraph",
+            "subparagraph",
+            "point",
+            "subpoint",
+            "subdivision",
+            "schedule",
+            "annex"
+          ]
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Regular expression pattern to match this level",
+          "minLength": 1
+        },
+        "title_follows": {
+          "type": "boolean",
+          "description": "Whether the title appears on the next line",
+          "default": false
+        },
+        "title_inline": {
+          "type": "boolean",
+          "description": "Whether the title is included in the same match",
+          "default": false
+        },
+        "number_group": {
+          "type": "integer",
+          "description": "Capture group index for the element number",
+          "minimum": 0
+        }
+      }
+    },
+    "preamble_config": {
+      "type": "object",
+      "description": "Configuration for parsing document preamble sections",
+      "properties": {
+        "start_pattern": {
+          "type": "string",
+          "description": "Pattern marking the start of the preamble"
+        },
+        "end_pattern": {
+          "type": "string",
+          "description": "Pattern marking the end of the preamble"
+        },
+        "recital_pattern": {
+          "type": "string",
+          "description": "Pattern for individual recitals within the preamble"
+        }
+      }
+    },
+    "definition_config": {
+      "type": "object",
+      "description": "Configuration for extracting legal definitions",
+      "properties": {
+        "location": {
+          "type": "array",
+          "description": "Locations where definitions are typically found",
+          "items": {
+            "$ref": "#/$defs/definition_location"
+          }
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Regular expression pattern for extracting individual definitions"
+        }
+      }
+    },
+    "definition_location": {
+      "type": "object",
+      "description": "A location where definitions may be found",
+      "properties": {
+        "section_number": {
+          "type": "integer",
+          "description": "Section number containing definitions"
+        },
+        "section_title": {
+          "type": "string",
+          "description": "Regular expression matching section titles containing definitions"
+        }
+      }
+    },
+    "reference_config": {
+      "type": "object",
+      "description": "Configuration for extracting internal and external references",
+      "properties": {
+        "internal": {
+          "type": "array",
+          "description": "Patterns for references within the same document",
+          "items": {
+            "$ref": "#/$defs/internal_reference"
+          }
+        },
+        "external": {
+          "type": "array",
+          "description": "Patterns for references to other documents",
+          "items": {
+            "$ref": "#/$defs/external_reference"
+          }
+        }
+      }
+    },
+    "internal_reference": {
+      "type": "object",
+      "description": "Pattern for internal document references",
+      "required": ["pattern", "target"],
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "Regular expression pattern for matching references",
+          "minLength": 1
+        },
+        "target": {
+          "type": "string",
+          "description": "Target element type being referenced",
+          "enum": [
+            "title",
+            "part",
+            "chapter",
+            "section",
+            "subsection",
+            "article",
+            "paragraph",
+            "point",
+            "subdivision",
+            "recital",
+            "schedule",
+            "annex"
+          ]
+        },
+        "groups": {
+          "type": "object",
+          "description": "Mapping of semantic names to capture group indices",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "external_reference": {
+      "type": "object",
+      "description": "Pattern for external document references",
+      "required": ["pattern", "type"],
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "Regular expression pattern for matching references",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "description": "Type of external document being referenced",
+          "examples": ["directive", "regulation", "usc", "public_law", "statutory_instrument", "act"]
+        },
+        "uri_template": {
+          "type": "string",
+          "description": "Template for generating URIs from captured groups",
+          "examples": [
+            "http://data.europa.eu/eli/dir/{year}/{number}/oj",
+            "https://www.law.cornell.edu/uscode/text/{title}/{section}"
+          ]
+        },
+        "groups": {
+          "type": "object",
+          "description": "Mapping of semantic names to capture group indices",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
