@@ -1,0 +1,120 @@
+# California Code Format Pattern
+# Detects and parses California state code documents (including CCPA)
+
+name: "California Code"
+format_id: "ca-code"
+version: "1.0.0"
+jurisdiction: "US-CA"
+
+detection:
+  required_indicators:
+    - pattern: '\bCalifornia\s+(Civil|Business\s+and\s+Professions|Government|Health\s+and\s+Safety|Labor|Penal)\s+Code\b'
+      weight: 25
+    - pattern: '\bCal\.\s*(Civ|Bus\.\s*&\s*Prof|Gov|Health\s*&\s*Saf|Lab|Pen)\.\s*Code\b'
+      weight: 25
+
+  optional_indicators:
+    - pattern: '\bSection\s+\d+(\.\d+)?'
+      weight: 8
+    - pattern: '\b§\s*\d+(\.\d+)?'
+      weight: 8
+    - pattern: '\bTitle\s+\d+(\.\d+)?'
+      weight: 5
+    - pattern: '\bDivision\s+\d+'
+      weight: 5
+    - pattern: '\bPart\s+\d+'
+      weight: 5
+    - pattern: '\bChapter\s+\d+'
+      weight: 5
+    - pattern: '\bCCPA\b'
+      weight: 10
+    - pattern: '\bCPRA\b'
+      weight: 10
+
+  negative_indicators:
+    - pattern: '\bEuropean\s+(Union|Parliament)\b'
+      weight: -15
+    - pattern: '\bU\.?S\.?C\.?\s*§'
+      weight: -10
+
+structure:
+  hierarchy:
+    - type: "division"
+      pattern: '^DIVISION\s+(\d+)\.\s+(.+)$'
+      number_group: 1
+      title_inline: true
+
+    - type: "part"
+      pattern: '^PART\s+(\d+)\.\s+(.+)$'
+      number_group: 1
+      title_inline: true
+
+    - type: "title"
+      pattern: '^TITLE\s+(\d+(?:\.\d+)?)\.\s+(.+)$'
+      number_group: 1
+      title_inline: true
+
+    - type: "chapter"
+      pattern: '^CHAPTER\s+(\d+)\.\s+(.+)$'
+      number_group: 1
+      title_inline: true
+
+    - type: "article"
+      pattern: '^Article\s+(\d+)\.\s+(.+)$'
+      number_group: 1
+      title_inline: true
+
+    - type: "section"
+      pattern: '^(\d+(?:\.\d+)?)\.\s+'
+      number_group: 1
+
+    - type: "subdivision"
+      pattern: '^\(([a-z])\)\s+'
+      number_group: 1
+
+    - type: "paragraph"
+      pattern: '^\((\d+)\)\s+'
+      number_group: 1
+
+    - type: "subparagraph"
+      pattern: '^\(([A-Z])\)\s+'
+      number_group: 1
+
+definitions:
+  location:
+    - section_title: '(?i)definitions?'
+    - section_number: 1798.140
+
+  pattern: '(?:^|\n)\s*\(([a-z])\)\s*["""]([^"""]+)["""]\s+means?\s+'
+
+references:
+  internal:
+    - pattern: '(?:Section|§)\s*(\d+(?:\.\d+)?)'
+      target: "section"
+      groups:
+        number: 1
+
+    - pattern: 'subdivision\s*\(([a-z])\)'
+      target: "subdivision"
+      groups:
+        letter: 1
+
+    - pattern: 'paragraph\s*\((\d+)\)'
+      target: "paragraph"
+      groups:
+        number: 1
+
+  external:
+    - pattern: '(\d+)\s+U\.?S\.?C\.?\s*§?\s*(\d+)'
+      type: "usc"
+      uri_template: "https://www.law.cornell.edu/uscode/text/{title}/{section}"
+      groups:
+        title: 1
+        section: 2
+
+    - pattern: '(Civil|Business\s+and\s+Professions|Government)\s+Code\s+(?:Section|§)\s*(\d+(?:\.\d+)?)'
+      type: "ca-code"
+      uri_template: "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode={code}&sectionNum={section}"
+      groups:
+        code: 1
+        section: 2

@@ -1,0 +1,105 @@
+# US Code Format Pattern
+# Detects and parses United States Code documents
+
+name: "United States Code"
+format_id: "usc"
+version: "1.0.0"
+jurisdiction: "US-Federal"
+
+detection:
+  required_indicators:
+    - pattern: '\bU\.?S\.?C\.?\s*§?\s*\d+'
+      weight: 25
+    - pattern: '\bUnited\s+States\s+Code\b'
+      weight: 20
+
+  optional_indicators:
+    - pattern: '\bTitle\s+\d+'
+      weight: 10
+    - pattern: '\bChapter\s+\d+'
+      weight: 5
+    - pattern: '\bSubchapter\s+[IVXLCDM]+'
+      weight: 5
+    - pattern: '\b\d+\s+Stat\.\s+\d+'
+      weight: 8
+    - pattern: '\bPublic\s+Law\s+\d+-\d+'
+      weight: 10
+
+  negative_indicators:
+    - pattern: '\bEuropean\s+(Union|Parliament|Commission)\b'
+      weight: -20
+    - pattern: '\bDirective\s+\d{4}/\d+/(EC|EU)\b'
+      weight: -25
+
+structure:
+  hierarchy:
+    - type: "title"
+      pattern: '^TITLE\s+(\d+)[—\-–]\s*(.+)$'
+      number_group: 1
+      title_inline: true
+
+    - type: "chapter"
+      pattern: '^CHAPTER\s+(\d+)[—\-–]\s*(.+)$'
+      number_group: 1
+      title_inline: true
+
+    - type: "subchapter"
+      pattern: '^SUBCHAPTER\s+([IVXLCDM]+)[—\-–]\s*(.+)$'
+      number_group: 1
+      title_inline: true
+
+    - type: "section"
+      pattern: '^§\s*(\d+[a-z]?(?:-\d+)?)\.\s+(.+)$'
+      number_group: 1
+      title_inline: true
+
+    - type: "subsection"
+      pattern: '^\(([a-z])\)\s+'
+      number_group: 1
+
+    - type: "paragraph"
+      pattern: '^\((\d+)\)\s+'
+      number_group: 1
+
+    - type: "subparagraph"
+      pattern: '^\(([A-Z])\)\s+'
+      number_group: 1
+
+definitions:
+  location:
+    - section_title: '(?i)definitions?'
+    - section_number: 1
+
+  pattern: '(?:^|\n)\s*(?:\(\d+\)|•)\s*(?:the\s+term\s+)?["""]([^"""]+)["""]\s+means?\s+'
+
+references:
+  internal:
+    - pattern: '(?:section|§)\s*(\d+[a-z]?(?:-\d+)?)'
+      target: "section"
+      groups:
+        number: 1
+
+    - pattern: 'subsection\s*\(([a-z])\)'
+      target: "subsection"
+      groups:
+        letter: 1
+
+    - pattern: 'paragraph\s*\((\d+)\)'
+      target: "paragraph"
+      groups:
+        number: 1
+
+  external:
+    - pattern: '(\d+)\s+U\.?S\.?C\.?\s*§?\s*(\d+[a-z]?(?:-\d+)?)'
+      type: "usc"
+      uri_template: "https://www.law.cornell.edu/uscode/text/{title}/{section}"
+      groups:
+        title: 1
+        section: 2
+
+    - pattern: 'Public\s+Law\s+(\d+)-(\d+)'
+      type: "public_law"
+      uri_template: "https://www.congress.gov/public-laws/{congress}/pl{number}"
+      groups:
+        congress: 1
+        number: 2
