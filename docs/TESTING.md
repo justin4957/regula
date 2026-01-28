@@ -63,6 +63,33 @@ go test ./pkg/citation/... -run "TestCitationFromReference|TestReferenceFromCita
 go test ./pkg/citation/... -run TestEUCitationParserGDPRIntegration -v
 ```
 
+### EUR-Lex Connector Tests
+
+Test the EUR-Lex connector for CELEX number generation, ELI URI generation, validation caching, and HTTP client integration:
+
+```bash
+# Run all EUR-Lex connector tests
+go test ./pkg/eurlex/... -v
+
+# Run CELEX generation tests
+go test ./pkg/eurlex/... -run TestGenerateCELEX -v
+
+# Run ELI URI generation tests
+go test ./pkg/eurlex/... -run TestGenerateELI -v
+
+# Run year normalization and number padding tests
+go test ./pkg/eurlex/... -run "TestNormalizeYear|TestPadCELEXNumber" -v
+
+# Run validation cache tests
+go test ./pkg/eurlex/... -run TestCache -v
+
+# Run HTTP client and validation tests (uses mock HTTP client)
+go test ./pkg/eurlex/... -run "TestValidate|TestFetch|TestUserAgent|TestHTTPMethod" -v
+
+# Verify ELI does not pad numbers (unlike CELEX)
+go test ./pkg/eurlex/... -run TestELIDoesNotPadNumbers -v
+```
+
 ### E2E Tests
 
 The E2E test script validates the complete MVP functionality:
