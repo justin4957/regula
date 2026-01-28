@@ -105,6 +105,12 @@ type DefinitionLocation struct {
 	titleCompiled *regexp.Regexp
 }
 
+// TitlePattern returns the compiled title regex for this definition location.
+// Returns nil if no title pattern was specified.
+func (dl *DefinitionLocation) TitlePattern() *regexp.Regexp {
+	return dl.titleCompiled
+}
+
 // ReferenceConfig defines how to extract references.
 type ReferenceConfig struct {
 	// Internal references within the same document

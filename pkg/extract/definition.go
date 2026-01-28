@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -43,57 +44,66 @@ func NewDefinitionExtractor() *DefinitionExtractor {
 }
 
 // ExtractDefinitions extracts all definitions from a document.
-// For EU-style documents (GDPR), this looks at Article 4.
-// For US-style documents (CCPA), this looks at Section 1798.110 (Article 110) or articles titled "Definitions".
+// Automatically detects definition sections by title matching and
+// definition pattern density, supporting multiple definition sections.
 func (e *DefinitionExtractor) ExtractDefinitions(doc *Document) []*DefinedTerm {
 	definitions := make([]*DefinedTerm, 0)
 
-	// Find the definitions article
-	defArticle := e.findDefinitionsArticle(doc)
-	if defArticle == nil || defArticle.Text == "" {
-		return definitions
-	}
+	defArticles := e.findDefinitionsArticles(doc)
+	for _, defArticle := range defArticles {
+		// Try EU-style extraction first (numbered definitions)
+		articleDefs := e.extractEUDefinitions(defArticle)
 
-	// Try EU-style extraction first (numbered definitions)
-	definitions = e.extractEUDefinitions(defArticle)
+		// If no definitions found, try US-style extraction (lettered definitions)
+		if len(articleDefs) == 0 {
+			articleDefs = e.extractUSDefinitions(defArticle)
+		}
 
-	// If no definitions found, try US-style extraction (lettered definitions)
-	if len(definitions) == 0 {
-		definitions = e.extractUSDefinitions(defArticle)
+		definitions = append(definitions, articleDefs...)
 	}
 
 	return definitions
 }
 
-// findDefinitionsArticle locates the article containing definitions.
-func (e *DefinitionExtractor) findDefinitionsArticle(doc *Document) *Article {
-	// Try Article 4 first (EU-style: GDPR)
-	if art := doc.GetArticle(4); art != nil && art.Text != "" {
-		return art
-	}
+// findDefinitionsArticles locates all articles containing definitions.
+// Uses title-based detection with fallback to definition pattern density scanning.
+func (e *DefinitionExtractor) findDefinitionsArticles(doc *Document) []*Article {
+	matchedArticles := make([]*Article, 0)
+	matchedArticleNumbers := make(map[int]bool)
 
-	// Try Article 110 (US-style: CCPA Section 1798.110)
-	if art := doc.GetArticle(110); art != nil && art.Text != "" {
-		return art
-	}
+	definitionTitlePattern := regexp.MustCompile(`(?i)definitions?|interpretation|terms`)
 
-	// Search for article with "Definition" in title
-	for _, ch := range doc.Chapters {
-		for _, art := range ch.Articles {
-			if strings.Contains(strings.ToLower(art.Title), "definition") {
-				return art
-			}
+	// Search by title
+	allArticles := doc.AllArticles()
+	for _, article := range allArticles {
+		if definitionTitlePattern.MatchString(article.Title) && article.Text != "" && !matchedArticleNumbers[article.Number] {
+			matchedArticles = append(matchedArticles, article)
+			matchedArticleNumbers[article.Number] = true
 		}
-		for _, sec := range ch.Sections {
-			for _, art := range sec.Articles {
-				if strings.Contains(strings.ToLower(art.Title), "definition") {
-					return art
+	}
+
+	// Density detection: scan remaining articles for high definition pattern density
+	if len(matchedArticles) == 0 {
+		const definitionDensityThreshold = 3
+		for _, article := range allArticles {
+			if article.Text == "" || matchedArticleNumbers[article.Number] {
+				continue
+			}
+			lines := strings.Split(article.Text, "\n")
+			definitionMatchCount := 0
+			for _, line := range lines {
+				if e.definitionStartPattern.MatchString(line) {
+					definitionMatchCount++
 				}
 			}
+			if definitionMatchCount >= definitionDensityThreshold {
+				matchedArticles = append(matchedArticles, article)
+				matchedArticleNumbers[article.Number] = true
+			}
 		}
 	}
 
-	return nil
+	return matchedArticles
 }
 
 // extractEUDefinitions extracts EU-style definitions (numbered: (1) 'term' means...).
@@ -147,8 +157,8 @@ func (e *DefinitionExtractor) extractEUDefinitions(defArticle *Article) []*Defin
 				Number:         num,
 				Term:           term,
 				NormalizedTerm: normalizeTerm(term),
-				Scope:          "Article 4",
-				ArticleRef:     4,
+				Scope:          fmt.Sprintf("Article %d", defArticle.Number),
+				ArticleRef:     defArticle.Number,
 				SubPoints:      make([]*DefinitionSubPoint, 0),
 			}
 
