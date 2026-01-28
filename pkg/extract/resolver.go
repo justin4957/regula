@@ -438,6 +438,13 @@ func (r *ReferenceResolver) resolveChapterReference(ref *Reference, result *Reso
 
 // resolveSectionReference resolves a section reference.
 func (r *ReferenceResolver) resolveSectionReference(ref *Reference, result *ResolvedReference) *ResolvedReference {
+	// US-style section references (e.g., Section 1798.100) map to articles
+	// The ArticleNum field contains the normalized article number (e.g., 100 for Section 1798.100)
+	if ref.ArticleNum > 0 && r.isUSStyleSectionRef(ref) {
+		return r.resolveUSStyleSectionReference(ref, result)
+	}
+
+	// EU-style section reference resolution
 	// Try to find section using context chapter
 	contextChapter := result.ContextChapter
 
@@ -481,6 +488,138 @@ func (r *ReferenceResolver) resolveSectionReference(ref *Reference, result *Reso
 	result.Status = ResolutionNotFound
 	result.Confidence = ConfidenceNone
 	result.Reason = fmt.Sprintf("Section %d not found", ref.SectionNum)
+	return result
+}
+
+// isUSStyleSectionRef checks if this is a US-style section reference (Section 1798.xxx).
+func (r *ReferenceResolver) isUSStyleSectionRef(ref *Reference) bool {
+	// US-style section refs have SectionNum > 1000000 (codePrefix*1000 + sectionNum pattern)
+	// or contain subdivision references
+	return ref.SectionNum >= 1000000 || ref.SubRef == "subdivision" || ref.SubRef == "paragraph" || ref.SubRef == "range"
+}
+
+// resolveUSStyleSectionReference resolves US-style California Code section references.
+// Section 1798.100 maps to Article 100, Section 1798.185(a) maps to Article 185 paragraph a.
+func (r *ReferenceResolver) resolveUSStyleSectionReference(ref *Reference, result *ResolvedReference) *ResolvedReference {
+	// For US-style sections, ArticleNum contains the normalized article number
+	articleNum := ref.ArticleNum
+
+	// Handle range references (e.g., "Sections 1798.100 to 1798.199")
+	if ref.SubRef == "range" {
+		return r.resolveUSStyleSectionRange(ref, result)
+	}
+
+	// Check if article exists
+	if !r.articles[articleNum] {
+		result.Status = ResolutionNotFound
+		result.Confidence = ConfidenceNone
+		result.Reason = fmt.Sprintf("Section %s not found (Article %d does not exist)", ref.Identifier, articleNum)
+		return result
+	}
+
+	// Build target URI
+	targetURI := r.articleURI(articleNum)
+
+	// Handle subdivision references (e.g., Section 1798.100(a))
+	if ref.PointLetter != "" {
+		// In US regulations, subdivisions often map to paragraphs
+		// Try to find a matching paragraph
+		for paraNum := 1; paraNum <= 20; paraNum++ {
+			pointKey := fmt.Sprintf("%d:%d:%s", articleNum, paraNum, ref.PointLetter)
+			if r.points[pointKey] {
+				targetURI = r.pointURI(articleNum, paraNum, ref.PointLetter)
+				result.Status = ResolutionResolved
+				result.Confidence = ConfidenceHigh
+				result.TargetURI = targetURI
+				result.Reason = fmt.Sprintf("Resolved to Article %d subdivision (%s)", articleNum, ref.PointLetter)
+				return result
+			}
+		}
+
+		// Subdivision not found as point, resolve to article with partial confidence
+		result.Status = ResolutionPartial
+		result.Confidence = ConfidenceMedium
+		result.TargetURI = targetURI
+		result.Reason = fmt.Sprintf("Resolved to Article %d (subdivision %s not indexed)", articleNum, ref.PointLetter)
+		return result
+	}
+
+	// Handle paragraph references within subdivisions (e.g., Section 1798.185(a)(1))
+	if ref.ParagraphNum > 0 && ref.PointLetter != "" {
+		// This is handled above in the subdivision case with ParagraphNum
+		result.Status = ResolutionPartial
+		result.Confidence = ConfidenceMedium
+		result.TargetURI = targetURI
+		result.Reason = fmt.Sprintf("Resolved to Article %d (paragraph %d of subdivision %s not fully indexed)",
+			articleNum, ref.ParagraphNum, ref.PointLetter)
+		return result
+	}
+
+	// Simple section reference resolved to article
+	result.Status = ResolutionResolved
+	result.Confidence = ConfidenceHigh
+	result.TargetURI = targetURI
+	result.Reason = fmt.Sprintf("Section 1798.%d resolved to Article %d", articleNum, articleNum)
+	return result
+}
+
+// resolveUSStyleSectionRange resolves a range of US-style sections.
+func (r *ReferenceResolver) resolveUSStyleSectionRange(ref *Reference, result *ResolvedReference) *ResolvedReference {
+	// Parse range from identifier (e.g., "Sections 1798.100-1798.199")
+	startArticle := ref.ArticleNum
+
+	// Extract end article from identifier
+	endArticle := startArticle
+	parts := strings.FieldsFunc(ref.Identifier, func(c rune) bool {
+		return c == '-' || c == '.'
+	})
+	for i, part := range parts {
+		if num := mustAtoiSafe(part); num > 0 {
+			if i > 0 && num > startArticle && num < 1000 {
+				endArticle = num
+			}
+		}
+	}
+
+	// If we couldn't parse the end, try from raw text
+	if endArticle == startArticle {
+		rawParts := strings.FieldsFunc(ref.RawText, func(c rune) bool {
+			return c == ' ' || c == '-' || c == '.'
+		})
+		for _, part := range rawParts {
+			if num := mustAtoiSafe(part); num > startArticle && num < 1000 {
+				endArticle = num
+			}
+		}
+	}
+
+	// Collect all articles in range
+	var targetURIs []string
+	var found, missing int
+	for artNum := startArticle; artNum <= endArticle; artNum++ {
+		if r.articles[artNum] {
+			targetURIs = append(targetURIs, r.articleURI(artNum))
+			found++
+		} else {
+			missing++
+		}
+	}
+
+	result.TargetURIs = targetURIs
+	result.Status = ResolutionRangeRef
+
+	if found > 0 && missing == 0 {
+		result.Confidence = ConfidenceHigh
+		result.Reason = fmt.Sprintf("All %d sections in range resolved to articles", found)
+	} else if found > 0 {
+		result.Confidence = ConfidenceMedium
+		result.Reason = fmt.Sprintf("%d sections resolved, %d not found", found, missing)
+	} else {
+		result.Status = ResolutionNotFound
+		result.Confidence = ConfidenceNone
+		result.Reason = "No sections in range found"
+	}
+
 	return result
 }
 
@@ -531,11 +670,25 @@ func (r *ReferenceResolver) buildExternalURI(ref *Reference) string {
 	case TargetDirective:
 		return fmt.Sprintf("urn:eu:directive:%s/%s", ref.DocYear, ref.DocNumber)
 	case TargetRegulation:
+		// Handle both EU and US regulations
+		if ref.ExternalDoc == "USC" {
+			return fmt.Sprintf("urn:us:usc:%s/%d", ref.DocNumber, ref.SectionNum)
+		} else if ref.ExternalDoc == "CFR" {
+			return fmt.Sprintf("urn:us:cfr:%s/%d", ref.DocNumber, ref.SectionNum)
+		} else if ref.ExternalDoc == "PublicLaw" {
+			return fmt.Sprintf("urn:us:pl:%s-%s", ref.DocYear, ref.DocNumber)
+		}
 		return fmt.Sprintf("urn:eu:regulation:%s/%s", ref.DocYear, ref.DocNumber)
 	case TargetTreaty:
 		return fmt.Sprintf("urn:eu:treaty:%s", ref.Identifier)
 	case TargetDecision:
 		return fmt.Sprintf("urn:eu:decision:%s/%s", ref.DocYear, ref.DocNumber)
+	case TargetSection:
+		// Handle external US-style section references (e.g., Section 17014 of Title 18)
+		if ref.ExternalDoc == "CalTitle" {
+			return fmt.Sprintf("urn:us:ca:title%s/sec%d", ref.DocNumber, ref.SectionNum)
+		}
+		return "urn:external:" + ref.Identifier
 	default:
 		return "urn:external:" + ref.Identifier
 	}

@@ -58,7 +58,7 @@ type Reference struct {
 
 // ReferenceExtractor detects cross-references in regulatory text.
 type ReferenceExtractor struct {
-	// Internal reference patterns
+	// Internal reference patterns (EU-style)
 	articlePattern      *regexp.Regexp
 	articleParenPattern *regexp.Regexp
 	articlesPattern     *regexp.Regexp
@@ -68,18 +68,31 @@ type ReferenceExtractor struct {
 	chapterPattern      *regexp.Regexp
 	sectionPattern      *regexp.Regexp
 
-	// External reference patterns
+	// Internal reference patterns (US-style)
+	usSectionPattern          *regexp.Regexp // Section 1798.100
+	usSectionSubdivPattern    *regexp.Regexp // Section 1798.100(a)
+	usSubdivOfSectionPattern  *regexp.Regexp // subdivision (a) of Section 1798.100
+	usParagraphSubdivPattern  *regexp.Regexp // paragraph (1) of subdivision (a) of Section 1798.100
+	usSectionsRangePattern    *regexp.Regexp // Sections 1798.100 to 1798.199
+
+	// External reference patterns (EU-style)
 	directivePattern    *regexp.Regexp
 	regulationPattern   *regexp.Regexp
 	regulationNoPattern *regexp.Regexp
 	treatyPattern       *regexp.Regexp
 	decisionPattern     *regexp.Regexp
+
+	// External reference patterns (US-style)
+	usCodePattern      *regexp.Regexp // 15 U.S.C. Section 1681
+	cfrPattern         *regexp.Regexp // 45 C.F.R. Part 164
+	caTitlePattern     *regexp.Regexp // Section 17014 of Title 18
+	publicLawPattern   *regexp.Regexp // Public Law 104-191
 }
 
 // NewReferenceExtractor creates a new ReferenceExtractor with default patterns.
 func NewReferenceExtractor() *ReferenceExtractor {
 	return &ReferenceExtractor{
-		// Internal references
+		// Internal references (EU-style)
 		// Simple "Article 6" - overlap with parenthetical is handled in extractArticleRefs
 		articlePattern:      regexp.MustCompile(`Article\s+(\d+)`),
 		articleParenPattern: regexp.MustCompile(`Article\s+(\d+)\((\d+)\)(?:\(([a-z])\))?`),
@@ -93,10 +106,24 @@ func NewReferenceExtractor() *ReferenceExtractor {
 		pointsRangePattern: regexp.MustCompile(`points\s+\(([a-z])\)\s+(?:to|and)\s+\(([a-z])\)`),
 		// "Chapter III" or "Chapter VIII"
 		chapterPattern: regexp.MustCompile(`Chapter\s+([IVX]+)`),
-		// "Section 1" or "Section 2"
+		// "Section 1" or "Section 2" (EU-style, simple section numbers)
+		// Note: We handle overlap with US-style in extractSectionRefs
 		sectionPattern: regexp.MustCompile(`Section\s+(\d+)`),
 
-		// External references
+		// Internal references (US-style California Civil Code)
+		// "Section 1798.100" or "Section 1798.185" (simple, no subdivision)
+		// Note: We handle overlap with subdivision pattern in extractUSSectionRefs
+		usSectionPattern: regexp.MustCompile(`Section\s+(\d+)\.(\d+)`),
+		// "Section 1798.100(a)" or "Section 1798.185(a)(1)"
+		usSectionSubdivPattern: regexp.MustCompile(`Section\s+(\d+)\.(\d+)\(([a-z])\)(?:\((\d+)\))?`),
+		// "subdivision (a) of Section 1798.100"
+		usSubdivOfSectionPattern: regexp.MustCompile(`subdivision\s+\(([a-z])\)\s+of\s+Section\s+(\d+)\.(\d+)`),
+		// "paragraph (1) of subdivision (a) of Section 1798.185"
+		usParagraphSubdivPattern: regexp.MustCompile(`paragraph\s+\((\d+)\)\s+of\s+subdivision\s+\(([a-z])\)\s+of\s+Section\s+(\d+)\.(\d+)`),
+		// "Sections 1798.100 to 1798.199" or "Sections 1798.100 through 1798.199"
+		usSectionsRangePattern: regexp.MustCompile(`Sections\s+(\d+)\.(\d+)\s+(?:to|through)\s+(\d+)\.(\d+)`),
+
+		// External references (EU-style)
 		// "Directive 95/46/EC" or "Directive (EU) 2016/680"
 		directivePattern: regexp.MustCompile(`Directive\s+(?:\(E[CU]\)\s+)?(\d+)/(\d+)(?:/EC|/EU)?`),
 		// "Regulation (EU) 2016/679"
@@ -107,6 +134,16 @@ func NewReferenceExtractor() *ReferenceExtractor {
 		treatyPattern: regexp.MustCompile(`(?:Treaty\s+on\s+the\s+Functioning\s+of\s+the\s+European\s+Union|TFEU|TEU)`),
 		// "Decision 2010/87/EU"
 		decisionPattern: regexp.MustCompile(`Decision\s+(\d+)/(\d+)/E[CU]`),
+
+		// External references (US-style)
+		// "15 U.S.C. Section 1681" or "15 U.S.C. § 1681" or "15 U.S.C. Sec. 1681" or "42 U.S.C. Sec. 1320d"
+		usCodePattern: regexp.MustCompile(`(\d+)\s+U\.?S\.?C\.?\s+(?:Section|Sec\.?|§)\s*(\d+[a-z]?)`),
+		// "45 C.F.R. Part 164" or "45 CFR 164"
+		cfrPattern: regexp.MustCompile(`(\d+)\s+C\.?F\.?R\.?\s+(?:Part\s+)?(\d+)`),
+		// "Section 17014 of Title 18" (California codes)
+		caTitlePattern: regexp.MustCompile(`Section\s+(\d+)\s+of\s+Title\s+(\d+)`),
+		// "Public Law 104-191"
+		publicLawPattern: regexp.MustCompile(`Public\s+Law\s+(\d+)-(\d+)`),
 	}
 }
 
@@ -139,18 +176,24 @@ func (e *ReferenceExtractor) ExtractFromArticle(article *Article) []*Reference {
 	var refs []*Reference
 	text := article.Text
 
-	// Extract internal references
+	// Extract internal references (EU-style)
 	refs = append(refs, e.extractArticleRefs(text, article.Number)...)
 	refs = append(refs, e.extractParagraphRefs(text, article.Number)...)
 	refs = append(refs, e.extractPointRefs(text, article.Number)...)
 	refs = append(refs, e.extractChapterRefs(text, article.Number)...)
 	refs = append(refs, e.extractSectionRefs(text, article.Number)...)
 
-	// Extract external references
+	// Extract internal references (US-style)
+	refs = append(refs, e.extractUSSectionRefs(text, article.Number)...)
+
+	// Extract external references (EU-style)
 	refs = append(refs, e.extractDirectiveRefs(text, article.Number)...)
 	refs = append(refs, e.extractRegulationRefs(text, article.Number)...)
 	refs = append(refs, e.extractTreatyRefs(text, article.Number)...)
 	refs = append(refs, e.extractDecisionRefs(text, article.Number)...)
+
+	// Extract external references (US-style)
+	refs = append(refs, e.extractUSExternalRefs(text, article.Number)...)
 
 	return refs
 }
@@ -331,12 +374,18 @@ func (e *ReferenceExtractor) extractChapterRefs(text string, sourceArticle int) 
 	return refs
 }
 
-// extractSectionRefs extracts section references.
+// extractSectionRefs extracts section references (EU-style simple numbers).
 func (e *ReferenceExtractor) extractSectionRefs(text string, sourceArticle int) []*Reference {
 	var refs []*Reference
 
 	matches := e.sectionPattern.FindAllStringSubmatchIndex(text, -1)
 	for _, match := range matches {
+		// Skip if this is a US-style section (followed by a decimal point)
+		endPos := match[1]
+		if endPos < len(text) && text[endPos] == '.' {
+			continue
+		}
+
 		rawText := text[match[0]:match[1]]
 		sectionNum := mustAtoi(text[match[2]:match[3]])
 
@@ -353,6 +402,281 @@ func (e *ReferenceExtractor) extractSectionRefs(text string, sourceArticle int) 
 	}
 
 	return refs
+}
+
+// extractUSSectionRefs extracts US-style California Civil Code section references.
+func (e *ReferenceExtractor) extractUSSectionRefs(text string, sourceArticle int) []*Reference {
+	var refs []*Reference
+
+	// Paragraph of subdivision of section: "paragraph (1) of subdivision (a) of Section 1798.185"
+	matches := e.usParagraphSubdivPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		rawText := text[match[0]:match[1]]
+		paragraphNum := text[match[2]:match[3]]
+		subdivLetter := text[match[4]:match[5]]
+		codePrefix := mustAtoi(text[match[6]:match[7]])
+		sectionNum := mustAtoi(text[match[8]:match[9]])
+
+		// For California Civil Code 1798.xxx, map to Article xxx
+		articleNum := sectionNum
+		if codePrefix == 1798 {
+			articleNum = sectionNum
+		}
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeInternal,
+			Target:        TargetSection,
+			RawText:       rawText,
+			Identifier:    buildUSSectionIdentifier(codePrefix, sectionNum, subdivLetter, paragraphNum),
+			SubRef:        "paragraph",
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ArticleNum:    articleNum,
+			ParagraphNum:  mustAtoi(paragraphNum),
+			PointLetter:   subdivLetter,
+			SectionNum:    codePrefix*1000 + sectionNum,
+		})
+	}
+
+	// Subdivision of section: "subdivision (a) of Section 1798.100"
+	matches = e.usSubdivOfSectionPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		subdivLetter := text[match[2]:match[3]]
+		codePrefix := mustAtoi(text[match[4]:match[5]])
+		sectionNum := mustAtoi(text[match[6]:match[7]])
+
+		articleNum := sectionNum
+		if codePrefix == 1798 {
+			articleNum = sectionNum
+		}
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeInternal,
+			Target:        TargetSection,
+			RawText:       rawText,
+			Identifier:    buildUSSectionIdentifier(codePrefix, sectionNum, subdivLetter, ""),
+			SubRef:        "subdivision",
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ArticleNum:    articleNum,
+			PointLetter:   subdivLetter,
+			SectionNum:    codePrefix*1000 + sectionNum,
+		})
+	}
+
+	// Section with subdivision: "Section 1798.100(a)" or "Section 1798.185(a)(1)"
+	matches = e.usSectionSubdivPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		codePrefix := mustAtoi(text[match[2]:match[3]])
+		sectionNum := mustAtoi(text[match[4]:match[5]])
+		subdivLetter := text[match[6]:match[7]]
+
+		var paragraphNum string
+		if match[8] != -1 {
+			paragraphNum = text[match[8]:match[9]]
+		}
+
+		articleNum := sectionNum
+		if codePrefix == 1798 {
+			articleNum = sectionNum
+		}
+
+		ref := &Reference{
+			Type:          ReferenceTypeInternal,
+			Target:        TargetSection,
+			RawText:       rawText,
+			Identifier:    buildUSSectionIdentifier(codePrefix, sectionNum, subdivLetter, paragraphNum),
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ArticleNum:    articleNum,
+			PointLetter:   subdivLetter,
+			SectionNum:    codePrefix*1000 + sectionNum,
+		}
+
+		if paragraphNum != "" {
+			ref.ParagraphNum = mustAtoi(paragraphNum)
+			ref.SubRef = "paragraph"
+		} else {
+			ref.SubRef = "subdivision"
+		}
+
+		refs = append(refs, ref)
+	}
+
+	// Sections range: "Sections 1798.100 to 1798.199"
+	matches = e.usSectionsRangePattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		rawText := text[match[0]:match[1]]
+		startPrefix := mustAtoi(text[match[2]:match[3]])
+		startSection := mustAtoi(text[match[4]:match[5]])
+		endPrefix := mustAtoi(text[match[6]:match[7]])
+		endSection := mustAtoi(text[match[8]:match[9]])
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeInternal,
+			Target:        TargetSection,
+			RawText:       rawText,
+			Identifier:    buildUSSectionsRangeIdentifier(startPrefix, startSection, endPrefix, endSection),
+			SubRef:        "range",
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ArticleNum:    startSection,
+			SectionNum:    startPrefix*1000 + startSection,
+		})
+	}
+
+	// Simple section: "Section 1798.100"
+	matches = e.usSectionPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		codePrefix := mustAtoi(text[match[2]:match[3]])
+		sectionNum := mustAtoi(text[match[4]:match[5]])
+
+		articleNum := sectionNum
+		if codePrefix == 1798 {
+			articleNum = sectionNum
+		}
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeInternal,
+			Target:        TargetSection,
+			RawText:       rawText,
+			Identifier:    buildUSSectionIdentifier(codePrefix, sectionNum, "", ""),
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ArticleNum:    articleNum,
+			SectionNum:    codePrefix*1000 + sectionNum,
+		})
+	}
+
+	return refs
+}
+
+// extractUSExternalRefs extracts US-style external references (USC, CFR, etc.).
+func (e *ReferenceExtractor) extractUSExternalRefs(text string, sourceArticle int) []*Reference {
+	var refs []*Reference
+
+	// US Code: "15 U.S.C. Section 1681"
+	matches := e.usCodePattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		rawText := text[match[0]:match[1]]
+		title := text[match[2]:match[3]]
+		section := text[match[4]:match[5]]
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeExternal,
+			Target:        TargetRegulation,
+			RawText:       rawText,
+			Identifier:    title + " U.S.C. § " + section,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ExternalDoc:   "USC",
+			DocNumber:     title,
+			SectionNum:    mustAtoi(section),
+		})
+	}
+
+	// CFR: "45 C.F.R. Part 164"
+	matches = e.cfrPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		rawText := text[match[0]:match[1]]
+		title := text[match[2]:match[3]]
+		part := text[match[4]:match[5]]
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeExternal,
+			Target:        TargetRegulation,
+			RawText:       rawText,
+			Identifier:    title + " C.F.R. Part " + part,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ExternalDoc:   "CFR",
+			DocNumber:     title,
+			SectionNum:    mustAtoi(part),
+		})
+	}
+
+	// California Title references: "Section 17014 of Title 18"
+	matches = e.caTitlePattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		rawText := text[match[0]:match[1]]
+		section := text[match[2]:match[3]]
+		title := text[match[4]:match[5]]
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeExternal,
+			Target:        TargetSection,
+			RawText:       rawText,
+			Identifier:    "Cal. Title " + title + " § " + section,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ExternalDoc:   "CalTitle",
+			DocNumber:     title,
+			SectionNum:    mustAtoi(section),
+		})
+	}
+
+	// Public Law: "Public Law 104-191"
+	matches = e.publicLawPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		rawText := text[match[0]:match[1]]
+		congress := text[match[2]:match[3]]
+		lawNum := text[match[4]:match[5]]
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeExternal,
+			Target:        TargetRegulation,
+			RawText:       rawText,
+			Identifier:    "Pub. L. " + congress + "-" + lawNum,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ExternalDoc:   "PublicLaw",
+			DocYear:       congress,
+			DocNumber:     lawNum,
+		})
+	}
+
+	return refs
+}
+
+// buildUSSectionIdentifier creates a standardized US section identifier.
+func buildUSSectionIdentifier(codePrefix, sectionNum int, subdivLetter, paragraphNum string) string {
+	id := "Section " + itoa(codePrefix) + "." + itoa(sectionNum)
+	if subdivLetter != "" {
+		id += "(" + subdivLetter + ")"
+	}
+	if paragraphNum != "" {
+		id += "(" + paragraphNum + ")"
+	}
+	return id
+}
+
+// buildUSSectionsRangeIdentifier creates an identifier for US section ranges.
+func buildUSSectionsRangeIdentifier(startPrefix, startSection, endPrefix, endSection int) string {
+	return "Sections " + itoa(startPrefix) + "." + itoa(startSection) + "-" + itoa(endPrefix) + "." + itoa(endSection)
 }
 
 // extractDirectiveRefs extracts Directive references.
