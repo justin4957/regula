@@ -522,7 +522,7 @@ func (v *Validator) validateConnectivity(doc *extract.Document, tripleStore *sto
 	}
 
 	// Count provisions
-	articles := collectArticles(doc)
+	articles := CollectArticles(doc)
 	val.TotalProvisions = len(articles)
 
 	// Check connectivity for each article
@@ -533,8 +533,8 @@ func (v *Validator) validateConnectivity(doc *extract.Document, tripleStore *sto
 		// Count references
 		for _, t := range tripleStore.All() {
 			if t.Predicate == store.PropReferences {
-				sourceNum := extractArticleNum(t.Subject)
-				targetNum := extractArticleNum(t.Object)
+				sourceNum := ExtractArticleNum(t.Subject)
+				targetNum := ExtractArticleNum(t.Object)
 				if sourceNum > 0 {
 					outgoingCounts[sourceNum]++
 				}
@@ -774,7 +774,7 @@ func (v *Validator) validateStructure(doc *extract.Document, definitions []*extr
 	val := &StructureValidation{}
 
 	// Count structure elements
-	articles := collectArticles(doc)
+	articles := CollectArticles(doc)
 	val.TotalArticles = len(articles)
 	val.TotalChapters = len(doc.Chapters)
 
@@ -1266,8 +1266,8 @@ func (r *ValidationResult) String() string {
 	return sb.String()
 }
 
-// collectArticles collects all articles from a document.
-func collectArticles(doc *extract.Document) []*extract.Article {
+// CollectArticles collects all articles from a document.
+func CollectArticles(doc *extract.Document) []*extract.Article {
 	articles := make([]*extract.Article, 0)
 	for _, ch := range doc.Chapters {
 		for _, sec := range ch.Sections {
@@ -1278,8 +1278,8 @@ func collectArticles(doc *extract.Document) []*extract.Article {
 	return articles
 }
 
-// extractArticleNum extracts article number from a URI.
-func extractArticleNum(uri string) int {
+// ExtractArticleNum extracts article number from a URI.
+func ExtractArticleNum(uri string) int {
 	if idx := strings.Index(uri, ":Art"); idx != -1 {
 		rest := uri[idx+4:]
 		var numStr strings.Builder
