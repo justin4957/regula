@@ -26,8 +26,8 @@ const (
 type DocumentFormat string
 
 const (
-	FormatEU DocumentFormat = "eu"   // EU-style: CHAPTER I, Article 1
-	FormatUS DocumentFormat = "us"   // US-style: CHAPTER 1, Section 1798.100
+	FormatEU      DocumentFormat = "eu" // EU-style: CHAPTER I, Article 1
+	FormatUS      DocumentFormat = "us" // US-style: CHAPTER 1, Section 1798.100
 	FormatUnknown DocumentFormat = "unknown"
 )
 
@@ -100,9 +100,9 @@ type Definition struct {
 // Parser parses regulatory documents into structured form.
 type Parser struct {
 	// EU-style patterns
-	euChapterPattern    *regexp.Regexp
-	euSectionPattern    *regexp.Regexp
-	euArticlePattern    *regexp.Regexp
+	euChapterPattern *regexp.Regexp
+	euSectionPattern *regexp.Regexp
+	euArticlePattern *regexp.Regexp
 
 	// US-style patterns (California Civil Code style)
 	usChapterPattern    *regexp.Regexp
@@ -110,11 +110,14 @@ type Parser struct {
 	usSectionPattern    *regexp.Regexp
 	usSectionNumPattern *regexp.Regexp
 
+	// Virginia Code style patterns (Section 59.1-575)
+	vaSectionPattern *regexp.Regexp
+
 	// Common patterns
-	paragraphPattern  *regexp.Regexp
-	pointPattern      *regexp.Regexp
-	recitalPattern    *regexp.Regexp
-	definitionPattern *regexp.Regexp
+	paragraphPattern    *regexp.Regexp
+	pointPattern        *regexp.Regexp
+	recitalPattern      *regexp.Regexp
+	definitionPattern   *regexp.Regexp
 	usDefinitionPattern *regexp.Regexp
 
 	// Detected format
@@ -125,9 +128,9 @@ type Parser struct {
 func NewParser() *Parser {
 	return &Parser{
 		// EU-style patterns (GDPR, etc.)
-		euChapterPattern:    regexp.MustCompile(`^CHAPTER\s+([IVX]+)$`),
-		euSectionPattern:    regexp.MustCompile(`^Section\s+(\d+)$`),
-		euArticlePattern:    regexp.MustCompile(`^Article\s+(\d+)$`),
+		euChapterPattern: regexp.MustCompile(`^CHAPTER\s+([IVX]+)$`),
+		euSectionPattern: regexp.MustCompile(`^Section\s+(\d+)$`),
+		euArticlePattern: regexp.MustCompile(`^Article\s+(\d+)$`),
 
 		// US-style patterns (CCPA, California Civil Code, etc.)
 		usChapterPattern:    regexp.MustCompile(`^CHAPTER\s+(\d+)$`),
@@ -135,11 +138,14 @@ func NewParser() *Parser {
 		usSectionPattern:    regexp.MustCompile(`^Section\s+(\d+(?:\.\d+)*)$`),
 		usSectionNumPattern: regexp.MustCompile(`^Section\s+(\d+)\.(\d+)$`),
 
+		// Virginia Code style: Section 59.1-575 or § 59.1-575
+		vaSectionPattern: regexp.MustCompile(`^(?:Section|§)\s*(\d+\.\d+)-(\d+)\.?$`),
+
 		// Common patterns
-		paragraphPattern:  regexp.MustCompile(`^(\d+)\.\s+(.*)$`),
-		pointPattern:      regexp.MustCompile(`^\(([a-z])\)\s+(.*)$`),
-		recitalPattern:    regexp.MustCompile(`^\((\d+)\)\s+(.*)$`),
-		definitionPattern: regexp.MustCompile(`^\((\d+)\)\s+['''"\x{2018}\x{2019}]([^'''"\x{2018}\x{2019}]+)['''"\x{2018}\x{2019}].*means`),
+		paragraphPattern:    regexp.MustCompile(`^(\d+)\.\s+(.*)$`),
+		pointPattern:        regexp.MustCompile(`^\(([a-z])\)\s+(.*)$`),
+		recitalPattern:      regexp.MustCompile(`^\((\d+)\)\s+(.*)$`),
+		definitionPattern:   regexp.MustCompile(`^\((\d+)\)\s+['''"\x{2018}\x{2019}]([^'''"\x{2018}\x{2019}]+)['''"\x{2018}\x{2019}].*means`),
 		usDefinitionPattern: regexp.MustCompile(`^\(([a-z])\)\s+['''"\x{2018}\x{2019}]([^'''"\x{2018}\x{2019}]+)['''"\x{2018}\x{2019}]\s+means`),
 
 		format: FormatUnknown,
@@ -218,7 +224,14 @@ func (p *Parser) detectFormat(lines []string) DocumentFormat {
 		if strings.Contains(strings.ToUpper(line), "CALIFORNIA") {
 			usIndicators += 2
 		}
+		if strings.Contains(strings.ToUpper(line), "VIRGINIA") {
+			usIndicators += 2
+		}
 		if strings.Contains(line, "TITLE 1.81") || strings.Contains(line, "Section 1798") {
+			usIndicators += 3
+		}
+		// Virginia Code style: Section 59.1-XXX
+		if strings.Contains(line, "Section 59.1-") || strings.Contains(line, "§ 59.1-") {
 			usIndicators += 3
 		}
 	}
@@ -256,6 +269,23 @@ func (p *Parser) detectDocumentType(lines []string) DocumentType {
 func (p *Parser) extractIdentifier(lines []string) string {
 	switch p.format {
 	case FormatUS:
+		// Look for Virginia Code style identifiers first
+		for i := 0; i < min(20, len(lines)); i++ {
+			// Virginia Code: Title 59.1 Chapter 53
+			if strings.Contains(lines[i], "Title 59.1") || strings.Contains(lines[i], "TITLE 59.1") {
+				if strings.Contains(lines[i], "Chapter 53") || strings.Contains(lines[i], "CHAPTER 53") {
+					return "Va. Code Ann. § 59.1-575 et seq."
+				}
+				// Generic Title 59.1
+				titlePattern := regexp.MustCompile(`(?i)Title\s+59\.1\s+Chapter\s+(\d+)`)
+				if m := titlePattern.FindStringSubmatch(lines[i]); m != nil {
+					return fmt.Sprintf("Va. Code Ann. Title 59.1 Chapter %s", m[1])
+				}
+			}
+			if strings.Contains(lines[i], "Section 59.1-") || strings.Contains(lines[i], "§ 59.1-") {
+				return "Va. Code Ann. § 59.1"
+			}
+		}
 		// Look for California Civil Code style identifiers
 		for i := 0; i < min(20, len(lines)); i++ {
 			if strings.Contains(lines[i], "TITLE") {
@@ -360,7 +390,30 @@ func (p *Parser) parseUSDocument(doc *Document, lines []string) {
 			continue
 		}
 
-		// Check for Section (e.g., "Section 1798.100")
+		// Check for Section (e.g., "Section 1798.100" or "Section 59.1-575")
+		// Try Virginia Code style first: Section 59.1-575
+		if m := p.vaSectionPattern.FindStringSubmatch(trimmedLine); m != nil {
+			// Save previous section
+			if currentSection != nil {
+				currentSection.Text = strings.TrimSpace(sectionText.String())
+				p.addArticle(currentChapter, nil, currentSection)
+			}
+
+			// Parse section number - use the section number after the hyphen
+			// e.g., "Section 59.1-575" -> Article 575
+			subNum, _ := strconv.Atoi(m[2])
+
+			currentSection = &Article{
+				Number: subNum,
+				Title:  "", // Will be set from next line
+			}
+			pendingSectionTitle = true
+			pendingSection = currentSection
+			sectionText.Reset()
+			continue
+		}
+
+		// Try California style: Section 1798.100
 		if m := p.usSectionNumPattern.FindStringSubmatch(trimmedLine); m != nil {
 			// Save previous section
 			if currentSection != nil {
@@ -664,12 +717,15 @@ func (p *Parser) extractUSDefinitions(doc *Document) []*Definition {
 	definitions := make([]*Definition, 0)
 
 	// In CCPA, definitions are typically in Section 1798.110 (mapped to Article 110)
+	// In VCDPA, definitions are in Section 59.1-575 (mapped to Article 575)
 	// or a section titled "Definitions"
 	var defArticle *Article
 	for _, chapter := range doc.Chapters {
 		for _, article := range chapter.Articles {
 			// Check for definitions section by number or title
-			if article.Number == 110 ||
+			// CCPA: Article 110 (from Section 1798.110)
+			// VCDPA: Article 575 (from Section 59.1-575)
+			if article.Number == 110 || article.Number == 575 ||
 				strings.Contains(strings.ToLower(article.Title), "definition") {
 				defArticle = article
 				break

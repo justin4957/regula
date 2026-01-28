@@ -9,11 +9,11 @@ import (
 type SemanticType string
 
 const (
-	SemanticRight      SemanticType = "right"
-	SemanticObligation SemanticType = "obligation"
+	SemanticRight       SemanticType = "right"
+	SemanticObligation  SemanticType = "obligation"
 	SemanticProhibition SemanticType = "prohibition"
-	SemanticPermission SemanticType = "permission"
-	SemanticExemption  SemanticType = "exemption"
+	SemanticPermission  SemanticType = "permission"
+	SemanticExemption   SemanticType = "exemption"
 )
 
 // EntityType represents the type of entity involved in a right/obligation.
@@ -110,24 +110,24 @@ const (
 
 // SemanticAnnotation represents an extracted right or obligation.
 type SemanticAnnotation struct {
-	Type           SemanticType   `json:"type"`
-	ArticleNum     int            `json:"article_num"`
-	ParagraphNum   int            `json:"paragraph_num,omitempty"`
-	PointLetter    string         `json:"point_letter,omitempty"`
+	Type         SemanticType `json:"type"`
+	ArticleNum   int          `json:"article_num"`
+	ParagraphNum int          `json:"paragraph_num,omitempty"`
+	PointLetter  string       `json:"point_letter,omitempty"`
 
 	// For rights
-	RightType      RightType      `json:"right_type,omitempty"`
-	Beneficiary    EntityType     `json:"beneficiary,omitempty"`
+	RightType   RightType  `json:"right_type,omitempty"`
+	Beneficiary EntityType `json:"beneficiary,omitempty"`
 
 	// For obligations
 	ObligationType ObligationType `json:"obligation_type,omitempty"`
 	DutyBearer     EntityType     `json:"duty_bearer,omitempty"`
 
 	// Common fields
-	MatchedText    string         `json:"matched_text"`
-	MatchedPattern string         `json:"matched_pattern"`
-	Confidence     float64        `json:"confidence"`
-	Context        string         `json:"context,omitempty"` // Surrounding text
+	MatchedText    string  `json:"matched_text"`
+	MatchedPattern string  `json:"matched_pattern"`
+	Confidence     float64 `json:"confidence"`
+	Context        string  `json:"context,omitempty"` // Surrounding text
 }
 
 // SemanticExtractor extracts rights and obligations from regulatory text.
@@ -179,6 +179,15 @@ func (e *SemanticExtractor) initRightPatterns() {
 			Confidence:  1.0,
 			Description: "Right of access",
 		},
+		// VCDPA-style: "right to... access such personal data"
+		{
+			Pattern:     regexp.MustCompile(`(?i)right\s+to[^.]*access\s+(?:such\s+)?personal\s+data`),
+			Type:        SemanticRight,
+			RightType:   RightAccess,
+			Beneficiary: EntityConsumer,
+			Confidence:  1.0,
+			Description: "Right to access personal data (VCDPA)",
+		},
 		{
 			Pattern:     regexp.MustCompile(`(?i)right\s+to\s+(?:obtain\s+)?rectification`),
 			Type:        SemanticRight,
@@ -210,6 +219,15 @@ func (e *SemanticExtractor) initRightPatterns() {
 			Beneficiary: EntityDataSubject,
 			Confidence:  1.0,
 			Description: "Right to data portability",
+		},
+		// VCDPA-style: "Obtain a copy... in a portable... format"
+		{
+			Pattern:     regexp.MustCompile(`(?i)right\s+to[^.]*obtain\s+a\s+copy[^.]*portable`),
+			Type:        SemanticRight,
+			RightType:   RightPortability,
+			Beneficiary: EntityConsumer,
+			Confidence:  1.0,
+			Description: "Right to Portability (VCDPA)",
 		},
 		{
 			Pattern:     regexp.MustCompile(`(?i)right\s+to\s+object`),
@@ -292,6 +310,15 @@ func (e *SemanticExtractor) initRightPatterns() {
 			Confidence:  0.9,
 			Description: "Right to Know",
 		},
+		// VCDPA-style: "right to... Confirm whether... processing"
+		{
+			Pattern:     regexp.MustCompile(`(?i)right\s+to[^.]*confirm\s+whether[^.]*processing`),
+			Type:        SemanticRight,
+			RightType:   RightToKnow,
+			Beneficiary: EntityConsumer,
+			Confidence:  1.0,
+			Description: "Right to Know (VCDPA)",
+		},
 		{
 			Pattern:     regexp.MustCompile(`(?i)consumer\s+shall\s+have\s+the\s+right\s+to\s+request.*(?:sell|sold|disclose)`),
 			Type:        SemanticRight,
@@ -323,6 +350,15 @@ func (e *SemanticExtractor) initRightPatterns() {
 			Beneficiary: EntityConsumer,
 			Confidence:  0.95,
 			Description: "Right to Deletion",
+		},
+		// VCDPA-style: "right to... Delete personal data"
+		{
+			Pattern:     regexp.MustCompile(`(?i)right\s+to[^.]*delete\s+personal\s+data`),
+			Type:        SemanticRight,
+			RightType:   RightToDelete,
+			Beneficiary: EntityConsumer,
+			Confidence:  1.0,
+			Description: "Right to Delete (VCDPA)",
 		},
 		{
 			Pattern:     regexp.MustCompile(`(?i)consumer\s+shall\s+have\s+the\s+right.*(?:opt[- ]?out|direct.*not\s+(?:to\s+)?sell)`),
@@ -363,6 +399,15 @@ func (e *SemanticExtractor) initRightPatterns() {
 			Beneficiary: EntityConsumer,
 			Confidence:  0.95,
 			Description: "Right to Correction",
+		},
+		// VCDPA-style: "right to... Correct inaccuracies"
+		{
+			Pattern:     regexp.MustCompile(`(?i)right\s+to[^.]*correct\s+inaccuracies`),
+			Type:        SemanticRight,
+			RightType:   RightToCorrect,
+			Beneficiary: EntityConsumer,
+			Confidence:  1.0,
+			Description: "Right to Correct (VCDPA)",
 		},
 		{
 			Pattern:     regexp.MustCompile(`(?i)right\s+to\s+limit.*(?:sensitive|use)`),
@@ -965,20 +1010,20 @@ func extractContext(text string, start, end, contextLen int) string {
 
 // SemanticStats holds statistics about extracted semantic annotations.
 type SemanticStats struct {
-	TotalAnnotations int                    `json:"total_annotations"`
-	Rights           int                    `json:"rights"`
-	Obligations      int                    `json:"obligations"`
-	Prohibitions     int                    `json:"prohibitions"`
-	Permissions      int                    `json:"permissions"`
-	ByRightType      map[RightType]int      `json:"by_right_type"`
-	ByObligationType map[ObligationType]int `json:"by_obligation_type"`
-	ByBeneficiary    map[EntityType]int     `json:"by_beneficiary"`
-	ByDutyBearer     map[EntityType]int     `json:"by_duty_bearer"`
-	ArticlesWithRights      int             `json:"articles_with_rights"`
-	ArticlesWithObligations int             `json:"articles_with_obligations"`
-	HighConfidence   int                    `json:"high_confidence"`
-	MediumConfidence int                    `json:"medium_confidence"`
-	LowConfidence    int                    `json:"low_confidence"`
+	TotalAnnotations        int                    `json:"total_annotations"`
+	Rights                  int                    `json:"rights"`
+	Obligations             int                    `json:"obligations"`
+	Prohibitions            int                    `json:"prohibitions"`
+	Permissions             int                    `json:"permissions"`
+	ByRightType             map[RightType]int      `json:"by_right_type"`
+	ByObligationType        map[ObligationType]int `json:"by_obligation_type"`
+	ByBeneficiary           map[EntityType]int     `json:"by_beneficiary"`
+	ByDutyBearer            map[EntityType]int     `json:"by_duty_bearer"`
+	ArticlesWithRights      int                    `json:"articles_with_rights"`
+	ArticlesWithObligations int                    `json:"articles_with_obligations"`
+	HighConfidence          int                    `json:"high_confidence"`
+	MediumConfidence        int                    `json:"medium_confidence"`
+	LowConfidence           int                    `json:"low_confidence"`
 }
 
 // CalculateSemanticStats calculates statistics for semantic annotations.
