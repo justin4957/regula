@@ -1,0 +1,78 @@
+International Data Governance Framework
+
+1. General Provisions
+
+1.1. Purpose
+This framework establishes principles for cross-border data governance
+applicable to all participating organizations and jurisdictions.
+
+1.2. Scope
+This framework applies to the processing of personal data by any
+organization that operates across national boundaries.
+
+1.3. Application
+Organizations shall implement these provisions within twelve months
+of adoption by their governing authority.
+
+2. Data Protection Principles
+
+2.1. Lawful Processing
+Data shall be processed lawfully, fairly, and in a transparent manner
+in relation to the data subject.
+
+2.2. Purpose Limitation
+Data shall be collected for specified, explicit, and legitimate purposes
+and not further processed in a manner incompatible with those purposes.
+
+2.2.1. Consent Requirements
+Processing shall require explicit consent of the data subject unless
+one of the other lawful bases applies.
+
+2.2.2. Legitimate Interest
+Processing may be based on legitimate interests of the controller,
+provided such interests are not overridden by the interests or
+fundamental rights of the data subject.
+
+2.3. Data Minimization
+Data collected shall be adequate, relevant, and limited to what is
+necessary in relation to the purposes for which it is processed.
+
+3. Rights of Data Subjects
+
+3.1. Right of Access
+Data subjects have the right to obtain confirmation as to whether
+personal data concerning them is being processed.
+
+3.2. Right to Rectification
+Data subjects have the right to obtain rectification of inaccurate
+personal data without undue delay.
+
+3.3. Right to Erasure
+Data subjects have the right to obtain the erasure of personal data
+concerning them without undue delay.
+
+4. Definitions
+
+"Personal data" means any information relating to an identified or
+identifiable natural person.
+
+"Processing" means any operation or set of operations which is performed
+on personal data or on sets of personal data.
+
+"Controller" means the natural or legal person which determines the
+purposes and means of the processing of personal data.
+
+"Processor" means a natural or legal person which processes personal
+data on behalf of the controller.
+
+"Data subject" means an identified or identifiable natural person.
+
+5. Enforcement
+
+5.1. Supervisory Authority
+Each participating jurisdiction shall designate a supervisory authority
+responsible for monitoring compliance with this framework.
+
+5.2. Penalties
+Infringements of this framework may result in administrative fines
+as determined by the supervisory authority.

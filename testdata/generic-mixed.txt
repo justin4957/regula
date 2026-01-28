@@ -1,0 +1,71 @@
+Standard Operating Procedure: Data Handling
+
+GENERAL REQUIREMENTS
+
+1. All data must be classified before processing according to the
+organization's data classification framework.
+
+(a) Public data requires no special handling beyond standard
+operating procedures.
+
+(b) Internal data requires access controls and audit logging.
+
+(c) Confidential data requires encryption at rest and in transit.
+
+(i) At rest encryption shall use industry-standard algorithms
+with a minimum key length of 256 bits.
+
+(ii) In transit encryption shall use current transport layer
+security protocols.
+
+(iii) Key management shall follow established key rotation
+schedules as defined by the security team.
+
+2. Data retention periods shall be established for all categories
+of data processed by the organization.
+
+(a) Transactional data shall be retained for seven years.
+
+(b) Customer communications shall be retained for three years.
+
+(c) Internal operational data shall be retained for one year.
+
+ACCESS CONTROL
+
+3. Access shall be granted on a need-to-know basis following the
+principle of least privilege.
+
+(a) Read access may be granted to authorized personnel within
+the relevant business unit.
+
+(b) Write access requires approval from the data steward and
+the relevant department manager.
+
+(c) Administrative access requires approval from the chief
+information security officer.
+
+4. Access reviews shall be conducted quarterly to ensure compliance
+with the principle of least privilege.
+
+DATA TRANSFER
+
+5. Cross-border data transfers require a documented legal basis
+and appropriate safeguards.
+
+(a) Transfers within the organization require a data transfer
+agreement approved by legal counsel.
+
+(b) Transfers to third parties require a data processing agreement
+and evidence of adequate security controls.
+
+6. Data transfers shall be logged and auditable for a minimum period
+of three years from the date of transfer.
+
+"Confidential data" means any data classified as confidential under
+the organization's data classification framework.
+
+"Data steward" means the individual designated as responsible for
+the governance of a specific dataset.
+
+"Authorized personnel" means employees who have been granted access
+through the formal access request process.
