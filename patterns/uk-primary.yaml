@@ -1,0 +1,187 @@
+# UK Primary Legislation Format Pattern
+# Detects and parses UK Acts of Parliament (e.g., Data Protection Act 2018)
+#
+# UK Acts use numbered sections (1, 2, 3...) with inline titles, parts with
+# Roman or Arabic numerals, and schedules appended after the main body.
+# Definitions typically appear in an "Interpretation" section.
+
+name: "UK Primary Legislation"
+format_id: "uk-primary"
+version: "2.0.0"
+jurisdiction: "GB"
+
+detection:
+  required_indicators:
+    # Chapter number citation: [2018 c. 12]
+    - pattern: '\[\d{4}\s+c\.\s*\d+\]'
+      weight: 30
+    # Enacting formula
+    - pattern: '(?i)\bBE\s+IT\s+ENACTED\b'
+      weight: 30
+
+  optional_indicators:
+    - pattern: '(?im)^An\s+Act\s+to\b'
+      weight: 15
+    - pattern: '(?i)\bRoyal\s+Assent\b'
+      weight: 12
+    - pattern: '(?i)\bHer\s+Majesty\b'
+      weight: 8
+    - pattern: "(?i)\\bQueen'?s\\s+most\\s+Excellent\\s+Majesty\\b"
+      weight: 8
+    - pattern: '(?i)\bLords\s+Spiritual\s+and\s+Temporal\b'
+      weight: 12
+    - pattern: '(?i)\bHouse\s+of\s+Commons\b'
+      weight: 8
+    - pattern: '(?im)^PART\s+\d+'
+      weight: 5
+    - pattern: '(?im)^SCHEDULE\s+\d+'
+      weight: 8
+    - pattern: '(?i)\bCommencement\b'
+      weight: 5
+
+  negative_indicators:
+    # Only penalize when the document IS an SI (header pattern), not when it references SIs
+    - pattern: '(?im)^Statutory\s+Instruments?\s+\d{4}\s+No\.'
+      weight: -25
+    - pattern: '(?i)\bCALIFORNIA\b'
+      weight: -15
+    - pattern: '(?i)\bVIRGINIA\b'
+      weight: -10
+    - pattern: '(?i)\bU\.?S\.?\s+Code\b'
+      weight: -20
+    # Penalize when the document itself IS an EU regulation
+    - pattern: '(?i)\bHAVE\s+ADOPTED\s+THIS\s+REGULATION\b'
+      weight: -25
+    - pattern: '(?im)^THE\s+EUROPEAN\s+PARLIAMENT\s+AND\s+THE\s+COUNCIL'
+      weight: -20
+
+structure:
+  preamble:
+    start_pattern: '(?i)^An\s+Act\s+to\b'
+    end_pattern: '(?i)\bBE\s+IT\s+ENACTED\b'
+    recital_pattern: ''
+
+  hierarchy:
+    - type: "part"
+      pattern: '^PART\s+(\d+)\s*$'
+      number_group: 1
+      title_follows: true
+
+    - type: "chapter"
+      pattern: '^CHAPTER\s+(\d+)\s*$'
+      number_group: 1
+      title_follows: true
+
+    # UK Acts use numbered sections: "1 Overview", "1. Overview" or "1.—(1) This Act..."
+    - type: "section"
+      pattern: '^(\d+)\.?\s+(.+)$'
+      number_group: 1
+      title_inline: true
+
+    - type: "subsection"
+      pattern: '^\((\d+)\)\s+'
+      number_group: 1
+
+    - type: "paragraph"
+      pattern: '^\(([a-z])\)\s+'
+      number_group: 1
+
+    - type: "subparagraph"
+      pattern: '^\(([ivx]+)\)\s+'
+      number_group: 1
+
+    - type: "schedule"
+      pattern: '^SCHEDULE\s+(\d+)\s*$'
+      number_group: 1
+      title_follows: true
+
+definitions:
+  location:
+    - section_title: '(?i)interpretation|definitions?|terms'
+    - section_number: 3
+
+  # UK style: "controller" means a person who...
+  # Also: (2) "personal data" means... (with paragraph number prefix)
+  # Also: "personal data" has the same meaning as in...
+  pattern: "^(?:\\(\\d+\\)\\s+)?[\\x{201c}\\x{201d}\"\u201c\u201d]([^\\x{201c}\\x{201d}\"\u201c\u201d]+)[\\x{201c}\\x{201d}\"\u201c\u201d]\\s+(?:means?|has\\s+the\\s+(?:same\\s+)?meaning)"
+
+references:
+  internal:
+    # Section reference: section 3, Section 170
+    - pattern: '(?i)section\s+(\d+)(?:\((\d+)\))?'
+      target: "section"
+      groups:
+        number: 1
+        subsection: 2
+
+    # Subsection reference: subsection (2)
+    - pattern: 'subsection\s+\((\d+)\)'
+      target: "subsection"
+      groups:
+        number: 1
+
+    # Paragraph reference: paragraph (a)
+    - pattern: 'paragraph\s+\(([a-z])\)'
+      target: "paragraph"
+      groups:
+        letter: 1
+
+    # Part reference: Part 1, Part 6
+    - pattern: 'Part\s+(\d+)'
+      target: "part"
+      groups:
+        number: 1
+
+    # Schedule reference: Schedule 1
+    - pattern: 'Schedule\s+(\d+)'
+      target: "schedule"
+      groups:
+        number: 1
+
+    # Chapter reference: Chapter 2
+    - pattern: 'Chapter\s+(\d+)'
+      target: "chapter"
+      groups:
+        number: 1
+
+  external:
+    # Act citation by chapter number: 2018 c. 12
+    - pattern: '(\d{4})\s+c\.\s*(\d+)'
+      type: "act"
+      uri_template: "https://www.legislation.gov.uk/ukpga/{year}/{chapter}"
+      groups:
+        year: 1
+        chapter: 2
+
+    # Named Act: the Data Protection Act 2018
+    - pattern: 'the\s+([A-Z][a-zA-Z\s]+)\s+Act\s+(\d{4})'
+      type: "act"
+      uri_template: "https://www.legislation.gov.uk/ukpga/{year}"
+      groups:
+        name: 1
+        year: 2
+
+    # Statutory Instrument reference: S.I. 2019/419
+    - pattern: 'S\.?I\.?\s+(\d{4})/(\d+)'
+      type: "statutory_instrument"
+      uri_template: "https://www.legislation.gov.uk/uksi/{year}/{number}"
+      groups:
+        year: 1
+        number: 2
+
+    # EU Regulation reference (retained EU law)
+    - pattern: 'Regulation\s+\(E[CU]\)\s+(?:No\s+)?(\d+)/(\d{4})'
+      type: "eu_regulation"
+      uri_template: "http://data.europa.eu/eli/reg/{year}/{number}/oj"
+      groups:
+        number: 1
+        year: 2
+
+    # EU Directive reference
+    - pattern: 'Directive\s+(\d{4})/(\d+)/(EC|EU)'
+      type: "eu_directive"
+      uri_template: "http://data.europa.eu/eli/dir/{year}/{number}/oj"
+      groups:
+        year: 1
+        number: 2
+        authority: 3

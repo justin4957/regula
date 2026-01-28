@@ -36,7 +36,7 @@ detection:
     - pattern: '\bHAVE\s+ADOPTED\s+THIS\s+REGULATION\b'
       weight: 12
     # Structural indicators from parser.go detectFormat()
-    - pattern: '^CHAPTER\s+[IVX]+'
+    - pattern: '(?m)^CHAPTER\s+[IVX]+'
       weight: 8
     - pattern: '\(EU\)|\(EC\)'
       weight: 8
@@ -53,6 +53,13 @@ detection:
       weight: -10
     - pattern: '\bSection\s+\d+\.\d+'
       weight: -8
+    # UK-style indicators: penalize when document is a UK Act or SI
+    - pattern: '(?i)\bBE\s+IT\s+ENACTED\b'
+      weight: -25
+    - pattern: '\[\d{4}\s+c\.\s*\d+\]'
+      weight: -20
+    - pattern: '(?im)^Statutory\s+Instruments?\s+\d{4}\s+No\.'
+      weight: -15
 
 structure:
   preamble:

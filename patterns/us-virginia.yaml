@@ -28,7 +28,7 @@ detection:
       weight: 15
     - pattern: '(?i)\bCode\s+of\s+Virginia\b'
       weight: 10
-    - pattern: '(?i)^CHAPTER\s+\d+'
+    - pattern: '(?im)^CHAPTER\s+\d+'
       weight: 5
     - pattern: '\bsubdivision\s+\([a-z]\)'
       weight: 5

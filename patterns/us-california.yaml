@@ -30,7 +30,7 @@ detection:
       weight: 10
     - pattern: '(?i)\bCal\.\s*(Civ|Bus)\.\s*'
       weight: 8
-    - pattern: '(?i)^CHAPTER\s+\d+'
+    - pattern: '(?im)^CHAPTER\s+\d+'
       weight: 5
     - pattern: '\bsubdivision\s+\([a-z]\)'
       weight: 8
