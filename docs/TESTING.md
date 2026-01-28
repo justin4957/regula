@@ -42,6 +42,27 @@ go test ./pkg/store/... -run "TestIsEU|TestEnrich" -v
 go test ./pkg/store/... -run TestEnrichWithELI_GDPRIntegration -v
 ```
 
+### Citation Parser Tests
+
+Test the extensible citation parser interface and EU citation parser:
+
+```bash
+# Run all citation parser tests
+go test ./pkg/citation/... -v
+
+# Run EU citation parser tests
+go test ./pkg/citation/... -run TestEUCitationParser -v
+
+# Run registry operation tests
+go test ./pkg/citation/... -run TestCitationRegistry -v
+
+# Run bridge conversion tests
+go test ./pkg/citation/... -run "TestCitationFromReference|TestReferenceFromCitation|TestRoundtrip|TestBatch" -v
+
+# Run GDPR integration test (parses full GDPR text)
+go test ./pkg/citation/... -run TestEUCitationParserGDPRIntegration -v
+```
+
 ### E2E Tests
 
 The E2E test script validates the complete MVP functionality:
