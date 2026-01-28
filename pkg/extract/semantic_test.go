@@ -516,3 +516,235 @@ func BenchmarkSemanticExtractor_ExtractFromDocument(b *testing.B) {
 		extractor.ExtractFromDocument(doc)
 	}
 }
+
+// CCPA-specific tests
+
+func TestSemanticExtractor_CCPARightPatterns(t *testing.T) {
+	extractor := NewSemanticExtractor()
+
+	tests := []struct {
+		text         string
+		expectedType RightType
+		description  string
+	}{
+		{
+			text:         "A consumer shall have the right to request that a business disclose the categories and specific pieces of personal information",
+			expectedType: RightToKnow,
+			description:  "Right to know",
+		},
+		{
+			text:         "A consumer shall have the right to request that a business delete any personal information about the consumer",
+			expectedType: RightToDelete,
+			description:  "Right to delete",
+		},
+		{
+			text:         "A consumer shall have the right to opt-out of the sale of the consumer's personal information",
+			expectedType: RightToOptOut,
+			description:  "Right to opt-out",
+		},
+		{
+			text:         "A business shall not discriminate against a consumer because the consumer exercised any of the consumer's rights",
+			expectedType: RightToNonDiscrimination,
+			description:  "Right to non-discrimination",
+		},
+		{
+			text:         "A consumer shall have the right to know what personal information is being sold or disclosed for a business purpose",
+			expectedType: RightToKnowAboutSales,
+			description:  "Right to know about sales",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.description, func(t *testing.T) {
+			annotations := extractor.extractFromText(tt.text, 1, 0, "")
+
+			found := false
+			for _, ann := range annotations {
+				if ann.Type == SemanticRight && ann.RightType == tt.expectedType {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("Expected to find CCPA right type %v in %q", tt.expectedType, tt.text)
+				t.Logf("Found annotations: %v", annotations)
+			}
+		})
+	}
+}
+
+func TestSemanticExtractor_CCPAObligationPatterns(t *testing.T) {
+	extractor := NewSemanticExtractor()
+
+	tests := []struct {
+		text         string
+		expectedType ObligationType
+		description  string
+	}{
+		{
+			text:         "A business shall provide notice at collection to the consumer",
+			expectedType: ObligationNoticeAtCollection,
+			description:  "Notice at collection",
+		},
+		{
+			text:         "A business shall make available to consumers a privacy policy",
+			expectedType: ObligationPrivacyPolicy,
+			description:  "Privacy policy",
+		},
+		{
+			text:         "A business shall verify the identity of the consumer making a request",
+			expectedType: ObligationVerifyRequest,
+			description:  "Verify request",
+		},
+		{
+			text:         "A business shall not discriminate against a consumer for exercising rights",
+			expectedType: ObligationNonDiscrimination,
+			description:  "Non-discrimination obligation",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.description, func(t *testing.T) {
+			annotations := extractor.extractFromText(tt.text, 1, 0, "")
+
+			found := false
+			for _, ann := range annotations {
+				if (ann.Type == SemanticObligation || ann.Type == SemanticProhibition) && ann.ObligationType == tt.expectedType {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("Expected to find CCPA obligation type %v in %q", tt.expectedType, tt.text)
+				t.Logf("Found annotations: %v", annotations)
+			}
+		})
+	}
+}
+
+func TestSemanticExtractor_CCPAEntityIdentification(t *testing.T) {
+	extractor := NewSemanticExtractor()
+
+	tests := []struct {
+		text           string
+		expectedEntity EntityType
+		description    string
+	}{
+		{
+			text:           "A consumer shall have the right to request deletion",
+			expectedEntity: EntityConsumer,
+			description:    "Consumer identification",
+		},
+		{
+			text:           "A business shall provide notice at collection",
+			expectedEntity: EntityBusiness,
+			description:    "Business identification",
+		},
+		{
+			text:           "A service provider may process personal information",
+			expectedEntity: EntityServiceProvider,
+			description:    "Service provider identification",
+		},
+		{
+			text:           "The Attorney General may bring an action",
+			expectedEntity: EntityAttorneyGeneral,
+			description:    "Attorney General identification",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.description, func(t *testing.T) {
+			entity := extractor.identifyEntity(tt.text)
+			if entity != tt.expectedEntity {
+				t.Errorf("Expected entity %v, got %v", tt.expectedEntity, entity)
+			}
+		})
+	}
+}
+
+// Integration test with CCPA data
+func TestCCPASemanticExtraction(t *testing.T) {
+	ccpaPath := "../../testdata/ccpa.txt"
+	if _, err := os.Stat(ccpaPath); os.IsNotExist(err) {
+		ccpaPath = "testdata/ccpa.txt"
+		if _, err := os.Stat(ccpaPath); os.IsNotExist(err) {
+			t.Skip("CCPA test data not available")
+		}
+	}
+
+	file, err := os.Open(ccpaPath)
+	if err != nil {
+		t.Fatalf("Failed to open CCPA: %v", err)
+	}
+	defer file.Close()
+
+	parser := NewParser()
+	doc, err := parser.Parse(file)
+	if err != nil {
+		t.Fatalf("Failed to parse CCPA: %v", err)
+	}
+
+	extractor := NewSemanticExtractor()
+	annotations := extractor.ExtractFromDocument(doc)
+	stats := CalculateSemanticStats(annotations)
+
+	t.Logf("CCPA Semantic Extraction Statistics:")
+	t.Logf("  Total annotations: %d", stats.TotalAnnotations)
+	t.Logf("  Rights: %d", stats.Rights)
+	t.Logf("  Obligations: %d", stats.Obligations)
+	t.Logf("  Prohibitions: %d", stats.Prohibitions)
+	t.Logf("  Articles with rights: %d", stats.ArticlesWithRights)
+	t.Logf("  Articles with obligations: %d", stats.ArticlesWithObligations)
+
+	// CCPA should have significant rights and obligations
+	if stats.Rights < 10 {
+		t.Errorf("Expected at least 10 rights in CCPA, found %d", stats.Rights)
+	}
+	if stats.Obligations < 10 {
+		t.Errorf("Expected at least 10 obligations in CCPA, found %d", stats.Obligations)
+	}
+
+	// Create lookup for validation
+	lookup := NewSemanticLookup(annotations)
+
+	// Log rights by type
+	t.Logf("\nCCPA Rights by Type:")
+	for rightType, count := range stats.ByRightType {
+		t.Logf("  %s: %d", rightType, count)
+	}
+
+	// Log obligations by type
+	t.Logf("\nCCPA Obligations by Type:")
+	for obligType, count := range stats.ByObligationType {
+		t.Logf("  %s: %d", obligType, count)
+	}
+
+	// Check for CCPA-specific rights
+	ccpaRightTypes := []RightType{RightToKnow, RightToDelete, RightToOptOut}
+	foundCCPARights := 0
+	for _, rightType := range ccpaRightTypes {
+		rights := lookup.GetByRightType(rightType)
+		if len(rights) > 0 {
+			foundCCPARights++
+			t.Logf("  [PASS] Found %s: %d occurrences", rightType, len(rights))
+		} else {
+			t.Logf("  [FAIL] %s not found", rightType)
+		}
+	}
+
+	if foundCCPARights < 2 {
+		t.Errorf("Expected to find at least 2 of 3 CCPA-specific rights, found %d", foundCCPARights)
+	}
+
+	// Sample output for manual validation
+	t.Logf("\nSample CCPA Rights (first 10):")
+	rights := lookup.GetRights()
+	for i, right := range rights {
+		if i >= 10 {
+			break
+		}
+		t.Logf("  Article %d: %s - %q", right.ArticleNum, right.RightType, right.MatchedText)
+	}
+}
