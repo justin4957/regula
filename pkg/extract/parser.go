@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/coolbeans/regula/pkg/pattern"
 )
 
 // DocumentType represents the type of regulatory document.
@@ -122,6 +124,10 @@ type Parser struct {
 
 	// Detected format
 	format DocumentFormat
+
+	// Pattern library integration (optional)
+	patternRegistry pattern.Registry
+	patternBridge   *pattern.PatternBridge
 }
 
 // NewParser creates a new Parser with patterns for multiple regulation formats.
@@ -149,6 +155,47 @@ func NewParser() *Parser {
 		usDefinitionPattern: regexp.MustCompile(`^\(([a-z])\)\s+['''"\x{2018}\x{2019}]([^'''"\x{2018}\x{2019}]+)['''"\x{2018}\x{2019}]\s+means`),
 
 		format: FormatUnknown,
+	}
+}
+
+// NewParserWithRegistry creates a new Parser that uses the pattern registry
+// for format detection and structure extraction. The registry patterns are used
+// to drive EU-format parsing when a matching pattern is found. Falls back to
+// hardcoded patterns when no registry match is found.
+func NewParserWithRegistry(registry pattern.Registry) *Parser {
+	parser := NewParser()
+	parser.patternRegistry = registry
+	return parser
+}
+
+// applyPatternBridge configures the parser to use compiled patterns from the
+// pattern bridge for EU document parsing. This replaces the hardcoded EU regex
+// patterns with the ones loaded from the YAML pattern library.
+func (p *Parser) applyPatternBridge(bridge *pattern.PatternBridge) {
+	if bridge == nil {
+		return
+	}
+	p.patternBridge = bridge
+
+	// Override EU hierarchy patterns from the pattern library
+	if chapterPattern := bridge.HierarchyPattern("chapter"); chapterPattern != nil {
+		p.euChapterPattern = chapterPattern
+	}
+	if sectionPattern := bridge.HierarchyPattern("section"); sectionPattern != nil {
+		p.euSectionPattern = sectionPattern
+	}
+	if articlePattern := bridge.HierarchyPattern("article"); articlePattern != nil {
+		p.euArticlePattern = articlePattern
+	}
+
+	// Override definition pattern from pattern library
+	if defPattern := bridge.DefinitionPattern(); defPattern != nil {
+		p.definitionPattern = defPattern
+	}
+
+	// Override recital pattern from pattern library
+	if recitalPattern := bridge.RecitalPattern(); recitalPattern != nil {
+		p.recitalPattern = recitalPattern
 	}
 }
 
@@ -195,7 +242,32 @@ func (p *Parser) Parse(r io.Reader) (*Document, error) {
 }
 
 // detectFormat analyzes the document to determine its structural format.
+// When a pattern registry is available, it uses the registry's confidence-based
+// detection. Otherwise, it falls back to the hardcoded indicator counting.
 func (p *Parser) detectFormat(lines []string) DocumentFormat {
+	// Try pattern-registry-based detection first
+	if p.patternRegistry != nil {
+		content := strings.Join(lines, "\n")
+		bridge := pattern.DetectAndBridge(p.patternRegistry, content, 0.3)
+		if bridge != nil {
+			p.applyPatternBridge(bridge)
+			// Map the detected format to our internal format type
+			switch bridge.Jurisdiction() {
+			case "EU":
+				return FormatEU
+			case "US", "US-CA", "US-VA":
+				return FormatUS
+			}
+		}
+	}
+
+	// Fall back to hardcoded indicator counting
+	return p.detectFormatLegacy(lines)
+}
+
+// detectFormatLegacy uses the original hardcoded indicator counting to
+// determine document format. This is the pre-pattern-library detection method.
+func (p *Parser) detectFormatLegacy(lines []string) DocumentFormat {
 	euIndicators := 0
 	usIndicators := 0
 
@@ -317,8 +389,14 @@ func (p *Parser) extractIdentifier(lines []string) string {
 func (p *Parser) parseEUDocument(doc *Document, lines []string) {
 	// Find where main body starts (after "HAVE ADOPTED THIS REGULATION:")
 	mainBodyStart := 0
+	endPattern := p.preambleEndPattern()
 	for i, line := range lines {
-		if strings.Contains(line, "HAVE ADOPTED THIS") {
+		if endPattern != nil && endPattern.MatchString(line) {
+			mainBodyStart = i + 1
+			break
+		}
+		// Fallback string check for backwards compatibility
+		if endPattern == nil && strings.Contains(line, "HAVE ADOPTED THIS") {
 			mainBodyStart = i + 1
 			break
 		}
@@ -464,6 +542,15 @@ func (p *Parser) parseUSDocument(doc *Document, lines []string) {
 
 	// Extract definitions
 	doc.Definitions = p.extractUSDefinitions(doc)
+}
+
+// preambleEndPattern returns the compiled preamble end pattern from the
+// pattern bridge, or nil if no bridge is available.
+func (p *Parser) preambleEndPattern() *regexp.Regexp {
+	if p.patternBridge != nil {
+		return p.patternBridge.PreambleEndPattern()
+	}
+	return nil
 }
 
 // parsePreamble extracts recitals from the preamble section.
