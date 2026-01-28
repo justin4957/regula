@@ -1020,82 +1020,24 @@ func (p *Parser) parseUKDocument(doc *Document, lines []string) {
 }
 
 // extractUKDefinitions extracts defined terms from UK legislation.
-// UK Acts typically define terms in an "Interpretation" section using the pattern:
-//
-//	"term" means ...
+// Uses auto-detection to find definition articles by title, bridge config,
+// or definition pattern density rather than hardcoded article numbers.
 func (p *Parser) extractUKDefinitions(doc *Document) []*Definition {
 	definitions := make([]*Definition, 0)
 
-	// Determine definition locations from pattern bridge or search by title
-	defArticleNumbers := []int{}
-	var defTitleRegexps []*regexp.Regexp
+	definitionArticles := p.findDefinitionArticles(doc, p.ukDefinitionPattern)
 
-	if p.patternBridge != nil {
-		bridgeLocations := p.patternBridge.DefinitionLocations()
-		for _, loc := range bridgeLocations {
-			if loc.SectionNumber > 0 {
-				defArticleNumbers = append(defArticleNumbers, loc.SectionNumber)
-			}
-			if loc.SectionTitle != "" {
-				compiled, err := regexp.Compile(loc.SectionTitle)
-				if err == nil {
-					defTitleRegexps = append(defTitleRegexps, compiled)
-				}
-			}
-		}
-	}
-
-	// Fallback title patterns if bridge doesn't provide any
-	if len(defTitleRegexps) == 0 {
-		defTitleRegexps = []*regexp.Regexp{
-			regexp.MustCompile(`(?i)interpretation|definitions?|terms`),
-		}
-	}
-
-	// Find the definitions article
-	var defArticle *Article
-	for _, chapter := range doc.Chapters {
-		for _, article := range chapter.Articles {
-			// Check by section number
-			for _, defNum := range defArticleNumbers {
-				if article.Number == defNum {
-					defArticle = article
-					break
-				}
-			}
-			if defArticle != nil {
-				break
-			}
-			// Check by title pattern
-			for _, titleRegexp := range defTitleRegexps {
-				if titleRegexp.MatchString(article.Title) {
-					defArticle = article
-					break
-				}
-			}
-			if defArticle != nil {
-				break
-			}
-		}
-		if defArticle != nil {
-			break
-		}
-	}
-
-	if defArticle == nil || defArticle.Text == "" {
-		return definitions
-	}
-
-	// Parse UK-style definitions: "term" means ...
-	allLines := strings.Split(defArticle.Text, "\n")
 	defNum := 0
-	for _, line := range allLines {
-		if m := p.ukDefinitionPattern.FindStringSubmatch(line); m != nil {
-			defNum++
-			definitions = append(definitions, &Definition{
-				Number: defNum,
-				Term:   strings.TrimSpace(m[1]),
-			})
+	for _, defArticle := range definitionArticles {
+		allLines := strings.Split(defArticle.Text, "\n")
+		for _, line := range allLines {
+			if m := p.ukDefinitionPattern.FindStringSubmatch(line); m != nil {
+				defNum++
+				definitions = append(definitions, &Definition{
+					Number: defNum,
+					Term:   strings.TrimSpace(m[1]),
+				})
+			}
 		}
 	}
 
@@ -1334,107 +1276,140 @@ func (p *Parser) addArticle(chapter *Chapter, section *Section, article *Article
 	}
 }
 
-// extractDefinitions extracts defined terms from Article 4 (Definitions).
-func (p *Parser) extractDefinitions(doc *Document) []*Definition {
-	definitions := make([]*Definition, 0)
+// findDefinitionArticles locates all articles containing definitions using
+// three strategies in priority order:
+//  1. Pattern bridge locations (section numbers + title patterns from YAML config)
+//  2. Fallback title matching (definitions, interpretation, terms)
+//  3. Definition density detection (scan article text for definition patterns)
+//
+// Returns all matching articles to support multiple definition sections.
+func (p *Parser) findDefinitionArticles(doc *Document, definitionPattern *regexp.Regexp) []*Article {
+	candidateArticleNumbers := []int{}
+	var candidateTitleRegexps []*regexp.Regexp
 
-	// Find Article 4
-	var article4 *Article
-	for _, chapter := range doc.Chapters {
-		for _, article := range chapter.Articles {
-			if article.Number == 4 {
-				article4 = article
-				break
+	// Strategy 1: Pattern bridge locations
+	if p.patternBridge != nil {
+		bridgeLocations := p.patternBridge.DefinitionLocations()
+		for _, loc := range bridgeLocations {
+			if loc.SectionNumber > 0 {
+				candidateArticleNumbers = append(candidateArticleNumbers, loc.SectionNumber)
 			}
-		}
-		for _, section := range chapter.Sections {
-			for _, article := range section.Articles {
-				if article.Number == 4 {
-					article4 = article
-					break
+			if compiled := loc.TitlePattern(); compiled != nil {
+				candidateTitleRegexps = append(candidateTitleRegexps, compiled)
+			} else if loc.SectionTitle != "" {
+				compiled, err := regexp.Compile(loc.SectionTitle)
+				if err == nil {
+					candidateTitleRegexps = append(candidateTitleRegexps, compiled)
 				}
 			}
 		}
-		if article4 != nil {
-			break
+	}
+
+	// Strategy 2: Fallback title patterns when bridge provides none
+	if len(candidateTitleRegexps) == 0 {
+		candidateTitleRegexps = []*regexp.Regexp{
+			regexp.MustCompile(`(?i)definitions?|interpretation|terms`),
 		}
 	}
 
-	if article4 == nil || article4.Text == "" {
-		return definitions
+	allArticles := doc.AllArticles()
+	matchedArticles := make([]*Article, 0)
+	matchedArticleNumbers := make(map[int]bool)
+
+	// Match by section number from bridge
+	for _, article := range allArticles {
+		for _, candidateNumber := range candidateArticleNumbers {
+			if article.Number == candidateNumber && article.Text != "" {
+				if !matchedArticleNumbers[article.Number] {
+					matchedArticles = append(matchedArticles, article)
+					matchedArticleNumbers[article.Number] = true
+				}
+				break
+			}
+		}
 	}
 
-	// Parse definitions from article text
-	lines := strings.Split(article4.Text, "\n")
-	for _, line := range lines {
-		if m := p.definitionPattern.FindStringSubmatch(line); m != nil {
-			num, _ := strconv.Atoi(m[1])
-			definitions = append(definitions, &Definition{
-				Number: num,
-				Term:   strings.TrimSpace(m[2]),
-			})
+	// Match by title pattern
+	for _, article := range allArticles {
+		if matchedArticleNumbers[article.Number] {
+			continue
+		}
+		for _, titleRegexp := range candidateTitleRegexps {
+			if titleRegexp.MatchString(article.Title) && article.Text != "" {
+				matchedArticles = append(matchedArticles, article)
+				matchedArticleNumbers[article.Number] = true
+				break
+			}
+		}
+	}
+
+	// Strategy 3: Definition density detection
+	if definitionPattern != nil {
+		const definitionDensityThreshold = 3
+		for _, article := range allArticles {
+			if matchedArticleNumbers[article.Number] || article.Text == "" {
+				continue
+			}
+			lines := strings.Split(article.Text, "\n")
+			definitionMatchCount := 0
+			for _, line := range lines {
+				if definitionPattern.MatchString(line) {
+					definitionMatchCount++
+				}
+			}
+			if definitionMatchCount >= definitionDensityThreshold {
+				matchedArticles = append(matchedArticles, article)
+				matchedArticleNumbers[article.Number] = true
+			}
+		}
+	}
+
+	return matchedArticles
+}
+
+// extractDefinitions extracts defined terms from EU-style documents.
+// Uses auto-detection to find definition articles by title, bridge config,
+// or definition pattern density rather than hardcoded article numbers.
+func (p *Parser) extractDefinitions(doc *Document) []*Definition {
+	definitions := make([]*Definition, 0)
+
+	definitionArticles := p.findDefinitionArticles(doc, p.definitionPattern)
+
+	for _, defArticle := range definitionArticles {
+		lines := strings.Split(defArticle.Text, "\n")
+		for _, line := range lines {
+			if m := p.definitionPattern.FindStringSubmatch(line); m != nil {
+				num, _ := strconv.Atoi(m[1])
+				definitions = append(definitions, &Definition{
+					Number: num,
+					Term:   strings.TrimSpace(m[2]),
+				})
+			}
 		}
 	}
 
 	return definitions
 }
 
-// extractUSDefinitions extracts defined terms from US-style documents (e.g., CCPA Section 1798.110).
+// extractUSDefinitions extracts defined terms from US-style documents.
+// Uses auto-detection to find definition articles by title, bridge config,
+// or definition pattern density rather than hardcoded article numbers.
 func (p *Parser) extractUSDefinitions(doc *Document) []*Definition {
 	definitions := make([]*Definition, 0)
 
-	// Determine definition locations from pattern bridge or hardcoded defaults
-	defArticleNumbers := []int{110, 575, 1303, 515, 1, 101} // CCPA: 110, VCDPA: 575, CPA: 1303, CTDPA: 515, TDPSA/ICDPA: 1, UCPA: 101
-	if p.patternBridge != nil {
-		bridgeLocations := p.patternBridge.DefinitionLocations()
-		if len(bridgeLocations) > 0 {
-			defArticleNumbers = make([]int, 0, len(bridgeLocations))
-			for _, loc := range bridgeLocations {
-				if loc.SectionNumber > 0 {
-					defArticleNumbers = append(defArticleNumbers, loc.SectionNumber)
-				}
-			}
-		}
-	}
+	definitionArticles := p.findDefinitionArticles(doc, p.usDefinitionPattern)
 
-	var defArticle *Article
-	for _, chapter := range doc.Chapters {
-		for _, article := range chapter.Articles {
-			// Check for definitions section by number or title
-			for _, defNum := range defArticleNumbers {
-				if article.Number == defNum {
-					defArticle = article
-					break
-				}
-			}
-			if defArticle != nil {
-				break
-			}
-			if strings.Contains(strings.ToLower(article.Title), "definition") {
-				defArticle = article
-				break
-			}
-		}
-		if defArticle != nil {
-			break
-		}
-	}
-
-	if defArticle == nil || defArticle.Text == "" {
-		return definitions
-	}
-
-	// Parse US-style definitions: (a) 'term' means ...
-	lines := strings.Split(defArticle.Text, "\n")
 	defNum := 0
-	for _, line := range lines {
-		// Match pattern: (a) 'term' means or (a) "term" means
-		if m := p.usDefinitionPattern.FindStringSubmatch(line); m != nil {
-			defNum++
-			definitions = append(definitions, &Definition{
-				Number: defNum,
-				Term:   strings.TrimSpace(m[2]),
-			})
+	for _, defArticle := range definitionArticles {
+		lines := strings.Split(defArticle.Text, "\n")
+		for _, line := range lines {
+			if m := p.usDefinitionPattern.FindStringSubmatch(line); m != nil {
+				defNum++
+				definitions = append(definitions, &Definition{
+					Number: defNum,
+					Term:   strings.TrimSpace(m[2]),
+				})
+			}
 		}
 	}
 
