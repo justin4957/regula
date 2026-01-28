@@ -160,8 +160,8 @@ func NewParser() *Parser {
 
 // NewParserWithRegistry creates a new Parser that uses the pattern registry
 // for format detection and structure extraction. The registry patterns are used
-// to drive EU-format parsing when a matching pattern is found. Falls back to
-// hardcoded patterns when no registry match is found.
+// to drive both EU and US format parsing when a matching pattern is found.
+// Falls back to hardcoded patterns when no registry match is found.
 func NewParserWithRegistry(registry pattern.Registry) *Parser {
 	parser := NewParser()
 	parser.patternRegistry = registry
@@ -196,6 +196,41 @@ func (p *Parser) applyPatternBridge(bridge *pattern.PatternBridge) {
 	// Override recital pattern from pattern library
 	if recitalPattern := bridge.RecitalPattern(); recitalPattern != nil {
 		p.recitalPattern = recitalPattern
+	}
+}
+
+// applyUSPatternBridge configures the parser to use compiled patterns from the
+// pattern bridge for US document parsing. This replaces the hardcoded US regex
+// patterns with the ones loaded from the YAML pattern library.
+func (p *Parser) applyUSPatternBridge(bridge *pattern.PatternBridge) {
+	if bridge == nil {
+		return
+	}
+	p.patternBridge = bridge
+
+	// Override US hierarchy patterns from the pattern library
+	if chapterPattern := bridge.HierarchyPattern("chapter"); chapterPattern != nil {
+		p.usChapterPattern = chapterPattern
+	}
+	if articlePattern := bridge.HierarchyPattern("article"); articlePattern != nil {
+		p.usArticlePattern = articlePattern
+	}
+	if sectionPattern := bridge.HierarchyPattern("section"); sectionPattern != nil {
+		// The section pattern varies by jurisdiction:
+		// California: Section 1798.100 (two capture groups: prefix.number)
+		// Virginia: Section 59.1-575 (two capture groups: prefix-number)
+		jurisdiction := bridge.Jurisdiction()
+		switch jurisdiction {
+		case "US-VA":
+			p.vaSectionPattern = sectionPattern
+		default:
+			p.usSectionNumPattern = sectionPattern
+		}
+	}
+
+	// Override US definition pattern from pattern library
+	if defPattern := bridge.DefinitionPattern(); defPattern != nil {
+		p.usDefinitionPattern = defPattern
 	}
 }
 
@@ -250,12 +285,16 @@ func (p *Parser) detectFormat(lines []string) DocumentFormat {
 		content := strings.Join(lines, "\n")
 		bridge := pattern.DetectAndBridge(p.patternRegistry, content, 0.3)
 		if bridge != nil {
-			p.applyPatternBridge(bridge)
 			// Map the detected format to our internal format type
 			switch bridge.Jurisdiction() {
 			case "EU":
+				p.applyPatternBridge(bridge)
 				return FormatEU
-			case "US", "US-CA", "US-VA":
+			case "US-CA", "US-VA":
+				p.applyUSPatternBridge(bridge)
+				return FormatUS
+			case "US", "US-Federal":
+				p.applyUSPatternBridge(bridge)
 				return FormatUS
 			}
 		}
@@ -803,17 +842,34 @@ func (p *Parser) extractDefinitions(doc *Document) []*Definition {
 func (p *Parser) extractUSDefinitions(doc *Document) []*Definition {
 	definitions := make([]*Definition, 0)
 
-	// In CCPA, definitions are typically in Section 1798.110 (mapped to Article 110)
-	// In VCDPA, definitions are in Section 59.1-575 (mapped to Article 575)
-	// or a section titled "Definitions"
+	// Determine definition locations from pattern bridge or hardcoded defaults
+	defArticleNumbers := []int{110, 575} // CCPA: 110, VCDPA: 575
+	if p.patternBridge != nil {
+		bridgeLocations := p.patternBridge.DefinitionLocations()
+		if len(bridgeLocations) > 0 {
+			defArticleNumbers = make([]int, 0, len(bridgeLocations))
+			for _, loc := range bridgeLocations {
+				if loc.SectionNumber > 0 {
+					defArticleNumbers = append(defArticleNumbers, loc.SectionNumber)
+				}
+			}
+		}
+	}
+
 	var defArticle *Article
 	for _, chapter := range doc.Chapters {
 		for _, article := range chapter.Articles {
 			// Check for definitions section by number or title
-			// CCPA: Article 110 (from Section 1798.110)
-			// VCDPA: Article 575 (from Section 59.1-575)
-			if article.Number == 110 || article.Number == 575 ||
-				strings.Contains(strings.ToLower(article.Title), "definition") {
+			for _, defNum := range defArticleNumbers {
+				if article.Number == defNum {
+					defArticle = article
+					break
+				}
+			}
+			if defArticle != nil {
+				break
+			}
+			if strings.Contains(strings.ToLower(article.Title), "definition") {
 				defArticle = article
 				break
 			}
