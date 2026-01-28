@@ -11,6 +11,8 @@ This document describes the RDF ontology used by Regula to represent regulatory 
 | `rdfs:` | `http://www.w3.org/2000/01/rdf-schema#` | RDF Schema |
 | `xsd:` | `http://www.w3.org/2001/XMLSchema#` | XML Schema datatypes |
 | `dc:` | `http://purl.org/dc/terms/` | Dublin Core metadata |
+| `eli:` | `http://data.europa.eu/eli/ontology#` | European Legislation Identifier |
+| `frbr:` | `http://purl.org/vocab/frbr/core#` | Functional Requirements for Bibliographic Records |
 
 ## Classes
 
@@ -339,6 +341,84 @@ WHERE {
 ORDER BY ?chapter ?article
 ```
 
+## ELI Vocabulary Mapping
+
+The [European Legislation Identifier (ELI)](http://data.europa.eu/eli/ontology) vocabulary is a standard for identifying and describing legal resources. Regula supports optional ELI enrichment that adds ELI triples **alongside** existing `reg:` triples, enabling interoperability with EUR-Lex and national legal information systems.
+
+### When ELI Applies
+
+ELI enrichment is only applied to **EU document types**: Regulation, Directive, and Decision. Non-EU documents (statutes, acts, generic) are not enriched with ELI vocabulary.
+
+Enable ELI enrichment with the `--eli` flag:
+
+```bash
+regula export --source gdpr.txt --format turtle --eli
+```
+
+### ELI Class Mapping
+
+| Regula Class | ELI Class | Description |
+|---|---|---|
+| `reg:Regulation` | `eli:LegalResource` | Top-level EU regulation |
+| `reg:Directive` | `eli:LegalResource` | EU directive |
+| `reg:Decision` | `eli:LegalResource` | EU decision |
+| `reg:Chapter` | `eli:LegalResourceSubdivision` | Chapter within a regulation |
+| `reg:Section` | `eli:LegalResourceSubdivision` | Section within a chapter |
+| `reg:Article` | `eli:LegalResourceSubdivision` | Article (main provision unit) |
+| `reg:Paragraph` | `eli:LegalResourceSubdivision` | Numbered paragraph |
+| `reg:Point` | `eli:LegalResourceSubdivision` | Lettered point |
+| `reg:Preamble` | `eli:LegalResourceSubdivision` | Preamble section |
+| `reg:Recital` | `eli:LegalResourceSubdivision` | Preamble recital |
+
+### ELI Property Mapping
+
+| Regula Property | ELI Property | Description |
+|---|---|---|
+| `reg:title` | `eli:title` | Title of the resource |
+| `reg:number` | `eli:id_local` | Local identifier (article number) |
+| `reg:identifier` | `eli:id_local` | Formal identifier |
+| `reg:partOf` | `eli:is_part_of` | Hierarchical containment (child → parent) |
+| `reg:contains` | `eli:has_part` | Hierarchical containment (parent → child) |
+| `reg:date` | `eli:date_document` | Document date |
+| `reg:version` | `eli:version` | Version identifier |
+| `reg:references` | `eli:cites` | Citation relationship |
+| `reg:referencedBy` | `eli:cited_by` | Incoming citation (inverse) |
+
+**Note**: `reg:text` is intentionally **not** mapped to `eli:description`. ELI's `description` property represents a summary, while `reg:text` contains the full provision text.
+
+### Example: Dual-Typed Turtle Output
+
+With ELI enrichment enabled, resources carry both `reg:` and `eli:` types:
+
+```turtle
+@prefix reg: <https://regula.dev/ontology#> .
+@prefix eli: <http://data.europa.eu/eli/ontology#> .
+@prefix gdpr: <https://regula.dev/regulations/GDPR#> .
+
+gdpr:Art17 a reg:Article ,
+             eli:LegalResourceSubdivision ;
+    reg:title "Right to erasure ('right to be forgotten')" ;
+    eli:title "Right to erasure ('right to be forgotten')" ;
+    reg:number "17" ;
+    eli:id_local "17" ;
+    reg:partOf gdpr:ChapterIII ;
+    eli:is_part_of gdpr:ChapterIII .
+```
+
+### ELI Version Compatibility
+
+The ELI properties used are stable across both ELI 1.x and 2.x schemas. The `eli:version` property is part of ELI 2.x.
+
+### FRBR Scope
+
+The ELI ontology is built on the FRBR (Functional Requirements for Bibliographic Records) model with three levels:
+
+- **Work** level: the abstract legislative intent → mapped via `eli:LegalResource`
+- **Expression** level: a particular version or language → `eli:LegalExpression` (available but not used yet)
+- **Manifestation** level: a specific publication format → not applicable
+
+Regula currently maps at the **Work level** only. Expression and Manifestation levels are available for future multi-version or multi-language support.
+
 ## Schema Validation
 
 The schema is designed to satisfy these requirements:
@@ -366,3 +446,8 @@ The schema is designed to satisfy these requirements:
    - Clear namespace separation
    - Consistent URI patterns
    - Compatible with SPARQL queries
+
+6. **Interoperability**: ELI vocabulary integration:
+   - Optional ELI enrichment for EU documents
+   - Compatible with EUR-Lex ELI usage
+   - Additive mapping preserves `reg:` triples

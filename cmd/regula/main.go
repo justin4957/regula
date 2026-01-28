@@ -20,10 +20,11 @@ var version = "0.1.0"
 
 // Global state for the loaded graph
 var (
-	tripleStore *store.TripleStore
-	executor    *query.Executor
-	graphLoaded bool
-	graphPath   string
+	tripleStore      *store.TripleStore
+	executor         *query.Executor
+	graphLoaded      bool
+	graphPath        string
+	loadedDocType    extract.DocumentType
 )
 
 func main() {
@@ -540,6 +541,7 @@ func loadAndIngest(source string) error {
 	executor = query.NewExecutor(tripleStore)
 	graphLoaded = true
 	graphPath = source
+	loadedDocType = doc.Type
 	return nil
 }
 
@@ -1001,16 +1003,21 @@ Supported formats:
   - turtle:  W3C Turtle (TTL) RDF serialization
   - summary: Relationship statistics and summary
 
+Use --eli to add ELI (European Legislation Identifier) vocabulary triples
+alongside reg: triples for EU documents (regulation, directive, decision).
+
 Example:
   regula export --source gdpr.txt --format json --output graph.json
   regula export --source gdpr.txt --format dot --output graph.dot
   regula export --source gdpr.txt --format turtle --output graph.ttl
+  regula export --source gdpr.txt --format turtle --eli --output graph-eli.ttl
   regula export --source gdpr.txt --format summary`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			source, _ := cmd.Flags().GetString("source")
 			formatStr, _ := cmd.Flags().GetString("format")
 			output, _ := cmd.Flags().GetString("output")
 			relationsOnly, _ := cmd.Flags().GetBool("relations-only")
+			enableELI, _ := cmd.Flags().GetBool("eli")
 
 			if source == "" {
 				return fmt.Errorf("--source flag is required")
@@ -1020,6 +1027,17 @@ Example:
 			if !graphLoaded || graphPath != source {
 				if err := loadAndIngest(source); err != nil {
 					return err
+				}
+			}
+
+			// Optionally enrich with ELI vocabulary
+			if enableELI {
+				eliStats := store.EnrichWithELI(tripleStore, loadedDocType)
+				if eliStats.TotalTriples > 0 {
+					fmt.Printf("ELI enrichment: %d triples added (%d class, %d property)\n",
+						eliStats.TotalTriples, eliStats.ClassTriples, eliStats.PropertyTriples)
+				} else if !store.IsEUDocumentType(loadedDocType) {
+					fmt.Println("ELI enrichment skipped: document is not an EU legislative type")
 				}
 			}
 
@@ -1116,6 +1134,7 @@ Example:
 	cmd.Flags().StringP("format", "f", "summary", "Output format (json, dot, turtle, summary)")
 	cmd.Flags().StringP("output", "o", "", "Output file path")
 	cmd.Flags().Bool("relations-only", true, "Export only relationship edges (default: true)")
+	cmd.Flags().Bool("eli", false, "Enrich with ELI (European Legislation Identifier) vocabulary for EU documents")
 
 	return cmd
 }
