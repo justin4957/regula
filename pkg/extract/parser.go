@@ -116,6 +116,12 @@ type Parser struct {
 	// Virginia Code style patterns (Section 59.1-575)
 	vaSectionPattern *regexp.Regexp
 
+	// Colorado/Utah hyphenated style patterns (Section 6-1-1301, Section 13-61-101)
+	coHyphenatedSectionPattern *regexp.Regexp
+
+	// Iowa alphanumeric style patterns (Section 715D.1)
+	ioAlphanumericSectionPattern *regexp.Regexp
+
 	// UK-style patterns (Acts and Statutory Instruments)
 	ukPartPattern       *regexp.Regexp
 	ukSectionPattern    *regexp.Regexp
@@ -153,6 +159,12 @@ func NewParser() *Parser {
 
 		// Virginia Code style: Section 59.1-575 or § 59.1-575
 		vaSectionPattern: regexp.MustCompile(`^(?:Section|§)\s*(\d+\.\d+)-(\d+)\.?$`),
+
+		// Colorado/Utah hyphenated: Section 6-1-1301 or Section 13-61-101
+		coHyphenatedSectionPattern: regexp.MustCompile(`^(?:Section|§)\s*(\d+)-(\d+)-(\d+)\.?$`),
+
+		// Iowa alphanumeric: Section 715D.1
+		ioAlphanumericSectionPattern: regexp.MustCompile(`^(?:Section|§)\s*(\d+[A-Z])\.(\d+)$`),
 
 		// UK-style patterns (Acts and Statutory Instruments)
 		ukPartPattern:       regexp.MustCompile(`^PART\s+(\d+)\s*$`),
@@ -225,6 +237,11 @@ func (p *Parser) applyUSPatternBridge(bridge *pattern.PatternBridge) {
 	if chapterPattern := bridge.HierarchyPattern("chapter"); chapterPattern != nil {
 		p.usChapterPattern = chapterPattern
 	}
+	// Some states (Colorado, Utah) use "part" instead of "chapter" as the
+	// top-level structural division. Map it to usChapterPattern when present.
+	if partPattern := bridge.HierarchyPattern("part"); partPattern != nil {
+		p.usChapterPattern = partPattern
+	}
 	if articlePattern := bridge.HierarchyPattern("article"); articlePattern != nil {
 		p.usArticlePattern = articlePattern
 	}
@@ -234,9 +251,17 @@ func (p *Parser) applyUSPatternBridge(bridge *pattern.PatternBridge) {
 		// Virginia: Section 59.1-575 (two capture groups: prefix-number)
 		jurisdiction := bridge.Jurisdiction()
 		switch jurisdiction {
-		case "US-VA":
+		case "US-VA", "US-CT":
+			// Two-segment hyphenated: Section 59.1-575, Section 42-515
 			p.vaSectionPattern = sectionPattern
+		case "US-CO", "US-UT":
+			// Three-segment hyphenated: Section 6-1-1301, Section 13-61-101
+			p.coHyphenatedSectionPattern = sectionPattern
+		case "US-IA":
+			// Alphanumeric dotted: Section 715D.1
+			p.ioAlphanumericSectionPattern = sectionPattern
 		default:
+			// California/Texas dotted: Section 1798.100, Section 541.001
 			p.usSectionNumPattern = sectionPattern
 		}
 	}
@@ -331,7 +356,7 @@ func (p *Parser) detectFormat(lines []string) DocumentFormat {
 			case "EU":
 				p.applyPatternBridge(bridge)
 				return FormatEU
-			case "US-CA", "US-VA":
+			case "US-CA", "US-VA", "US-CO", "US-CT", "US-UT", "US-IA", "US-TX":
 				p.applyUSPatternBridge(bridge)
 				return FormatUS
 			case "US", "US-Federal":
@@ -463,6 +488,62 @@ func (p *Parser) extractIdentifier(lines []string) string {
 	case FormatUK:
 		return p.extractUKIdentifier(lines)
 	case FormatUS:
+		// Check pattern bridge jurisdiction for targeted extraction
+		if p.patternBridge != nil {
+			switch p.patternBridge.Jurisdiction() {
+			case "US-CO":
+				for i := 0; i < min(20, len(lines)); i++ {
+					coSectionPattern := regexp.MustCompile(`(?:Section|§)\s*(\d+-\d+-\d+)`)
+					if m := coSectionPattern.FindStringSubmatch(lines[i]); m != nil {
+						return fmt.Sprintf("C.R.S. § %s", m[1])
+					}
+					if strings.Contains(lines[i], "C.R.S.") {
+						return "C.R.S. § 6-1-1301 et seq."
+					}
+				}
+			case "US-CT":
+				for i := 0; i < min(20, len(lines)); i++ {
+					ctSectionPattern := regexp.MustCompile(`(?i)(?:Section|Sec\.|§)\s*(\d+-\d+)`)
+					if m := ctSectionPattern.FindStringSubmatch(lines[i]); m != nil {
+						return fmt.Sprintf("Conn. Gen. Stat. § %s", m[1])
+					}
+					if strings.Contains(lines[i], "Conn. Gen. Stat.") || strings.Contains(lines[i], "CGS") {
+						return "Conn. Gen. Stat. § 42-515 et seq."
+					}
+				}
+			case "US-TX":
+				for i := 0; i < min(20, len(lines)); i++ {
+					txSectionPattern := regexp.MustCompile(`(?i)(?:Section|Sec\.|§)\s*(\d+\.\d+)`)
+					if m := txSectionPattern.FindStringSubmatch(lines[i]); m != nil {
+						return fmt.Sprintf("Tex. Bus. & Com. Code § %s", m[1])
+					}
+					if strings.Contains(lines[i], "Tex. Bus.") || strings.Contains(lines[i], "Texas Business") {
+						return "Tex. Bus. & Com. Code § 541.001 et seq."
+					}
+				}
+			case "US-UT":
+				for i := 0; i < min(20, len(lines)); i++ {
+					utSectionPattern := regexp.MustCompile(`(?:Section|§)\s*(\d+-\d+-\d+)`)
+					if m := utSectionPattern.FindStringSubmatch(lines[i]); m != nil {
+						return fmt.Sprintf("U.C.A. § %s", m[1])
+					}
+					if strings.Contains(lines[i], "U.C.A.") || strings.Contains(lines[i], "Utah Code") {
+						return "U.C.A. § 13-61-101 et seq."
+					}
+				}
+			case "US-IA":
+				for i := 0; i < min(20, len(lines)); i++ {
+					iaSectionPattern := regexp.MustCompile(`(?:Section|§)\s*(\d+[A-Z]\.\d+)`)
+					if m := iaSectionPattern.FindStringSubmatch(lines[i]); m != nil {
+						return fmt.Sprintf("Iowa Code § %s", m[1])
+					}
+					if strings.Contains(lines[i], "Iowa Code") {
+						return "Iowa Code § 715D.1 et seq."
+					}
+				}
+			}
+		}
+
 		// Look for Virginia Code style identifiers first
 		for i := 0; i < min(20, len(lines)); i++ {
 			// Virginia Code: Title 59.1 Chapter 53
@@ -613,7 +694,71 @@ func (p *Parser) parseUSDocument(doc *Document, lines []string) {
 			continue
 		}
 
-		// Try California style: Section 1798.100
+		// Try Colorado/Utah three-segment hyphenated: Section 6-1-1301 or Section 13-61-101
+		if m := p.coHyphenatedSectionPattern.FindStringSubmatch(trimmedLine); m != nil {
+			// Save previous section
+			if currentSection != nil {
+				currentSection.Text = strings.TrimSpace(sectionText.String())
+				p.addArticle(currentChapter, nil, currentSection)
+			}
+
+			// Use third segment as section number: 6-1-1301 -> 1301
+			subNum, _ := strconv.Atoi(m[3])
+
+			currentSection = &Article{
+				Number: subNum,
+				Title:  "", // Will be set from next line
+			}
+			pendingSectionTitle = true
+			pendingSection = currentSection
+			sectionText.Reset()
+
+			// Ensure there's at least a default chapter container
+			if currentChapter == nil {
+				currentChapter = &Chapter{
+					Number:   "1",
+					Title:    "",
+					Sections: make([]*Section, 0),
+					Articles: make([]*Article, 0),
+				}
+				doc.Chapters = append(doc.Chapters, currentChapter)
+			}
+			continue
+		}
+
+		// Try Iowa alphanumeric dotted: Section 715D.1
+		if m := p.ioAlphanumericSectionPattern.FindStringSubmatch(trimmedLine); m != nil {
+			// Save previous section
+			if currentSection != nil {
+				currentSection.Text = strings.TrimSpace(sectionText.String())
+				p.addArticle(currentChapter, nil, currentSection)
+			}
+
+			// Use numeric suffix as section number: 715D.1 -> 1
+			subNum, _ := strconv.Atoi(m[2])
+
+			currentSection = &Article{
+				Number: subNum,
+				Title:  "", // Will be set from next line
+			}
+			pendingSectionTitle = true
+			pendingSection = currentSection
+			sectionText.Reset()
+
+			// Ensure there's at least a default chapter container
+			if currentChapter == nil {
+				currentChapter = &Chapter{
+					Number:   "1",
+					Title:    "",
+					Sections: make([]*Section, 0),
+					Articles: make([]*Article, 0),
+				}
+				doc.Chapters = append(doc.Chapters, currentChapter)
+			}
+			continue
+		}
+
+		// Try California/Texas style: Section 1798.100 or Section 541.001
 		if m := p.usSectionNumPattern.FindStringSubmatch(trimmedLine); m != nil {
 			// Save previous section
 			if currentSection != nil {
@@ -1197,7 +1342,7 @@ func (p *Parser) extractUSDefinitions(doc *Document) []*Definition {
 	definitions := make([]*Definition, 0)
 
 	// Determine definition locations from pattern bridge or hardcoded defaults
-	defArticleNumbers := []int{110, 575} // CCPA: 110, VCDPA: 575
+	defArticleNumbers := []int{110, 575, 1303, 515, 1, 101} // CCPA: 110, VCDPA: 575, CPA: 1303, CTDPA: 515, TDPSA/ICDPA: 1, UCPA: 101
 	if p.patternBridge != nil {
 		bridgeLocations := p.patternBridge.DefinitionLocations()
 		if len(bridgeLocations) > 0 {

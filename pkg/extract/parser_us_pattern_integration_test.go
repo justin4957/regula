@@ -376,6 +376,46 @@ Section 59.1-575`,
 			expectedFormat: "us-virginia",
 		},
 		{
+			name: "CPA content should match us-colorado",
+			content: `COLORADO PRIVACY ACT
+Colorado Revised Statutes Title 6 Article 1 Part 13
+C.R.S. 6-1-1301 et seq.
+Section 6-1-1301`,
+			expectedFormat: "us-colorado",
+		},
+		{
+			name: "CTDPA content should match us-connecticut",
+			content: `CONNECTICUT DATA PRIVACY ACT
+Connecticut General Statutes Title 42 Chapter 815e
+Conn. Gen. Stat. Section 42-515 et seq.
+Section 42-515`,
+			expectedFormat: "us-connecticut",
+		},
+		{
+			name: "TDPSA content should match us-texas",
+			content: `TEXAS DATA PRIVACY AND SECURITY ACT
+Texas Business and Commerce Code Title 11 Subtitle C Chapter 541
+Tex. Bus. & Com. Code Section 541.001 et seq.
+Section 541.001`,
+			expectedFormat: "us-texas",
+		},
+		{
+			name: "UCPA content should match us-utah",
+			content: `UTAH CONSUMER PRIVACY ACT
+Utah Code Title 13 Chapter 61
+U.C.A. Section 13-61-101 et seq.
+Section 13-61-101`,
+			expectedFormat: "us-utah",
+		},
+		{
+			name: "ICDPA content should match us-iowa",
+			content: `IOWA CONSUMER DATA PROTECTION ACT
+Iowa Code Chapter 715D
+Iowa Code Section 715D.1 et seq.
+Section 715D.1`,
+			expectedFormat: "us-iowa",
+		},
+		{
 			name: "EU Regulation should not match US patterns",
 			content: `Regulation (EU) 2016/679 of the European Parliament and of the Council
 HAVE ADOPTED THIS REGULATION:

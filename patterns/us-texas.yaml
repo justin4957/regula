@@ -1,0 +1,163 @@
+# US Texas Code Format Pattern
+# Detects and parses Texas state legislation (including TDPSA)
+#
+# This pattern file defines Texas-specific patterns for:
+#   - pkg/extract/parser.go (format detection, section parsing, definition extraction)
+#   - pkg/extract/reference.go (internal and external cross-references)
+
+name: "Texas Business and Commerce Code"
+format_id: "us-texas"
+version: "2.0.0"
+jurisdiction: "US-TX"
+
+detection:
+  required_indicators:
+    - pattern: '(?i)\bTEXAS\b'
+      weight: 25
+    - pattern: '(?i)(?:Section|Sec\.|§)\s*541\.\d+'
+      weight: 30
+
+  optional_indicators:
+    - pattern: '(?i)\bTexas\s+Data\s+Privacy\s+and\s+Security\s+Act\b'
+      weight: 15
+    - pattern: '\bTDPSA\b'
+      weight: 12
+    - pattern: '(?i)\bTexas\s+Business\s+and\s+Commerce\s+Code\b'
+      weight: 15
+    - pattern: '(?i)\bTex\.?\s*Bus\.?\s*(?:&|and)\s*Com\.?\s*Code\b'
+      weight: 12
+    - pattern: '(?i)\bTitle\s+11\b'
+      weight: 8
+    - pattern: '(?i)\bSubtitle\s+C\b'
+      weight: 8
+    - pattern: '(?i)\bChapter\s+541\b'
+      weight: 10
+    - pattern: '(?im)^CHAPTER\s+\d+'
+      weight: 5
+    - pattern: '(?im)^SUBCHAPTER\s+[A-Z]'
+      weight: 8
+    - pattern: '\bsubsection\s+\([a-z]\)'
+      weight: 5
+
+  negative_indicators:
+    - pattern: '\bEuropean\s+(Union|Parliament)\b'
+      weight: -20
+    - pattern: '(?i)\bRegulation\s+\(E[CU]\)'
+      weight: -25
+    - pattern: '(?i)\bDirective\s+\d{4}/\d+/(EC|EU)\b'
+      weight: -20
+    - pattern: '(?i)\bCALIFORNIA\b'
+      weight: -10
+    - pattern: '(?i)\bVIRGINIA\b'
+      weight: -10
+    - pattern: '(?i)\bCOLORADO\b'
+      weight: -10
+    - pattern: '(?i)\bCONNECTICUT\b'
+      weight: -10
+    - pattern: '(?i)\bUTAH\b'
+      weight: -10
+    - pattern: '(?i)\bIOWA\b'
+      weight: -10
+    - pattern: '(?i)\bSection\s+1798\.'
+      weight: -15
+    - pattern: '(?i)\bSection\s+59\.1-'
+      weight: -15
+    - pattern: '(?i)\bSection\s+6-1-1[23]\d{2}'
+      weight: -10
+    - pattern: '(?i)\bSection\s+42-5\d{2}'
+      weight: -10
+    - pattern: '(?i)\bSection\s+13-61-'
+      weight: -10
+
+structure:
+  hierarchy:
+    - type: "chapter"
+      pattern: '^CHAPTER\s+(\d+)$'
+      number_group: 1
+      title_follows: true
+
+    - type: "subchapter"
+      pattern: '^SUBCHAPTER\s+([A-Z])$'
+      number_group: 1
+      title_follows: true
+
+    # Texas Business and Commerce Code: Section 541.001
+    - type: "section"
+      pattern: '^(?:Section|Sec\.|§)\s*(\d+)\.(\d+)$'
+      number_group: 2
+      title_follows: true
+
+    - type: "subdivision"
+      pattern: '^\(([a-z])\)\s+'
+      number_group: 1
+
+    - type: "paragraph"
+      pattern: '^\((\d+)\)\s+'
+      number_group: 1
+
+    - type: "subparagraph"
+      pattern: '^\(([A-Z])\)\s+'
+      number_group: 1
+
+definitions:
+  location:
+    - section_title: '(?i)definitions?'
+    - section_number: 1
+
+  # Texas style: (1) "term" means or (1) 'term' means
+  pattern: "^\\((\\d+)\\)\\s+[\\x{2018}\\x{2019}''\"]([^\\x{2018}\\x{2019}''\"]+)[\\x{2018}\\x{2019}''\"]\\s+means"
+
+references:
+  internal:
+    # Section with subsection: Section 541.001(a)(1)
+    - pattern: '(?:Section|Sec\.|§)\s*(\d+)\.(\d+)\(([a-z])\)(?:\((\d+)\))?'
+      target: "section"
+      groups:
+        chapter: 1
+        section: 2
+        subdivision: 3
+        paragraph: 4
+
+    # Simple section reference: Section 541.001
+    - pattern: '(?:Section|Sec\.|§)\s*(\d+)\.(\d+)'
+      target: "section"
+      groups:
+        chapter: 1
+        section: 2
+
+    # Subsection reference: Subsection (a)
+    - pattern: '[Ss]ubsection\s+\(([a-z])\)'
+      target: "subdivision"
+      groups:
+        letter: 1
+
+    # Subchapter reference: Subchapter A
+    - pattern: 'Subchapter\s+([A-Z])'
+      target: "subchapter"
+      groups:
+        letter: 1
+
+  external:
+    # US Code: 15 U.S.C. Section 6801
+    - pattern: '(\d+)\s+U\.?S\.?C\.?\s+(?:Section|Sec\.?|§)\s*(\d+[a-z]?)'
+      type: "usc"
+      uri_template: "https://www.law.cornell.edu/uscode/text/{title}/{section}"
+      groups:
+        title: 1
+        section: 2
+
+    # CFR: 16 C.F.R. Part 314
+    - pattern: '(\d+)\s+C\.?F\.?R\.?\s+(?:Part[s]?\s+)?(\d+)'
+      type: "cfr"
+      uri_template: ""
+      groups:
+        title: 1
+        part: 2
+
+    # Public Law: Public Law 104-191
+    - pattern: '(?:Public\s+Law|P\.L\.)\s+(\d+)-(\d+)'
+      type: "public_law"
+      uri_template: "https://www.congress.gov/public-laws/{congress}/pl{number}"
+      groups:
+        congress: 1
+        number: 2
