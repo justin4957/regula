@@ -238,6 +238,10 @@ func isRelationshipPredicate(predicate string) bool {
 		PropResolvedTarget,
 		PropAlternativeTarget,
 		PropExternalRef,
+		ELIPropIsPartOf,
+		ELIPropHasPart,
+		ELIPropCites,
+		ELIPropCitedBy,
 	}
 
 	for _, rp := range relationshipPredicates {

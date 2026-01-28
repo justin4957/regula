@@ -36,6 +36,60 @@ const (
 	PrefixFRBR = "frbr:"
 )
 
+// ELI Classes - European Legislation Identifier types.
+const (
+	// ELIClassLegalResource represents a legislative resource at the Work level (FRBR).
+	ELIClassLegalResource = "eli:LegalResource"
+
+	// ELIClassLegalResourceSubdivision represents a subdivision of a legal resource.
+	ELIClassLegalResourceSubdivision = "eli:LegalResourceSubdivision"
+
+	// ELIClassLegalExpression represents a particular linguistic expression of a resource.
+	ELIClassLegalExpression = "eli:LegalExpression"
+)
+
+// ELI Properties - European Legislation Identifier predicates.
+const (
+	// ELIPropTitle is the title of a legal resource.
+	ELIPropTitle = "eli:title"
+
+	// ELIPropIDLocal is the local identifier within the resource.
+	ELIPropIDLocal = "eli:id_local"
+
+	// ELIPropIsPartOf indicates hierarchical containment (child -> parent).
+	ELIPropIsPartOf = "eli:is_part_of"
+
+	// ELIPropHasPart indicates hierarchical containment (parent -> child).
+	ELIPropHasPart = "eli:has_part"
+
+	// ELIPropDateDocument is the date of the document.
+	ELIPropDateDocument = "eli:date_document"
+
+	// ELIPropVersion is the version identifier.
+	ELIPropVersion = "eli:version"
+
+	// ELIPropDescription is a description of the resource.
+	ELIPropDescription = "eli:description"
+
+	// ELIPropCites indicates a citation relationship.
+	ELIPropCites = "eli:cites"
+
+	// ELIPropCitedBy indicates an incoming citation (inverse of cites).
+	ELIPropCitedBy = "eli:cited_by"
+
+	// ELIPropTypeDocument is the document type classification.
+	ELIPropTypeDocument = "eli:type_document"
+
+	// ELIPropLanguage is the language of the resource.
+	ELIPropLanguage = "eli:language"
+
+	// ELIPropIsAbout indicates the subject matter of the resource.
+	ELIPropIsAbout = "eli:is_about"
+
+	// ELIPropPassedBy indicates the institution that passed the document.
+	ELIPropPassedBy = "eli:passed_by"
+)
+
 // RDF Standard Predicates.
 const (
 	// RDFType indicates the class of a resource.

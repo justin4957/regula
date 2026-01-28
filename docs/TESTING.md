@@ -30,6 +30,18 @@ go test ./pkg/simulate/... -v -run TestGDPR
 go test ./pkg/extract/... -v -run TestIntegration
 ```
 
+### ELI Vocabulary Tests
+
+Test ELI (European Legislation Identifier) enrichment:
+
+```bash
+# Run all ELI mapper tests
+go test ./pkg/store/... -run "TestIsEU|TestEnrich" -v
+
+# Run GDPR ELI integration test
+go test ./pkg/store/... -run TestEnrichWithELI_GDPRIntegration -v
+```
+
 ### E2E Tests
 
 The E2E test script validates the complete MVP functionality:
