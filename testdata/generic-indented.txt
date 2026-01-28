@@ -1,0 +1,76 @@
+Municipal Zoning Ordinance
+
+RESIDENTIAL DISTRICTS
+
+    Single Family Residential
+        Lot size minimum: 5000 square feet
+        Maximum building height: 35 feet
+        Front setback: 25 feet
+        Side setback: 10 feet
+        Rear setback: 20 feet
+        Maximum lot coverage: 40 percent
+
+    Multi Family Residential
+        Lot size minimum: 10000 square feet
+        Maximum building height: 45 feet
+        Front setback: 20 feet
+        Side setback: 15 feet
+        Rear setback: 25 feet
+        Maximum density: 20 dwelling units per acre
+        Parking requirement: 1.5 spaces per dwelling unit
+
+    Planned Development Residential
+        Minimum project area: 5 acres
+        Maximum building height: 50 feet
+        Open space requirement: 30 percent of total area
+        Density bonus available for affordable housing units
+
+COMMERCIAL DISTRICTS
+
+    Neighborhood Commercial
+        Permitted uses: retail, office, restaurant, personal services
+        Maximum building height: 40 feet
+        Front setback: 10 feet
+        Parking requirement: 1 space per 250 square feet
+        Maximum floor area ratio: 1.5
+
+    General Commercial
+        Permitted uses: all neighborhood commercial plus entertainment
+        Maximum building height: 60 feet
+        Front setback: 5 feet
+        Parking requirement: 1 space per 300 square feet
+        Maximum floor area ratio: 3.0
+
+    Highway Commercial
+        Permitted uses: automobile services, large retail, hospitality
+        Maximum building height: 45 feet
+        Minimum lot frontage: 100 feet
+        Parking requirement: 1 space per 200 square feet
+
+INDUSTRIAL DISTRICTS
+
+    Light Industrial
+        Permitted uses: manufacturing, warehousing, research facilities
+        Maximum building height: 50 feet
+        Minimum lot size: 20000 square feet
+        Buffer requirement: 50 feet from residential districts
+
+    Heavy Industrial
+        Permitted uses: heavy manufacturing, processing, storage
+        Maximum building height: 75 feet
+        Minimum lot size: 40000 square feet
+        Buffer requirement: 200 feet from residential districts
+        Environmental impact assessment required
+
+SPECIAL PROVISIONS
+
+    Variances may be granted by the zoning board of appeals upon
+    demonstration of practical difficulty or unnecessary hardship.
+
+    Conditional use permits may be issued for uses not expressly
+    permitted in a given district when the proposed use is compatible
+    with the character of the surrounding area.
+
+    Non-conforming uses existing at the time of adoption of this
+    ordinance may continue subject to the restrictions outlined in
+    the non-conforming use provisions.

@@ -28,9 +28,10 @@ const (
 type DocumentFormat string
 
 const (
-	FormatEU      DocumentFormat = "eu" // EU-style: CHAPTER I, Article 1
-	FormatUS      DocumentFormat = "us" // US-style: CHAPTER 1, Section 1798.100
-	FormatUK      DocumentFormat = "uk" // UK-style: PART 1, numbered sections
+	FormatEU      DocumentFormat = "eu"      // EU-style: CHAPTER I, Article 1
+	FormatUS      DocumentFormat = "us"      // US-style: CHAPTER 1, Section 1798.100
+	FormatUK      DocumentFormat = "uk"      // UK-style: PART 1, numbered sections
+	FormatGeneric DocumentFormat = "generic" // Inferred from whitespace/numbering patterns
 	FormatUnknown DocumentFormat = "unknown"
 )
 
@@ -334,6 +335,8 @@ func (p *Parser) Parse(r io.Reader) (*Document, error) {
 		p.parseUSDocument(doc, lines)
 	case FormatUK:
 		p.parseUKDocument(doc, lines)
+	case FormatGeneric:
+		p.parseGenericDocument(doc, lines)
 	default:
 		// EU format (default)
 		p.parseEUDocument(doc, lines)
@@ -349,6 +352,15 @@ func (p *Parser) detectFormat(lines []string) DocumentFormat {
 	// Try pattern-registry-based detection first
 	if p.patternRegistry != nil {
 		content := strings.Join(lines, "\n")
+
+		// Check if any pattern matches above threshold. If not, use
+		// generic parsing (hierarchy inferred from whitespace/numbering).
+		detector := pattern.NewFormatDetector(p.patternRegistry)
+		matches := detector.DetectWithThreshold(content, 0.3)
+		if pattern.ShouldUseGenericParser(matches, 0.3) {
+			return FormatGeneric
+		}
+
 		bridge := pattern.DetectAndBridge(p.patternRegistry, content, 0.3)
 		if bridge != nil {
 			// Map the detected format to our internal format type
@@ -448,6 +460,14 @@ func (p *Parser) detectFormatLegacy(lines []string) DocumentFormat {
 		if matched, _ := regexp.MatchString(`S\.?I\.?\s+\d{4}/\d+`, line); matched {
 			ukIndicators += 3
 		}
+	}
+
+	// If all indicators are below a minimum threshold, this document
+	// doesn't match any known format — use generic inference instead.
+	minimumIndicatorThreshold := 2
+	maxIndicatorScore := max(euIndicators, usIndicators, ukIndicators)
+	if maxIndicatorScore < minimumIndicatorThreshold {
+		return FormatGeneric
 	}
 
 	if ukIndicators > euIndicators && ukIndicators > usIndicators {
@@ -1080,6 +1100,28 @@ func (p *Parser) extractUKDefinitions(doc *Document) []*Definition {
 	}
 
 	return definitions
+}
+
+// parseGenericDocument parses a document using the GenericParser for documents
+// that don't match any specific format (EU, US, UK). It infers hierarchy from
+// whitespace and numbering patterns, then converts the result into the standard
+// Document model.
+func (p *Parser) parseGenericDocument(doc *Document, lines []string) {
+	genericParser := pattern.NewGenericParser()
+	content := strings.Join(lines, "\n")
+
+	genericDocument, _ := genericParser.Parse(content)
+
+	// Convert GenericDocument into our Document model
+	convertedDocument := convertGenericDocument(genericDocument)
+
+	doc.Chapters = convertedDocument.Chapters
+	doc.Definitions = convertedDocument.Definitions
+
+	// Use the generic parser's title detection if it found a better title
+	if genericDocument.Title != "" {
+		doc.Title = genericDocument.Title
+	}
 }
 
 // preambleEndPattern returns the compiled preamble end pattern from the
