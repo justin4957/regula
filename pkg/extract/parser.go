@@ -1106,7 +1106,12 @@ func (p *Parser) parsePreamble(lines []string) *Preamble {
 			num, _ := strconv.Atoi(m[1])
 			currentRecital = &Recital{Number: num}
 			recitalText.Reset()
-			recitalText.WriteString(m[2])
+			if len(m) > 2 {
+				recitalText.WriteString(m[2])
+			} else {
+				// Pattern only captured the number; extract remaining text after the full match
+				recitalText.WriteString(line[len(m[0]):])
+			}
 		} else if currentRecital != nil && line != "" {
 			// Continue current recital
 			recitalText.WriteString(" ")

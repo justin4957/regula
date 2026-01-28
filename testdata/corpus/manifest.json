@@ -1,0 +1,171 @@
+{
+  "version": "1.0.0",
+  "description": "Regula golden file test corpus - validates parser output across 15 jurisdictions",
+  "entries": [
+    {
+      "id": "eu-gdpr",
+      "jurisdiction": "EU",
+      "short_name": "GDPR",
+      "full_name": "Regulation (EU) 2016/679 (General Data Protection Regulation)",
+      "format": "eu",
+      "source_path": "../gdpr.txt",
+      "expected_path": "eu-gdpr/expected.json",
+      "source_info": "Official Journal of the European Union, L 119, 4 May 2016",
+      "use_registry": true
+    },
+    {
+      "id": "eu-eprivacy",
+      "jurisdiction": "EU",
+      "short_name": "ePrivacy Directive",
+      "full_name": "Directive 2002/58/EC (ePrivacy Directive)",
+      "format": "eu",
+      "source_path": "eu-eprivacy/source.txt",
+      "expected_path": "eu-eprivacy/expected.json",
+      "source_info": "Official Journal of the European Communities, L 201, 31 July 2002",
+      "use_registry": true
+    },
+    {
+      "id": "us-ca-ccpa",
+      "jurisdiction": "US-CA",
+      "short_name": "CCPA",
+      "full_name": "California Consumer Privacy Act (Cal. Civ. Code 1798.100 et seq.)",
+      "format": "us",
+      "source_path": "../ccpa.txt",
+      "expected_path": "us-ca-ccpa/expected.json",
+      "source_info": "California Civil Code, Title 1.81.5",
+      "use_registry": true
+    },
+    {
+      "id": "us-va-vcdpa",
+      "jurisdiction": "US-VA",
+      "short_name": "VCDPA",
+      "full_name": "Virginia Consumer Data Protection Act (Va. Code Ann. 59.1-575 et seq.)",
+      "format": "us",
+      "source_path": "../vcdpa.txt",
+      "expected_path": "us-va-vcdpa/expected.json",
+      "source_info": "Code of Virginia, Title 59.1, Chapter 53",
+      "use_registry": true
+    },
+    {
+      "id": "us-co-cpa",
+      "jurisdiction": "US-CO",
+      "short_name": "CPA",
+      "full_name": "Colorado Privacy Act (C.R.S. 6-1-1301 et seq.)",
+      "format": "us",
+      "source_path": "../cpa.txt",
+      "expected_path": "us-co-cpa/expected.json",
+      "source_info": "Colorado Revised Statutes, Title 6, Article 1, Part 13",
+      "use_registry": true
+    },
+    {
+      "id": "us-ct-ctdpa",
+      "jurisdiction": "US-CT",
+      "short_name": "CTDPA",
+      "full_name": "Connecticut Data Privacy Act (Conn. Gen. Stat. 42-515 et seq.)",
+      "format": "us",
+      "source_path": "../ctdpa.txt",
+      "expected_path": "us-ct-ctdpa/expected.json",
+      "source_info": "Connecticut General Statutes, Title 42, Chapter 743dd",
+      "use_registry": true
+    },
+    {
+      "id": "us-ut-ucpa",
+      "jurisdiction": "US-UT",
+      "short_name": "UCPA",
+      "full_name": "Utah Consumer Privacy Act (U.C.A. 13-61-101 et seq.)",
+      "format": "us",
+      "source_path": "../ucpa.txt",
+      "expected_path": "us-ut-ucpa/expected.json",
+      "source_info": "Utah Code Annotated, Title 13, Chapter 61",
+      "use_registry": true
+    },
+    {
+      "id": "us-tx-tdpsa",
+      "jurisdiction": "US-TX",
+      "short_name": "TDPSA",
+      "full_name": "Texas Data Privacy and Security Act (Tex. Bus. & Com. Code 541.001 et seq.)",
+      "format": "us",
+      "source_path": "../tdpsa.txt",
+      "expected_path": "us-tx-tdpsa/expected.json",
+      "source_info": "Texas Business and Commerce Code, Title 11, Subtitle C",
+      "use_registry": true
+    },
+    {
+      "id": "us-ia-icdpa",
+      "jurisdiction": "US-IA",
+      "short_name": "ICDPA",
+      "full_name": "Iowa Consumer Data Protection Act (Iowa Code 715D.1 et seq.)",
+      "format": "us",
+      "source_path": "../icdpa.txt",
+      "expected_path": "us-ia-icdpa/expected.json",
+      "source_info": "Iowa Code, Chapter 715D",
+      "use_registry": true
+    },
+    {
+      "id": "us-hipaa",
+      "jurisdiction": "US-Federal",
+      "short_name": "HIPAA",
+      "full_name": "Health Insurance Portability and Accountability Act excerpt (42 USC 1320d)",
+      "format": "us",
+      "source_path": "us-hipaa/source.txt",
+      "expected_path": "us-hipaa/expected.json",
+      "source_info": "United States Code, Title 42, Chapter 7, Subchapter XI, Part C",
+      "use_registry": false
+    },
+    {
+      "id": "us-hipaa-cfr",
+      "jurisdiction": "US-Federal",
+      "short_name": "45 CFR 164",
+      "full_name": "Security and Privacy Standards (45 CFR Part 164 excerpt)",
+      "format": "us",
+      "source_path": "us-hipaa-cfr/source.txt",
+      "expected_path": "us-hipaa-cfr/expected.json",
+      "source_info": "Code of Federal Regulations, Title 45, Part 164",
+      "use_registry": false
+    },
+    {
+      "id": "gb-dpa2018",
+      "jurisdiction": "GB",
+      "short_name": "DPA 2018",
+      "full_name": "Data Protection Act 2018 (2018 c. 12)",
+      "format": "uk",
+      "source_path": "../uk-dpa2018.txt",
+      "expected_path": "gb-dpa2018/expected.json",
+      "source_info": "Acts of Parliament, 2018 c. 12",
+      "use_registry": true
+    },
+    {
+      "id": "gb-si-example",
+      "jurisdiction": "GB",
+      "short_name": "GDPR SI 2019",
+      "full_name": "Data Protection, Privacy and Electronic Communications Regulations 2019 (S.I. 2019/419)",
+      "format": "uk",
+      "source_path": "../uk-si-example.txt",
+      "expected_path": "gb-si-example/expected.json",
+      "source_info": "Statutory Instruments, S.I. 2019 No. 419",
+      "use_registry": true
+    },
+    {
+      "id": "intl-uncitral",
+      "jurisdiction": "INTL",
+      "short_name": "UNCITRAL Model Law",
+      "full_name": "UNCITRAL Model Law on Electronic Commerce (1996)",
+      "format": "generic",
+      "source_path": "intl-uncitral/source.txt",
+      "expected_path": "intl-uncitral/expected.json",
+      "source_info": "United Nations Commission on International Trade Law, 1996",
+      "use_registry": false
+    },
+    {
+      "id": "au-privacy",
+      "jurisdiction": "AU",
+      "short_name": "Privacy Act 1988",
+      "full_name": "Privacy Act 1988 (Cth) excerpt",
+      "format": "generic",
+      "source_path": "au-privacy/source.txt",
+      "expected_path": "au-privacy/expected.json",
+      "source_info": "Commonwealth of Australia, Act No. 119 of 1988",
+      "use_registry": false
+    }
+  ]
+}

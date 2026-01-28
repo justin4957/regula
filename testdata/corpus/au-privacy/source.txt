@@ -1,0 +1,177 @@
+Privacy Act 1988
+
+No. 119 of 1988
+
+An Act to make provision to protect the privacy of individuals, and for related purposes.
+
+The Parliament of Australia enacts:
+
+PART I — PRELIMINARY
+
+Division 1 — Short title, commencement and application
+
+1. Short title
+
+This Act may be cited as the Privacy Act 1988.
+
+2. Commencement
+
+(1) Subject to subsection (2), this Act shall come into operation on a day to be fixed by Proclamation.
+
+(2) If this Act does not come into operation under subsection (1) within the period of 6 months beginning on the day on which it receives the Royal Assent, it shall come into operation on the first day after the end of that period.
+
+3. Application
+
+(1) This Act applies to the handling of personal information by an organisation or agency.
+
+(2) Without limiting subsection (1), this Act applies in relation to the collection, use, storage, and disclosure of personal information.
+
+Division 2 — Interpretation
+
+6. Definitions
+
+(1) In this Act, unless the contrary intention appears:
+
+(1) 'agency' means a Minister, a Department, a body established for a public purpose by or under a Commonwealth enactment, or a federal court.
+
+(2) 'APP entity' means an agency or organisation.
+
+(3) 'Australian Privacy Principle' means an Australian Privacy Principle set out in Schedule 1.
+
+(4) 'collection' means the act of gathering, acquiring or obtaining personal information from any source, including third parties, by any means.
+
+(5) 'Commissioner' means the Australian Information Commissioner.
+
+(6) 'complaint' means a complaint made under Part V.
+
+(7) 'contracted service provider' means an organisation that is, or was, a party to a Commonwealth contract, to the extent that the organisation is, or was, required under a Commonwealth contract to provide services to a Commonwealth agency.
+
+(8) 'credit information' means personal information that is credit eligibility information or information prescribed by the regulations.
+
+(9) 'de-identified' means personal information is de-identified if the information is no longer about an identifiable individual or an individual who is reasonably identifiable.
+
+(10) 'disclosure' means making personal information accessible or visible to others outside the entity holding the information, or releasing it into an environment where it can be accessed.
+
+(11) 'eligible data breach' means an unauthorised access to, or unauthorised disclosure of, personal information held by an entity, or a loss of personal information held by an entity, that is likely to result in serious harm to any of the individuals to whom the information relates.
+
+(12) 'employee record' means a record of personal information relating to the employment of the employee, including health information about the employee, information about the terms and conditions of employment, and information about the employee's performance.
+
+(13) 'enforcement body' means the Australian Federal Police, a Police Force of a State, the Australian Crime Commission, the Australian Securities and Investments Commission, or any other body or person prescribed by the regulations.
+
+(14) 'health information' means information or an opinion about the health, including illness or disability, of an individual, or an individual's expressed wishes about the future provision of health services to him or her.
+
+(15) 'interference with the privacy of an individual' means a breach of an Australian Privacy Principle, a breach of a registered APP code, or an act or practice of an organisation or agency that is an interference with privacy under section 13.
+
+(16) 'organisation' means an individual, a body corporate, a partnership, any other unincorporated association, or a trust, that is not a small business operator, a registered political party, an agency, a State or Territory authority, or a prescribed instrumentality of a State or Territory.
+
+(17) 'overseas recipient' means a person who receives personal information, and who is not in Australia or an external Territory, and who is not the entity disclosing the information, and who is not the individual to whom the personal information relates.
+
+(18) 'personal information' means information or an opinion about an identified individual, or an individual who is reasonably identifiable, whether the information or opinion is true or not, and whether the information or opinion is recorded in a material form or not.
+
+(19) 'record' means a document, or an electronic or other device, that contains personal information.
+
+(20) 'sensitive information' means information or an opinion about an individual's racial or ethnic origin, political opinions, membership of a political association, religious beliefs or affiliations, philosophical beliefs, membership of a professional or trade association, membership of a trade union, sexual orientation or practices, criminal record, health information about an individual, genetic information about an individual that is not otherwise health information, biometric information that is to be used for the purpose of automated biometric verification or biometric identification, or biometric templates.
+
+(21) 'small business operator' means an operator of a business that has an annual turnover for the previous financial year of three million dollars or less.
+
+(22) 'tax file number information' means information that is a tax file number or information from which a tax file number can be ascertained.
+
+(23) 'use' means the handling of personal information within, or among the related bodies of, the entity holding the information.
+
+PART II — AUSTRALIAN PRIVACY PRINCIPLES
+
+Division 1 — Consideration of personal information privacy
+
+14. Australian Privacy Principles
+
+The Australian Privacy Principles are the principles set out in Schedule 1.
+
+15. Application of Australian Privacy Principles
+
+(1) An APP entity must not do an act, or engage in a practice, that breaches an Australian Privacy Principle.
+
+(2) A breach of an Australian Privacy Principle is an interference with the privacy of an individual.
+
+16. Personal information must be managed in an open and transparent way
+
+(1) An APP entity must take such steps as are reasonable in the circumstances to implement practices, procedures and systems relating to the entity's functions or activities that will ensure that the entity complies with the Australian Privacy Principles.
+
+(2) Without limiting subsection (1), the practices, procedures and systems must relate to the collection, holding, use, and disclosure of personal information.
+
+17. Anonymity and pseudonymity
+
+(1) Individuals must have the option of not identifying themselves, or of using a pseudonym, when dealing with an APP entity in relation to a particular matter.
+
+(2) Subsection (1) does not apply if the APP entity is required or authorised by or under an Australian law, or a court or tribunal order, to deal with individuals who have identified themselves, or it is impracticable for the APP entity to deal with individuals who have not identified themselves or who have used a pseudonym.
+
+PART III — COLLECTION OF SOLICITED PERSONAL INFORMATION
+
+Division 1 — Collection requirements
+
+18. Collection of solicited personal information
+
+(1) An APP entity must not collect personal information unless the information is reasonably necessary for, or directly related to, one or more of the entity's functions or activities.
+
+(2) If the APP entity is an agency, the entity is taken to need the information for the purposes of subsection (1) if the information is reasonably necessary for, or directly related to, one or more of the entity's functions or activities.
+
+(3) An APP entity must collect personal information only by lawful and fair means.
+
+(4) An APP entity must collect personal information directly from the individual, unless it is unreasonable or impracticable to do so.
+
+19. Dealing with unsolicited personal information
+
+(1) If an APP entity receives personal information, and the entity did not solicit the information, the entity must, within a reasonable period after receiving the information, determine whether or not the entity could have collected the information under section 18.
+
+(2) If the entity determines that it could not have collected the information under section 18, the entity must, as soon as practicable, destroy the information or ensure that the information is de-identified.
+
+(3) If the entity determines that it could have collected the information under section 18, sections 20 to 22 apply to the information as if the entity had collected the information under section 18.
+
+Division 2 — Notification
+
+20. Notification of the collection of personal information
+
+(1) At or before the time or, if that is not practicable, as soon as practicable after, an APP entity collects personal information about an individual, the entity must take such steps as are reasonable in the circumstances to notify the individual of such matters.
+
+(2) The matters referred to in subsection (1) are the identity and contact details of the APP entity, the fact that the entity has collected the personal information, the purposes for which the entity collects the personal information, and the main consequences for the individual if personal information is not collected.
+
+PART IV — USE OR DISCLOSURE OF PERSONAL INFORMATION
+
+21. Use or disclosure of personal information
+
+(1) If an APP entity holds personal information about an individual that was collected for a particular purpose (the primary purpose), the entity must not use or disclose the information for another purpose (the secondary purpose) unless the individual has consented to the use or disclosure, or the secondary purpose is related to the primary purpose and the individual would reasonably expect the entity to use or disclose the information for the secondary purpose.
+
+(2) If the personal information is sensitive information, the secondary purpose must be directly related to the primary purpose.
+
+(3) Nothing in this section limits the operation of a provision of a law of the Commonwealth, or of a State or Territory, that requires or authorises the use or disclosure of the information.
+
+22. Direct marketing
+
+(1) An organisation must not use or disclose personal information for the purpose of direct marketing.
+
+(2) Despite subsection (1), an organisation may use or disclose personal information for the purpose of direct marketing if the information is not sensitive information, and the individual would reasonably expect the organisation to use or disclose the information for that purpose, and the organisation provides a simple means by which the individual may easily request not to receive direct marketing communications.
+
+(3) An organisation may use or disclose sensitive information for the purpose of direct marketing only if the individual has consented to the use or disclosure.
+
+PART V — COMPLAINTS AND INVESTIGATIONS
+
+Division 1 — Complaints
+
+36. Making of complaints
+
+(1) An individual may complain to the Commissioner about an act or practice that may be an interference with the privacy of the individual.
+
+(2) A complaint must be in writing, must identify the respondent to the complaint, and must give particulars of the act or practice complained of.
+
+37. Investigation of complaints
+
+(1) The Commissioner must investigate a complaint made under section 36.
+
+(2) The Commissioner may decide not to investigate, or not to investigate further, a complaint if the Commissioner is satisfied that the act or practice is not an interference with the privacy of the individual, or the complaint was made more than 12 months after the individual became aware of the act or practice, or the complaint is frivolous or vexatious.
+
+Division 2 — Determinations
+
+52. Determinations
+
+(1) After investigating a complaint, the Commissioner may make a determination in relation to the complaint.
+
+(2) A determination may include a declaration that the conduct of the respondent is an interference with the privacy of the individual, a declaration that the respondent must perform any reasonable act or course of conduct to redress any loss or damage suffered by the complainant, or a declaration that the complainant is entitled to a specified amount by way of compensation for any loss or damage suffered by reason of the act or practice the subject of the complaint.
