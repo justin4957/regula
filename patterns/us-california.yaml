@@ -1,0 +1,164 @@
+# US California Code Format Pattern
+# Detects and parses California state legislation (including CCPA/CPRA)
+#
+# This pattern file consolidates California-specific patterns previously hardcoded in:
+#   - pkg/extract/parser.go (format detection, section parsing, definition extraction)
+#   - pkg/extract/reference.go (internal and external cross-references)
+
+name: "California Code"
+format_id: "us-california"
+version: "2.0.0"
+jurisdiction: "US-CA"
+
+detection:
+  required_indicators:
+    - pattern: '(?i)\bCALIFORNIA\b'
+      weight: 25
+    - pattern: '(?i)\bSection\s+1798\.\d+'
+      weight: 30
+
+  optional_indicators:
+    - pattern: '(?i)\bTITLE\s+1\.81'
+      weight: 15
+    - pattern: '\bCCPA\b'
+      weight: 12
+    - pattern: '\bCPRA\b'
+      weight: 12
+    - pattern: '(?i)\bCalifornia\s+Consumer\s+Privacy\s+Act\b'
+      weight: 15
+    - pattern: '(?i)\bCalifornia\s+(Civil|Business\s+and\s+Professions|Government)\s+Code\b'
+      weight: 10
+    - pattern: '(?i)\bCal\.\s*(Civ|Bus)\.\s*'
+      weight: 8
+    - pattern: '(?i)^CHAPTER\s+\d+'
+      weight: 5
+    - pattern: '\bsubdivision\s+\([a-z]\)'
+      weight: 8
+    - pattern: '\b§\s*\d+(\.\d+)?'
+      weight: 5
+
+  negative_indicators:
+    - pattern: '\bEuropean\s+(Union|Parliament)\b'
+      weight: -20
+    - pattern: '(?i)\bRegulation\s+\(E[CU]\)'
+      weight: -25
+    - pattern: '(?i)\bDirective\s+\d{4}/\d+/(EC|EU)\b'
+      weight: -20
+    - pattern: '(?i)\bVIRGINIA\b'
+      weight: -10
+    - pattern: '(?i)\bSection\s+59\.1-'
+      weight: -15
+
+structure:
+  hierarchy:
+    - type: "chapter"
+      pattern: '^CHAPTER\s+(\d+)$'
+      number_group: 1
+      title_follows: true
+
+    - type: "article"
+      pattern: '^Article\s+(\d+)$'
+      number_group: 1
+      title_follows: true
+
+    - type: "section"
+      pattern: '^Section\s+(\d+)\.(\d+)$'
+      number_group: 2
+      title_follows: true
+
+    - type: "subdivision"
+      pattern: '^\(([a-z])\)\s+'
+      number_group: 1
+
+    - type: "paragraph"
+      pattern: '^\((\d+)\)\s+'
+      number_group: 1
+
+    - type: "subparagraph"
+      pattern: '^\(([A-Z])\)\s+'
+      number_group: 1
+
+definitions:
+  location:
+    - section_title: '(?i)definitions?'
+    - section_number: 110
+
+  # US-style: (a) 'term' means or (a) "term" means
+  pattern: "^\\(([a-z])\\)\\s+[\\x{2018}\\x{2019}''\"]([^\\x{2018}\\x{2019}''\"]+)[\\x{2018}\\x{2019}''\"]\\s+means"
+
+references:
+  internal:
+    # Section with subdivision and paragraph: Section 1798.185(a)(1)
+    - pattern: 'Section\s+(\d+)\.(\d+)\(([a-z])\)(?:\((\d+)\))?'
+      target: "section"
+      groups:
+        code_prefix: 1
+        section: 2
+        subdivision: 3
+        paragraph: 4
+
+    # Subdivision of section: subdivision (a) of Section 1798.100
+    - pattern: 'subdivision\s+\(([a-z])\)\s+of\s+Section\s+(\d+)\.(\d+)'
+      target: "subdivision"
+      groups:
+        letter: 1
+        code_prefix: 2
+        section: 3
+
+    # Paragraph of subdivision of section: paragraph (1) of subdivision (a) of Section 1798.185
+    - pattern: 'paragraph\s+\((\d+)\)\s+of\s+subdivision\s+\(([a-z])\)\s+of\s+Section\s+(\d+)\.(\d+)'
+      target: "paragraph"
+      groups:
+        number: 1
+        subdivision: 2
+        code_prefix: 3
+        section: 4
+
+    # Sections range: Sections 1798.100 to 1798.199
+    - pattern: 'Sections\s+(\d+)\.(\d+)\s+(?:to|through)\s+(\d+)\.(\d+)'
+      target: "section"
+      groups:
+        start_prefix: 1
+        start_section: 2
+        end_prefix: 3
+        end_section: 4
+
+    # Simple section reference: Section 1798.100
+    - pattern: 'Section\s+(\d+)\.(\d+)'
+      target: "section"
+      groups:
+        code_prefix: 1
+        section: 2
+
+  external:
+    # US Code: 15 U.S.C. Section 1681 or 15 U.S.C. § 1681
+    - pattern: '(\d+)\s+U\.?S\.?C\.?\s+(?:Section|Sec\.?|§)\s*(\d+[a-z]?)'
+      type: "usc"
+      uri_template: "https://www.law.cornell.edu/uscode/text/{title}/{section}"
+      groups:
+        title: 1
+        section: 2
+
+    # CFR: 45 C.F.R. Part 164
+    - pattern: '(\d+)\s+C\.?F\.?R\.?\s+(?:Part\s+)?(\d+)'
+      type: "cfr"
+      uri_template: ""
+      groups:
+        title: 1
+        part: 2
+
+    # California Title: Section 17014 of Title 18
+    - pattern: 'Section\s+(\d+)\s+of\s+Title\s+(\d+)'
+      type: "ca-title"
+      uri_template: ""
+      groups:
+        section: 1
+        title: 2
+
+    # Public Law: Public Law 104-191
+    - pattern: 'Public\s+Law\s+(\d+)-(\d+)'
+      type: "public_law"
+      uri_template: "https://www.congress.gov/public-laws/{congress}/pl{number}"
+      groups:
+        congress: 1
+        number: 2
