@@ -3,7 +3,7 @@
 
 name: "EU Directive"
 format_id: "eu-directive"
-version: "1.0.0"
+version: "1.1.0"
 jurisdiction: "EU"
 
 detection:
@@ -32,6 +32,11 @@ detection:
       weight: -20
     - pattern: '\bUnited\s+States\s+Code\b'
       weight: -25
+    # Penalize when document is a Regulation, not a Directive
+    - pattern: '(?i)\bHAVE\s+ADOPTED\s+THIS\s+REGULATION\b'
+      weight: -30
+    - pattern: '(?i)\bRegulation\s+\(E[CU]\)\s+(?:No\s+)?(\d+)/(\d{4})\b'
+      weight: -20
 
 structure:
   preamble:

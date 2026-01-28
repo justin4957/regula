@@ -1,16 +1,21 @@
 # EU Regulation Format Pattern
 # Detects and parses European Union Regulation documents (including GDPR)
+#
+# This pattern file consolidates all EU-specific patterns previously hardcoded in:
+#   - pkg/extract/parser.go (structure detection, preamble, definitions)
+#   - pkg/extract/reference.go (internal and external cross-references)
+#   - pkg/extract/definition.go (definition extraction with Unicode quotes)
 
 name: "EU Regulation"
 format_id: "eu-regulation"
-version: "1.0.0"
+version: "2.0.0"
 jurisdiction: "EU"
 
 detection:
   required_indicators:
-    - pattern: '\bRegulation\s+\(E[CU]\)\s+(?:No\s+)?(\d+)/(\d{4})\b'
+    - pattern: '(?i)\bRegulation\s+\(E[CU]\)\s+(?:No\s+)?(\d+)/(\d{4})\b'
       weight: 30
-    - pattern: '\bRegulation\s+\(EU\)\s+(\d{4})/(\d+)\b'
+    - pattern: '(?i)\bRegulation\s+\(EU\)\s+(\d{4})/(\d+)\b'
       weight: 30
 
   optional_indicators:
@@ -30,18 +35,30 @@ detection:
       weight: 8
     - pattern: '\bHAVE\s+ADOPTED\s+THIS\s+REGULATION\b'
       weight: 12
+    # Structural indicators from parser.go detectFormat()
+    - pattern: '^CHAPTER\s+[IVX]+'
+      weight: 8
+    - pattern: '\(EU\)|\(EC\)'
+      weight: 8
 
   negative_indicators:
     - pattern: '\bU\.?S\.?\s+Code\b'
       weight: -20
     - pattern: '\bDirective\s+\d{4}/\d+/(EC|EU)\b'
       weight: -5
+    # US-style indicators from parser.go detectFormat()
+    - pattern: '\bCALIFORNIA\b'
+      weight: -10
+    - pattern: '\bVIRGINIA\b'
+      weight: -10
+    - pattern: '\bSection\s+\d+\.\d+'
+      weight: -8
 
 structure:
   preamble:
     start_pattern: '^THE\s+EUROPEAN\s+PARLIAMENT\s+AND\s+THE\s+COUNCIL'
-    end_pattern: '^HAVE\s+ADOPTED\s+THIS\s+REGULATION'
-    recital_pattern: '^\((\d+)\)\s+'
+    end_pattern: 'HAVE\s+ADOPTED\s+THIS'
+    recital_pattern: '^\((\d+)\)\s+(.*)'
 
   hierarchy:
     - type: "chapter"
@@ -76,39 +93,107 @@ definitions:
     - section_title: '(?i)definitions?'
     - section_number: 4
 
-  pattern: '^\((\d+)\)\s*[''"]([^''"]+)[''"]\s+means?\s+'
+  # Enhanced definition pattern from definition.go with Unicode quote variants
+  # Matches: (1) 'term' means, (1) "term" means, (1) \u2018term\u2019 means
+  # Also handles: (1) 'term' of [something] means
+  pattern: '^\((\d+)\)\s+[\x{2018}\x{2019}''"]([^\x{2018}\x{2019}''"]+)[\x{2018}\x{2019}''"](?:\s+of[^m]*?)?\s*means[:\s]'
 
 references:
   internal:
-    - pattern: 'Article\s+(\d+)(?:\((\d+)\))?'
+    # Article with optional paragraph and point: Article 6(1)(a)
+    - pattern: 'Article\s+(\d+)\((\d+)\)(?:\(([a-z])\))?'
       target: "article"
       groups:
         article: 1
         paragraph: 2
+        point: 3
 
+    # Simple article reference: Article 6
+    - pattern: 'Article\s+(\d+)'
+      target: "article"
+      groups:
+        article: 1
+
+    # Articles range: Articles 13 and 14, Articles 15 to 22
+    - pattern: 'Articles\s+(\d+)\s+(?:and|to)\s+(\d+)'
+      target: "article"
+      groups:
+        start_article: 1
+        end_article: 2
+
+    # Paragraph reference: paragraph 1
+    - pattern: 'paragraph\s+(\d+)'
+      target: "paragraph"
+      groups:
+        paragraph: 1
+
+    # Points range: points (a) to (f), points (a) and (b)
+    - pattern: 'points\s+\(([a-z])\)\s+(?:to|and)\s+\(([a-z])\)'
+      target: "point"
+      groups:
+        start_point: 1
+        end_point: 2
+
+    # Single point reference: point (a) of Article 6
     - pattern: 'point\s*\(([a-z])\)\s+of\s+Article\s+(\d+)'
       target: "point"
       groups:
         point: 1
         article: 2
 
+    # Single point reference (standalone): point (a)
+    - pattern: 'point\s+\(([a-z])\)'
+      target: "point"
+      groups:
+        point: 1
+
+    # Chapter reference: Chapter III
     - pattern: 'Chapter\s+([IVXLCDM]+)'
       target: "chapter"
       groups:
         number: 1
 
+    # Section reference: Section 1 (EU-style simple numbers)
+    - pattern: 'Section\s+(\d+)'
+      target: "section"
+      groups:
+        number: 1
+
   external:
-    - pattern: 'Directive\s+(\d{4})/(\d+)/(EC|EU)'
+    # Directive reference: Directive 95/46/EC, Directive (EU) 2016/680
+    - pattern: 'Directive\s+(?:\(E[CU]\)\s+)?(\d+)/(\d+)(?:/EC|/EU)?'
       type: "directive"
       uri_template: "http://data.europa.eu/eli/dir/{year}/{number}/oj"
       groups:
         year: 1
         number: 2
-        authority: 3
 
-    - pattern: 'Regulation\s+\(E[CU]\)\s+(?:No\s+)?(\d+)/(\d{4})'
+    # Regulation with "No": Regulation (EC) No 45/2001
+    - pattern: 'Regulation\s+\(E[CU]\)\s+No\s+(\d+)/(\d+)'
       type: "regulation"
       uri_template: "http://data.europa.eu/eli/reg/{year}/{number}/oj"
       groups:
         number: 1
         year: 2
+
+    # Regulation reference: Regulation (EU) 2016/679
+    - pattern: 'Regulation\s+\(E[CU]\)\s+(\d+)/(\d+)'
+      type: "regulation"
+      uri_template: "http://data.europa.eu/eli/reg/{year}/{number}/oj"
+      groups:
+        number: 1
+        year: 2
+
+    # Treaty reference: Treaty on the Functioning of the European Union, TFEU, TEU
+    - pattern: '(?:Treaty\s+on\s+the\s+Functioning\s+of\s+the\s+European\s+Union|TFEU|TEU)'
+      type: "treaty"
+      uri_template: ""
+      groups: {}
+
+    # Decision reference: Decision 2010/87/EU
+    - pattern: 'Decision\s+(\d+)/(\d+)/E[CU]'
+      type: "decision"
+      uri_template: ""
+      groups:
+        year: 1
+        number: 2
