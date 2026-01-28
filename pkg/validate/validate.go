@@ -194,6 +194,7 @@ type RegulationType string
 const (
 	RegulationGDPR    RegulationType = "GDPR"
 	RegulationCCPA    RegulationType = "CCPA"
+	RegulationVCDPA   RegulationType = "VCDPA"
 	RegulationGeneric RegulationType = "Generic"
 )
 
@@ -285,6 +286,29 @@ var ValidationProfiles = map[RegulationType]*ValidationProfile{
 		},
 		Weights: DefaultWeights(),
 	},
+	RegulationVCDPA: {
+		Name:                "VCDPA",
+		Description:         "Virginia Consumer Data Protection Act (Code of Virginia Title 59.1 Chapter 53)",
+		ExpectedArticles:    12,
+		ExpectedDefinitions: 22,
+		ExpectedChapters:    7,
+		KnownRights: []string{
+			string(extract.RightAccess),
+			string(extract.RightToKnow),
+			string(extract.RightToDelete),
+			string(extract.RightToCorrect),
+			string(extract.RightPortability),
+			string(extract.RightToOptOut),
+		},
+		KnownObligations: []string{
+			string(extract.ObligationPrivacyPolicy),
+			string(extract.ObligationImpactAssessment),
+			string(extract.ObligationSecure),
+			string(extract.ObligationVerifyRequest),
+			string(extract.ObligationNonDiscrimination),
+		},
+		Weights: DefaultWeights(),
+	},
 	RegulationGeneric: {
 		Name:                "Generic",
 		Description:         "Generic regulation (minimal criteria)",
@@ -364,6 +388,15 @@ func (v *Validator) DetectRegulationType(doc *extract.Document) RegulationType {
 		strings.Contains(title, "california consumer privacy act") ||
 		strings.Contains(title, "california privacy") {
 		return RegulationCCPA
+	}
+
+	// Check for VCDPA
+	if strings.Contains(identifier, "59.1") ||
+		strings.Contains(title, "vcdpa") ||
+		strings.Contains(title, "virginia consumer data protection act") ||
+		strings.Contains(title, "virginia privacy") ||
+		(strings.Contains(title, "virginia") && strings.Contains(title, "consumer data")) {
+		return RegulationVCDPA
 	}
 
 	return RegulationGeneric

@@ -114,6 +114,48 @@ The primary test data is `testdata/gdpr.txt`, containing the full GDPR text with
 - 26 defined terms
 - 255+ cross-references
 
+### CCPA Test File
+
+US-style regulation test data at `testdata/ccpa.txt`:
+
+- 6 chapters
+- 21 articles (sections)
+- 15 defined terms
+- California Civil Code format (Section 1798.xxx)
+
+### VCDPA Test File
+
+Virginia Consumer Data Protection Act at `testdata/vcdpa.txt`:
+
+- 7 chapters
+- 12 sections (59.1-575 through 59.1-585)
+- 22 defined terms
+- Virginia Code format (Section 59.1-xxx)
+- Heavy external law references (HIPAA, GLBA, FCRA, FERPA, etc.)
+
+**Testing VCDPA:**
+
+```bash
+# Validate VCDPA document
+go run cmd/regula/main.go validate --source testdata/vcdpa.txt
+
+# Auto-detects VCDPA profile based on document content
+# Expected output:
+#   Profile: VCDPA
+#   Rights found: 12 (in 3 articles)
+#   Known VCDPA rights: 6/6
+#   Definitions: 20 defined terms
+#   Structure: 93.9%
+```
+
+**Note on VCDPA Reference Resolution:**
+
+VCDPA contains many references to external federal laws (HIPAA, GLBA, COPPA, etc.)
+that are written in short form without full U.S.C. citations (e.g., "Section 1320d"
+instead of "42 U.S.C. § 1320d"). These may show as unresolved internal references.
+The semantic extraction and definition coverage are more reliable metrics for
+VCDPA validation.
+
 ### Expected Output Files
 
 Expected outputs for comparison testing:
