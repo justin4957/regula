@@ -17,7 +17,18 @@ const (
 	DocumentTypeRegulation DocumentType = "regulation"
 	DocumentTypeDirective  DocumentType = "directive"
 	DocumentTypeDecision   DocumentType = "decision"
+	DocumentTypeStatute    DocumentType = "statute"
+	DocumentTypeAct        DocumentType = "act"
 	DocumentTypeUnknown    DocumentType = "unknown"
+)
+
+// DocumentFormat represents the structural format of a regulatory document.
+type DocumentFormat string
+
+const (
+	FormatEU DocumentFormat = "eu"   // EU-style: CHAPTER I, Article 1
+	FormatUS DocumentFormat = "us"   // US-style: CHAPTER 1, Section 1798.100
+	FormatUnknown DocumentFormat = "unknown"
 )
 
 // Document represents a parsed regulatory document.
@@ -88,25 +99,50 @@ type Definition struct {
 
 // Parser parses regulatory documents into structured form.
 type Parser struct {
-	chapterPattern    *regexp.Regexp
-	sectionPattern    *regexp.Regexp
-	articlePattern    *regexp.Regexp
+	// EU-style patterns
+	euChapterPattern    *regexp.Regexp
+	euSectionPattern    *regexp.Regexp
+	euArticlePattern    *regexp.Regexp
+
+	// US-style patterns (California Civil Code style)
+	usChapterPattern    *regexp.Regexp
+	usArticlePattern    *regexp.Regexp
+	usSectionPattern    *regexp.Regexp
+	usSectionNumPattern *regexp.Regexp
+
+	// Common patterns
 	paragraphPattern  *regexp.Regexp
 	pointPattern      *regexp.Regexp
 	recitalPattern    *regexp.Regexp
 	definitionPattern *regexp.Regexp
+	usDefinitionPattern *regexp.Regexp
+
+	// Detected format
+	format DocumentFormat
 }
 
-// NewParser creates a new Parser with default patterns for EU regulations.
+// NewParser creates a new Parser with patterns for multiple regulation formats.
 func NewParser() *Parser {
 	return &Parser{
-		chapterPattern:    regexp.MustCompile(`^CHAPTER\s+([IVX]+)$`),
-		sectionPattern:    regexp.MustCompile(`^Section\s+(\d+)$`),
-		articlePattern:    regexp.MustCompile(`^Article\s+(\d+)$`),
+		// EU-style patterns (GDPR, etc.)
+		euChapterPattern:    regexp.MustCompile(`^CHAPTER\s+([IVX]+)$`),
+		euSectionPattern:    regexp.MustCompile(`^Section\s+(\d+)$`),
+		euArticlePattern:    regexp.MustCompile(`^Article\s+(\d+)$`),
+
+		// US-style patterns (CCPA, California Civil Code, etc.)
+		usChapterPattern:    regexp.MustCompile(`^CHAPTER\s+(\d+)$`),
+		usArticlePattern:    regexp.MustCompile(`^Article\s+(\d+)$`),
+		usSectionPattern:    regexp.MustCompile(`^Section\s+(\d+(?:\.\d+)*)$`),
+		usSectionNumPattern: regexp.MustCompile(`^Section\s+(\d+)\.(\d+)$`),
+
+		// Common patterns
 		paragraphPattern:  regexp.MustCompile(`^(\d+)\.\s+(.*)$`),
 		pointPattern:      regexp.MustCompile(`^\(([a-z])\)\s+(.*)$`),
 		recitalPattern:    regexp.MustCompile(`^\((\d+)\)\s+(.*)$`),
 		definitionPattern: regexp.MustCompile(`^\((\d+)\)\s+['''"\x{2018}\x{2019}]([^'''"\x{2018}\x{2019}]+)['''"\x{2018}\x{2019}].*means`),
+		usDefinitionPattern: regexp.MustCompile(`^\(([a-z])\)\s+['''"\x{2018}\x{2019}]([^'''"\x{2018}\x{2019}]+)['''"\x{2018}\x{2019}]\s+means`),
+
+		format: FormatUnknown,
 	}
 }
 
@@ -128,29 +164,127 @@ func (p *Parser) Parse(r io.Reader) (*Document, error) {
 		Chapters: make([]*Chapter, 0),
 	}
 
+	// Detect document format and type from content
+	p.format = p.detectFormat(lines)
+
 	// Parse title and type from first lines
 	if len(lines) > 0 {
 		doc.Title = lines[0]
-		if strings.Contains(strings.ToUpper(lines[0]), "REGULATION") {
-			doc.Type = DocumentTypeRegulation
-		} else if strings.Contains(strings.ToUpper(lines[0]), "DIRECTIVE") {
-			doc.Type = DocumentTypeDirective
-		} else if strings.Contains(strings.ToUpper(lines[0]), "DECISION") {
-			doc.Type = DocumentTypeDecision
+		doc.Type = p.detectDocumentType(lines)
+	}
+
+	// Find identifier based on format
+	doc.Identifier = p.extractIdentifier(lines)
+
+	// Parse based on detected format
+	switch p.format {
+	case FormatUS:
+		p.parseUSDocument(doc, lines)
+	default:
+		// EU format (default)
+		p.parseEUDocument(doc, lines)
+	}
+
+	return doc, nil
+}
+
+// detectFormat analyzes the document to determine its structural format.
+func (p *Parser) detectFormat(lines []string) DocumentFormat {
+	euIndicators := 0
+	usIndicators := 0
+
+	for _, line := range lines {
+		// EU indicators
+		if p.euChapterPattern.MatchString(line) {
+			euIndicators += 2
+		}
+		if p.euArticlePattern.MatchString(line) {
+			euIndicators++
+		}
+		if strings.Contains(line, "HAVE ADOPTED THIS REGULATION") {
+			euIndicators += 3
+		}
+		if strings.Contains(line, "(EU)") || strings.Contains(line, "(EC)") {
+			euIndicators += 2
+		}
+
+		// US indicators
+		if p.usChapterPattern.MatchString(line) {
+			usIndicators += 2
+		}
+		if p.usSectionNumPattern.MatchString(line) {
+			usIndicators += 2
+		}
+		if strings.Contains(strings.ToUpper(line), "CALIFORNIA") {
+			usIndicators += 2
+		}
+		if strings.Contains(line, "TITLE 1.81") || strings.Contains(line, "Section 1798") {
+			usIndicators += 3
 		}
 	}
 
-	// Find identifier (e.g., "(EU) 2016/679")
-	for i := 0; i < min(10, len(lines)); i++ {
-		if strings.Contains(lines[i], "(EU)") || strings.Contains(lines[i], "(EC)") {
-			// Extract the identifier
-			idPattern := regexp.MustCompile(`\(E[UC]\)\s*(?:No\s*)?(\d+/\d+)`)
-			if m := idPattern.FindStringSubmatch(lines[i]); m != nil {
-				doc.Identifier = fmt.Sprintf("(EU) %s", m[1])
+	if usIndicators > euIndicators {
+		return FormatUS
+	}
+	return FormatEU
+}
+
+// detectDocumentType determines the type of document from its content.
+func (p *Parser) detectDocumentType(lines []string) DocumentType {
+	for i := 0; i < min(20, len(lines)); i++ {
+		upper := strings.ToUpper(lines[i])
+		if strings.Contains(upper, "REGULATION") {
+			return DocumentTypeRegulation
+		}
+		if strings.Contains(upper, "DIRECTIVE") {
+			return DocumentTypeDirective
+		}
+		if strings.Contains(upper, "DECISION") {
+			return DocumentTypeDecision
+		}
+		if strings.Contains(upper, "ACT") {
+			return DocumentTypeAct
+		}
+		if strings.Contains(upper, "CODE") || strings.Contains(upper, "STATUTE") {
+			return DocumentTypeStatute
+		}
+	}
+	return DocumentTypeUnknown
+}
+
+// extractIdentifier extracts the document identifier based on format.
+func (p *Parser) extractIdentifier(lines []string) string {
+	switch p.format {
+	case FormatUS:
+		// Look for California Civil Code style identifiers
+		for i := 0; i < min(20, len(lines)); i++ {
+			if strings.Contains(lines[i], "TITLE") {
+				// Extract title number (e.g., "TITLE 1.81.5")
+				titlePattern := regexp.MustCompile(`TITLE\s+([\d.]+)`)
+				if m := titlePattern.FindStringSubmatch(lines[i]); m != nil {
+					return fmt.Sprintf("Cal. Civ. Code Title %s", m[1])
+				}
+			}
+			if strings.Contains(lines[i], "Section 1798") {
+				return "Cal. Civ. Code § 1798"
+			}
+		}
+	default:
+		// EU format
+		for i := 0; i < min(10, len(lines)); i++ {
+			if strings.Contains(lines[i], "(EU)") || strings.Contains(lines[i], "(EC)") {
+				idPattern := regexp.MustCompile(`\(E[UC]\)\s*(?:No\s*)?(\d+/\d+)`)
+				if m := idPattern.FindStringSubmatch(lines[i]); m != nil {
+					return fmt.Sprintf("(EU) %s", m[1])
+				}
 			}
 		}
 	}
+	return ""
+}
 
+// parseEUDocument parses an EU-style document (GDPR, etc.).
+func (p *Parser) parseEUDocument(doc *Document, lines []string) {
 	// Find where main body starts (after "HAVE ADOPTED THIS REGULATION:")
 	mainBodyStart := 0
 	for i, line := range lines {
@@ -168,8 +302,115 @@ func (p *Parser) Parse(r io.Reader) (*Document, error) {
 
 	// Extract definitions from Article 4
 	doc.Definitions = p.extractDefinitions(doc)
+}
 
-	return doc, nil
+// parseUSDocument parses a US-style document (CCPA, California Civil Code, etc.).
+func (p *Parser) parseUSDocument(doc *Document, lines []string) {
+	var currentChapter *Chapter
+	var currentSection *Article // In US format, Sections are treated as Articles
+	var sectionText strings.Builder
+
+	// Track section title for next line
+	pendingSectionTitle := false
+	var pendingSection *Article
+
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		trimmedLine := strings.TrimSpace(line)
+
+		// Check for CHAPTER
+		if m := p.usChapterPattern.FindStringSubmatch(trimmedLine); m != nil {
+			// Save previous section
+			if currentSection != nil {
+				currentSection.Text = strings.TrimSpace(sectionText.String())
+				p.addArticle(currentChapter, nil, currentSection)
+				currentSection = nil
+				sectionText.Reset()
+			}
+
+			// Get chapter title (next non-empty line)
+			title := ""
+			for j := i + 1; j < len(lines) && j < i+5; j++ {
+				if strings.TrimSpace(lines[j]) != "" {
+					title = strings.TrimSpace(lines[j])
+					break
+				}
+			}
+
+			currentChapter = &Chapter{
+				Number:   m[1],
+				Title:    title,
+				Sections: make([]*Section, 0),
+				Articles: make([]*Article, 0),
+			}
+			doc.Chapters = append(doc.Chapters, currentChapter)
+			continue
+		}
+
+		// Check for Article header (in US format, these are grouping labels, skip them)
+		if p.usArticlePattern.MatchString(trimmedLine) {
+			// Save previous section
+			if currentSection != nil {
+				currentSection.Text = strings.TrimSpace(sectionText.String())
+				p.addArticle(currentChapter, nil, currentSection)
+				currentSection = nil
+				sectionText.Reset()
+			}
+			// Skip article headers - they just group sections
+			continue
+		}
+
+		// Check for Section (e.g., "Section 1798.100")
+		if m := p.usSectionNumPattern.FindStringSubmatch(trimmedLine); m != nil {
+			// Save previous section
+			if currentSection != nil {
+				currentSection.Text = strings.TrimSpace(sectionText.String())
+				p.addArticle(currentChapter, nil, currentSection)
+			}
+
+			// Parse section number - use the subsection part as the article number
+			// e.g., "Section 1798.100" -> Article 100
+			subNum, _ := strconv.Atoi(m[2])
+
+			currentSection = &Article{
+				Number: subNum,
+				Title:  "", // Will be set from next line
+			}
+			pendingSectionTitle = true
+			pendingSection = currentSection
+			sectionText.Reset()
+			continue
+		}
+
+		// Set section title from line after "Section X"
+		if pendingSectionTitle && pendingSection != nil && trimmedLine != "" {
+			pendingSection.Title = trimmedLine
+			pendingSectionTitle = false
+			pendingSection = nil
+			continue
+		}
+
+		// Accumulate section text
+		if currentSection != nil && trimmedLine != "" {
+			// Skip if this line is the section title
+			if currentSection.Title != "" && trimmedLine == currentSection.Title {
+				continue
+			}
+			if sectionText.Len() > 0 {
+				sectionText.WriteString("\n")
+			}
+			sectionText.WriteString(trimmedLine)
+		}
+	}
+
+	// Save last section
+	if currentSection != nil {
+		currentSection.Text = strings.TrimSpace(sectionText.String())
+		p.addArticle(currentChapter, nil, currentSection)
+	}
+
+	// Extract definitions
+	doc.Definitions = p.extractUSDefinitions(doc)
 }
 
 // parsePreamble extracts recitals from the preamble section.
@@ -220,7 +461,7 @@ func (p *Parser) parsePreamble(lines []string) *Preamble {
 	return preamble
 }
 
-// parseMainBody parses chapters, sections, and articles from the main body.
+// parseMainBody parses chapters, sections, and articles from the main body (EU format).
 func (p *Parser) parseMainBody(doc *Document, lines []string) {
 	var currentChapter *Chapter
 	var currentSection *Section
@@ -231,7 +472,7 @@ func (p *Parser) parseMainBody(doc *Document, lines []string) {
 		line := lines[i]
 
 		// Check for chapter
-		if m := p.chapterPattern.FindStringSubmatch(line); m != nil {
+		if m := p.euChapterPattern.FindStringSubmatch(line); m != nil {
 			// Save previous article
 			if currentArticle != nil {
 				currentArticle.Text = strings.TrimSpace(articleText.String())
@@ -261,7 +502,7 @@ func (p *Parser) parseMainBody(doc *Document, lines []string) {
 		}
 
 		// Check for section
-		if m := p.sectionPattern.FindStringSubmatch(line); m != nil {
+		if m := p.euSectionPattern.FindStringSubmatch(line); m != nil {
 			// Save previous article
 			if currentArticle != nil {
 				currentArticle.Text = strings.TrimSpace(articleText.String())
@@ -293,7 +534,7 @@ func (p *Parser) parseMainBody(doc *Document, lines []string) {
 		}
 
 		// Check for article
-		if m := p.articlePattern.FindStringSubmatch(line); m != nil {
+		if m := p.euArticlePattern.FindStringSubmatch(line); m != nil {
 			// Save previous article
 			if currentArticle != nil {
 				currentArticle.Text = strings.TrimSpace(articleText.String())
@@ -321,9 +562,9 @@ func (p *Parser) parseMainBody(doc *Document, lines []string) {
 					break
 				}
 				// Stop when we hit another structural element
-				if p.articlePattern.MatchString(lines[j]) ||
-					p.sectionPattern.MatchString(lines[j]) ||
-					p.chapterPattern.MatchString(lines[j]) {
+				if p.euArticlePattern.MatchString(lines[j]) ||
+					p.euSectionPattern.MatchString(lines[j]) ||
+					p.euChapterPattern.MatchString(lines[j]) {
 					break
 				}
 				// If we saw a blank after collecting title, this is body text, not title
@@ -410,6 +651,48 @@ func (p *Parser) extractDefinitions(doc *Document) []*Definition {
 			num, _ := strconv.Atoi(m[1])
 			definitions = append(definitions, &Definition{
 				Number: num,
+				Term:   strings.TrimSpace(m[2]),
+			})
+		}
+	}
+
+	return definitions
+}
+
+// extractUSDefinitions extracts defined terms from US-style documents (e.g., CCPA Section 1798.110).
+func (p *Parser) extractUSDefinitions(doc *Document) []*Definition {
+	definitions := make([]*Definition, 0)
+
+	// In CCPA, definitions are typically in Section 1798.110 (mapped to Article 110)
+	// or a section titled "Definitions"
+	var defArticle *Article
+	for _, chapter := range doc.Chapters {
+		for _, article := range chapter.Articles {
+			// Check for definitions section by number or title
+			if article.Number == 110 ||
+				strings.Contains(strings.ToLower(article.Title), "definition") {
+				defArticle = article
+				break
+			}
+		}
+		if defArticle != nil {
+			break
+		}
+	}
+
+	if defArticle == nil || defArticle.Text == "" {
+		return definitions
+	}
+
+	// Parse US-style definitions: (a) 'term' means ...
+	lines := strings.Split(defArticle.Text, "\n")
+	defNum := 0
+	for _, line := range lines {
+		// Match pattern: (a) 'term' means or (a) "term" means
+		if m := p.usDefinitionPattern.FindStringSubmatch(line); m != nil {
+			defNum++
+			definitions = append(definitions, &Definition{
+				Number: defNum,
 				Term:   strings.TrimSpace(m[2]),
 			})
 		}

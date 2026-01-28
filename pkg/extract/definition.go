@@ -42,17 +42,65 @@ func NewDefinitionExtractor() *DefinitionExtractor {
 	}
 }
 
-// ExtractDefinitions extracts all definitions from Article 4 of a document.
+// ExtractDefinitions extracts all definitions from a document.
+// For EU-style documents (GDPR), this looks at Article 4.
+// For US-style documents (CCPA), this looks at Section 1798.110 (Article 110) or articles titled "Definitions".
 func (e *DefinitionExtractor) ExtractDefinitions(doc *Document) []*DefinedTerm {
 	definitions := make([]*DefinedTerm, 0)
 
-	// Find Article 4 (Definitions)
-	article4 := doc.GetArticle(4)
-	if article4 == nil || article4.Text == "" {
+	// Find the definitions article
+	defArticle := e.findDefinitionsArticle(doc)
+	if defArticle == nil || defArticle.Text == "" {
 		return definitions
 	}
 
-	lines := strings.Split(article4.Text, "\n")
+	// Try EU-style extraction first (numbered definitions)
+	definitions = e.extractEUDefinitions(defArticle)
+
+	// If no definitions found, try US-style extraction (lettered definitions)
+	if len(definitions) == 0 {
+		definitions = e.extractUSDefinitions(defArticle)
+	}
+
+	return definitions
+}
+
+// findDefinitionsArticle locates the article containing definitions.
+func (e *DefinitionExtractor) findDefinitionsArticle(doc *Document) *Article {
+	// Try Article 4 first (EU-style: GDPR)
+	if art := doc.GetArticle(4); art != nil && art.Text != "" {
+		return art
+	}
+
+	// Try Article 110 (US-style: CCPA Section 1798.110)
+	if art := doc.GetArticle(110); art != nil && art.Text != "" {
+		return art
+	}
+
+	// Search for article with "Definition" in title
+	for _, ch := range doc.Chapters {
+		for _, art := range ch.Articles {
+			if strings.Contains(strings.ToLower(art.Title), "definition") {
+				return art
+			}
+		}
+		for _, sec := range ch.Sections {
+			for _, art := range sec.Articles {
+				if strings.Contains(strings.ToLower(art.Title), "definition") {
+					return art
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// extractEUDefinitions extracts EU-style definitions (numbered: (1) 'term' means...).
+func (e *DefinitionExtractor) extractEUDefinitions(defArticle *Article) []*DefinedTerm {
+	definitions := make([]*DefinedTerm, 0)
+
+	lines := strings.Split(defArticle.Text, "\n")
 
 	var currentDef *DefinedTerm
 	var textBuffer strings.Builder
@@ -139,6 +187,79 @@ func (e *DefinitionExtractor) ExtractDefinitions(doc *Document) []*DefinedTerm {
 				}
 				textBuffer.WriteString(line)
 			}
+		}
+	}
+
+	// Flush final definition
+	flushDefinition()
+
+	return definitions
+}
+
+// extractUSDefinitions extracts US-style definitions (lettered: (a) 'term' means...).
+func (e *DefinitionExtractor) extractUSDefinitions(defArticle *Article) []*DefinedTerm {
+	definitions := make([]*DefinedTerm, 0)
+
+	// US-style definition pattern: (a) 'term' means or (a) "term" means
+	usDefPattern := regexp.MustCompile(`^\(([a-z])\)\s+['''"\x{2018}\x{2019}]([^'''"\x{2018}\x{2019}]+)['''"\x{2018}\x{2019}]\s+means[:\s]`)
+
+	lines := strings.Split(defArticle.Text, "\n")
+
+	var currentDef *DefinedTerm
+	var textBuffer strings.Builder
+	defNum := 0
+
+	flushDefinition := func() {
+		if currentDef != nil {
+			currentDef.Definition = strings.TrimSpace(textBuffer.String())
+			currentDef.References = e.extractReferences(currentDef.Definition, nil)
+			definitions = append(definitions, currentDef)
+			currentDef = nil
+			textBuffer.Reset()
+		}
+	}
+
+	for _, line := range lines {
+		// Check for new definition
+		if m := usDefPattern.FindStringSubmatch(line); m != nil {
+			flushDefinition()
+
+			defNum++
+			term := strings.TrimSpace(m[2])
+
+			currentDef = &DefinedTerm{
+				Number:         defNum,
+				Term:           term,
+				NormalizedTerm: normalizeTerm(term),
+				Scope:          "Section " + defArticle.Title,
+				ArticleRef:     defArticle.Number,
+				SubPoints:      make([]*DefinitionSubPoint, 0),
+			}
+
+			// Extract the rest of the line after "means"
+			rest := e.extractAfterMeans(line)
+			if rest != "" {
+				textBuffer.WriteString(rest)
+			}
+			continue
+		}
+
+		// Continuation line for current definition
+		if currentDef != nil && line != "" {
+			// Stop if we hit the next lettered point that's not a definition
+			if matched, _ := regexp.MatchString(`^\([a-z]\)\s+[^'''"]+`, line); matched {
+				// Check if this is a new definition or just a sub-point
+				if usDefPattern.MatchString(line) {
+					// This is a new definition, will be handled next iteration
+					continue
+				}
+				// Not a definition, might be end of definitions section
+			}
+
+			if textBuffer.Len() > 0 {
+				textBuffer.WriteString(" ")
+			}
+			textBuffer.WriteString(strings.TrimSpace(line))
 		}
 	}
 
