@@ -18,15 +18,64 @@ type ValidationResult struct {
 	Threshold  float64          `json:"threshold"`
 	OverallScore float64        `json:"overall_score"`
 
+	// Profile used
+	ProfileName string            `json:"profile_name"`
+	ProfileUsed *ValidationProfile `json:"profile_used,omitempty"`
+
 	// Component results
 	References   *ReferenceValidation   `json:"references"`
 	Connectivity *ConnectivityValidation `json:"connectivity"`
 	Definitions  *DefinitionValidation  `json:"definitions"`
 	Semantics    *SemanticValidation    `json:"semantics"`
+	Structure    *StructureValidation   `json:"structure"`
+
+	// Component scores (for transparency)
+	ComponentScores *ComponentScores `json:"component_scores,omitempty"`
 
 	// Summary
 	Issues   []ValidationIssue `json:"issues"`
 	Warnings []ValidationIssue `json:"warnings"`
+}
+
+// ComponentScores shows individual scores and weights for transparency.
+type ComponentScores struct {
+	ReferenceScore   float64 `json:"reference_score"`
+	ReferenceWeight  float64 `json:"reference_weight"`
+	ConnectivityScore float64 `json:"connectivity_score"`
+	ConnectivityWeight float64 `json:"connectivity_weight"`
+	DefinitionScore  float64 `json:"definition_score"`
+	DefinitionWeight float64 `json:"definition_weight"`
+	SemanticScore    float64 `json:"semantic_score"`
+	SemanticWeight   float64 `json:"semantic_weight"`
+	StructureScore   float64 `json:"structure_score"`
+	StructureWeight  float64 `json:"structure_weight"`
+}
+
+// StructureValidation contains document structure quality metrics.
+type StructureValidation struct {
+	// Counts
+	TotalArticles    int `json:"total_articles"`
+	TotalChapters    int `json:"total_chapters"`
+	TotalSections    int `json:"total_sections"`
+	TotalRecitals    int `json:"total_recitals"`
+
+	// Expected vs actual (from profile)
+	ExpectedArticles    int     `json:"expected_articles"`
+	ExpectedDefinitions int     `json:"expected_definitions"`
+	ExpectedChapters    int     `json:"expected_chapters"`
+
+	// Quality metrics
+	ArticleCompleteness   float64 `json:"article_completeness"`   // % of expected articles
+	DefinitionCompleteness float64 `json:"definition_completeness"` // % of expected definitions
+	ChapterCompleteness   float64 `json:"chapter_completeness"`   // % of expected chapters
+
+	// Content quality
+	ArticlesWithContent   int     `json:"articles_with_content"`
+	ArticlesEmpty         int     `json:"articles_empty"`
+	ContentRate           float64 `json:"content_rate"` // % of articles with meaningful content
+
+	// Overall structure score
+	StructureScore float64 `json:"structure_score"`
 }
 
 // ValidationStatus indicates pass/fail.
@@ -148,10 +197,111 @@ const (
 	RegulationGeneric RegulationType = "Generic"
 )
 
+// ValidationProfile defines regulation-specific validation criteria and weights.
+type ValidationProfile struct {
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+
+	// Expected structure
+	ExpectedArticles    int `json:"expected_articles"`
+	ExpectedDefinitions int `json:"expected_definitions"`
+	ExpectedChapters    int `json:"expected_chapters"`
+
+	// Known rights for this regulation
+	KnownRights []string `json:"known_rights"`
+
+	// Known obligations for this regulation
+	KnownObligations []string `json:"known_obligations"`
+
+	// Scoring weights (must sum to 1.0)
+	Weights ValidationWeights `json:"weights"`
+}
+
+// ValidationWeights defines the weight for each scoring component.
+type ValidationWeights struct {
+	ReferenceResolution float64 `json:"reference_resolution"`
+	GraphConnectivity   float64 `json:"graph_connectivity"`
+	DefinitionCoverage  float64 `json:"definition_coverage"`
+	SemanticExtraction  float64 `json:"semantic_extraction"`
+	StructureQuality    float64 `json:"structure_quality"`
+}
+
+// DefaultWeights returns the default scoring weights.
+func DefaultWeights() ValidationWeights {
+	return ValidationWeights{
+		ReferenceResolution: 0.25,
+		GraphConnectivity:   0.20,
+		DefinitionCoverage:  0.20,
+		SemanticExtraction:  0.20,
+		StructureQuality:    0.15,
+	}
+}
+
+// ValidationProfiles contains the built-in validation profiles.
+var ValidationProfiles = map[RegulationType]*ValidationProfile{
+	RegulationGDPR: {
+		Name:                "GDPR",
+		Description:         "General Data Protection Regulation (EU) 2016/679",
+		ExpectedArticles:    99,
+		ExpectedDefinitions: 26,
+		ExpectedChapters:    11,
+		KnownRights: []string{
+			string(extract.RightAccess),
+			string(extract.RightRectification),
+			string(extract.RightErasure),
+			string(extract.RightRestriction),
+			string(extract.RightPortability),
+			string(extract.RightObject),
+		},
+		KnownObligations: []string{
+			string(extract.ObligationLawfulProcessing),
+			string(extract.ObligationConsent),
+			string(extract.ObligationSecure),
+			string(extract.ObligationNotifyBreach),
+			string(extract.ObligationRecord),
+			string(extract.ObligationImpactAssessment),
+		},
+		Weights: DefaultWeights(),
+	},
+	RegulationCCPA: {
+		Name:                "CCPA",
+		Description:         "California Consumer Privacy Act of 2018",
+		ExpectedArticles:    21,
+		ExpectedDefinitions: 15,
+		ExpectedChapters:    6,
+		KnownRights: []string{
+			string(extract.RightToKnow),
+			string(extract.RightToDelete),
+			string(extract.RightToOptOut),
+			string(extract.RightToNonDiscrimination),
+			string(extract.RightToKnowAboutSales),
+		},
+		KnownObligations: []string{
+			string(extract.ObligationNoticeAtCollection),
+			string(extract.ObligationPrivacyPolicy),
+			string(extract.ObligationVerifyRequest),
+			string(extract.ObligationNonDiscrimination),
+			string(extract.ObligationServiceProvider),
+		},
+		Weights: DefaultWeights(),
+	},
+	RegulationGeneric: {
+		Name:                "Generic",
+		Description:         "Generic regulation (minimal criteria)",
+		ExpectedArticles:    0, // No expectation
+		ExpectedDefinitions: 0,
+		ExpectedChapters:    0,
+		KnownRights:         []string{},
+		KnownObligations:    []string{},
+		Weights:             DefaultWeights(),
+	},
+}
+
 // Validator performs comprehensive validation on regulatory data.
 type Validator struct {
 	threshold      float64
 	regulationType RegulationType
+	profile        *ValidationProfile
 }
 
 // NewValidator creates a new Validator with the specified threshold.
@@ -162,12 +312,33 @@ func NewValidator(threshold float64) *Validator {
 	return &Validator{
 		threshold:      threshold,
 		regulationType: RegulationGeneric,
+		profile:        nil, // Will be set on first validation
 	}
 }
 
 // SetRegulationType sets the regulation type for regulation-aware validation.
 func (v *Validator) SetRegulationType(regType RegulationType) {
 	v.regulationType = regType
+	v.profile = ValidationProfiles[regType]
+}
+
+// SetProfile sets a custom validation profile.
+func (v *Validator) SetProfile(profile *ValidationProfile) {
+	v.profile = profile
+}
+
+// GetProfile returns the current validation profile.
+func (v *Validator) GetProfile() *ValidationProfile {
+	return v.profile
+}
+
+// GetAvailableProfiles returns a list of available profile names.
+func GetAvailableProfiles() []string {
+	profiles := make([]string, 0, len(ValidationProfiles))
+	for regType := range ValidationProfiles {
+		profiles = append(profiles, string(regType))
+	}
+	return profiles
 }
 
 // DetectRegulationType auto-detects the regulation type from the document.
@@ -218,6 +389,17 @@ func (v *Validator) Validate(
 		v.regulationType = v.DetectRegulationType(doc)
 	}
 
+	// Set profile based on regulation type if not already set
+	if v.profile == nil {
+		v.profile = ValidationProfiles[v.regulationType]
+	}
+
+	// Store profile info in result
+	if v.profile != nil {
+		result.ProfileName = v.profile.Name
+		result.ProfileUsed = v.profile
+	}
+
 	// Validate references
 	result.References = v.validateReferences(resolvedRefs)
 
@@ -230,8 +412,11 @@ func (v *Validator) Validate(
 	// Validate semantics (regulation-aware)
 	result.Semantics = v.validateSemantics(semantics)
 
-	// Calculate overall score and status
-	v.calculateOverallScore(result)
+	// Validate structure (new)
+	result.Structure = v.validateStructure(doc, definitions)
+
+	// Calculate overall score and status using weighted scoring
+	v.calculateWeightedScore(result)
 
 	return result
 }
@@ -517,6 +702,16 @@ func (v *Validator) validateSemantics(annotations []*extract.SemanticAnnotation)
 
 // getKnownRights returns the known rights for the current regulation type.
 func (v *Validator) getKnownRights() map[string]bool {
+	// Use profile if available
+	if v.profile != nil && len(v.profile.KnownRights) > 0 {
+		rights := make(map[string]bool)
+		for _, right := range v.profile.KnownRights {
+			rights[right] = false
+		}
+		return rights
+	}
+
+	// Fallback to hardcoded values for backwards compatibility
 	switch v.regulationType {
 	case RegulationGDPR:
 		return map[string]bool{
@@ -538,6 +733,238 @@ func (v *Validator) getKnownRights() map[string]bool {
 	default:
 		// For generic regulations, don't require specific rights
 		return make(map[string]bool)
+	}
+}
+
+// validateStructure validates document structure completeness.
+func (v *Validator) validateStructure(doc *extract.Document, definitions []*extract.DefinedTerm) *StructureValidation {
+	val := &StructureValidation{}
+
+	// Count structure elements
+	articles := collectArticles(doc)
+	val.TotalArticles = len(articles)
+	val.TotalChapters = len(doc.Chapters)
+
+	// Count sections
+	for _, ch := range doc.Chapters {
+		val.TotalSections += len(ch.Sections)
+	}
+
+	if doc.Preamble != nil {
+		val.TotalRecitals = len(doc.Preamble.Recitals)
+	}
+
+	// Set expected values from profile
+	if v.profile != nil {
+		val.ExpectedArticles = v.profile.ExpectedArticles
+		val.ExpectedDefinitions = v.profile.ExpectedDefinitions
+		val.ExpectedChapters = v.profile.ExpectedChapters
+	}
+
+	// Calculate completeness scores
+	if val.ExpectedArticles > 0 {
+		val.ArticleCompleteness = min(1.0, float64(val.TotalArticles)/float64(val.ExpectedArticles))
+	} else {
+		val.ArticleCompleteness = 1.0 // No expectation means 100% complete
+	}
+
+	if val.ExpectedDefinitions > 0 {
+		val.DefinitionCompleteness = min(1.0, float64(len(definitions))/float64(val.ExpectedDefinitions))
+	} else {
+		val.DefinitionCompleteness = 1.0
+	}
+
+	if val.ExpectedChapters > 0 {
+		val.ChapterCompleteness = min(1.0, float64(val.TotalChapters)/float64(val.ExpectedChapters))
+	} else {
+		val.ChapterCompleteness = 1.0
+	}
+
+	// Check content quality (articles with meaningful content)
+	for _, art := range articles {
+		if len(art.Text) > 50 || len(art.Paragraphs) > 0 {
+			val.ArticlesWithContent++
+		} else {
+			val.ArticlesEmpty++
+		}
+	}
+
+	if val.TotalArticles > 0 {
+		val.ContentRate = float64(val.ArticlesWithContent) / float64(val.TotalArticles)
+	} else {
+		val.ContentRate = 1.0
+	}
+
+	// Calculate overall structure score (weighted average of completeness metrics)
+	val.StructureScore = (val.ArticleCompleteness*0.4 +
+		val.DefinitionCompleteness*0.3 +
+		val.ChapterCompleteness*0.2 +
+		val.ContentRate*0.1)
+
+	return val
+}
+
+// min returns the minimum of two float64 values.
+func min(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// calculateWeightedScore computes the overall validation score using weighted scoring.
+func (v *Validator) calculateWeightedScore(result *ValidationResult) {
+	weights := DefaultWeights()
+	if v.profile != nil {
+		weights = v.profile.Weights
+	}
+
+	// Initialize component scores
+	result.ComponentScores = &ComponentScores{
+		ReferenceWeight:    weights.ReferenceResolution,
+		ConnectivityWeight: weights.GraphConnectivity,
+		DefinitionWeight:   weights.DefinitionCoverage,
+		SemanticWeight:     weights.SemanticExtraction,
+		StructureWeight:    weights.StructureQuality,
+	}
+
+	var totalWeight float64
+	var weightedSum float64
+
+	// Reference resolution score
+	if result.References != nil {
+		result.ComponentScores.ReferenceScore = result.References.ResolutionRate
+		weightedSum += result.References.ResolutionRate * weights.ReferenceResolution
+		totalWeight += weights.ReferenceResolution
+
+		if result.References.NotFound > 0 {
+			result.Warnings = append(result.Warnings, ValidationIssue{
+				Category: "references",
+				Severity: "warning",
+				Message:  fmt.Sprintf("%d references could not be resolved", result.References.NotFound),
+				Count:    result.References.NotFound,
+			})
+		}
+		if result.References.Ambiguous > 0 {
+			result.Warnings = append(result.Warnings, ValidationIssue{
+				Category: "references",
+				Severity: "info",
+				Message:  fmt.Sprintf("%d references are ambiguous and may need manual review", result.References.Ambiguous),
+				Count:    result.References.Ambiguous,
+			})
+		}
+	}
+
+	// Connectivity score
+	if result.Connectivity != nil {
+		result.ComponentScores.ConnectivityScore = result.Connectivity.ConnectivityRate
+		weightedSum += result.Connectivity.ConnectivityRate * weights.GraphConnectivity
+		totalWeight += weights.GraphConnectivity
+
+		if result.Connectivity.OrphanCount > 0 {
+			examples := make([]string, 0)
+			for i, artNum := range result.Connectivity.OrphanArticles {
+				if i >= 5 {
+					break
+				}
+				examples = append(examples, fmt.Sprintf("Article %d", artNum))
+			}
+			result.Warnings = append(result.Warnings, ValidationIssue{
+				Category: "connectivity",
+				Severity: "info",
+				Message:  fmt.Sprintf("%d provisions have no cross-references", result.Connectivity.OrphanCount),
+				Count:    result.Connectivity.OrphanCount,
+				Examples: examples,
+			})
+		}
+	}
+
+	// Definition usage score
+	if result.Definitions != nil {
+		result.ComponentScores.DefinitionScore = result.Definitions.UsageRate
+		weightedSum += result.Definitions.UsageRate * weights.DefinitionCoverage
+		totalWeight += weights.DefinitionCoverage
+
+		if result.Definitions.UnusedDefinitions > 0 {
+			result.Warnings = append(result.Warnings, ValidationIssue{
+				Category: "definitions",
+				Severity: "info",
+				Message:  fmt.Sprintf("%d defined terms are not referenced in other articles", result.Definitions.UnusedDefinitions),
+				Count:    result.Definitions.UnusedDefinitions,
+				Examples: result.Definitions.UnusedTerms,
+			})
+		}
+	}
+
+	// Semantics score (based on known rights coverage)
+	if result.Semantics != nil && result.Semantics.KnownRightsTotal > 0 {
+		semanticScore := float64(result.Semantics.KnownRightsFound) / float64(result.Semantics.KnownRightsTotal)
+		result.ComponentScores.SemanticScore = semanticScore
+		weightedSum += semanticScore * weights.SemanticExtraction
+		totalWeight += weights.SemanticExtraction
+
+		if len(result.Semantics.MissingRights) > 0 {
+			regulationName := result.Semantics.RegulationType
+			if regulationName == "" {
+				regulationName = "known"
+			}
+			result.Warnings = append(result.Warnings, ValidationIssue{
+				Category: "semantics",
+				Severity: "warning",
+				Message:  fmt.Sprintf("%d %s rights were not detected", len(result.Semantics.MissingRights), regulationName),
+				Count:    len(result.Semantics.MissingRights),
+				Examples: result.Semantics.MissingRights,
+			})
+		}
+	} else if result.Semantics != nil {
+		// For generic regulations without expected rights, use a quality score
+		// based on whether any rights/obligations were found
+		hasRights := result.Semantics.RightsCount > 0
+		hasObligations := result.Semantics.ObligationsCount > 0
+		qualityScore := 0.0
+		if hasRights && hasObligations {
+			qualityScore = 1.0
+		} else if hasRights || hasObligations {
+			qualityScore = 0.5
+		}
+		result.ComponentScores.SemanticScore = qualityScore
+		weightedSum += qualityScore * weights.SemanticExtraction
+		totalWeight += weights.SemanticExtraction
+	}
+
+	// Structure score
+	if result.Structure != nil {
+		result.ComponentScores.StructureScore = result.Structure.StructureScore
+		weightedSum += result.Structure.StructureScore * weights.StructureQuality
+		totalWeight += weights.StructureQuality
+
+		if result.Structure.ArticlesEmpty > 0 {
+			result.Warnings = append(result.Warnings, ValidationIssue{
+				Category: "structure",
+				Severity: "info",
+				Message:  fmt.Sprintf("%d articles have minimal or no content", result.Structure.ArticlesEmpty),
+				Count:    result.Structure.ArticlesEmpty,
+			})
+		}
+	}
+
+	// Calculate overall score
+	if totalWeight > 0 {
+		result.OverallScore = weightedSum / totalWeight
+	}
+
+	// Determine status
+	if result.OverallScore >= v.threshold {
+		result.Status = StatusPass
+	} else if result.OverallScore >= v.threshold*0.9 {
+		result.Status = StatusWarn
+	} else {
+		result.Status = StatusFail
+		result.Issues = append(result.Issues, ValidationIssue{
+			Category: "overall",
+			Severity: "error",
+			Message:  fmt.Sprintf("Overall score %.1f%% is below threshold %.1f%%", result.OverallScore*100, v.threshold*100),
+		})
 	}
 }
 
@@ -658,7 +1085,13 @@ func (r *ValidationResult) String() string {
 	var sb strings.Builder
 
 	sb.WriteString("Validation Report\n")
-	sb.WriteString("=================\n\n")
+	sb.WriteString("=================\n")
+
+	// Profile used
+	if r.ProfileName != "" {
+		sb.WriteString(fmt.Sprintf("Profile: %s\n", r.ProfileName))
+	}
+	sb.WriteString("\n")
 
 	// Reference Resolution
 	if r.References != nil {
@@ -744,6 +1177,42 @@ func (r *ValidationResult) String() string {
 				sb.WriteString(fmt.Sprintf("    - %s\n", right))
 			}
 		}
+		sb.WriteString("\n")
+	}
+
+	// Structure Quality
+	if r.Structure != nil {
+		sb.WriteString("Structure Quality:\n")
+		sb.WriteString(fmt.Sprintf("  Articles: %d", r.Structure.TotalArticles))
+		if r.Structure.ExpectedArticles > 0 {
+			sb.WriteString(fmt.Sprintf(" (expected: %d, %.1f%%)",
+				r.Structure.ExpectedArticles, r.Structure.ArticleCompleteness*100))
+		}
+		sb.WriteString("\n")
+		sb.WriteString(fmt.Sprintf("  Chapters: %d", r.Structure.TotalChapters))
+		if r.Structure.ExpectedChapters > 0 {
+			sb.WriteString(fmt.Sprintf(" (expected: %d, %.1f%%)",
+				r.Structure.ExpectedChapters, r.Structure.ChapterCompleteness*100))
+		}
+		sb.WriteString("\n")
+		sb.WriteString(fmt.Sprintf("  Content quality: %.1f%% articles with content\n", r.Structure.ContentRate*100))
+		sb.WriteString(fmt.Sprintf("  Structure score: %.1f%%\n", r.Structure.StructureScore*100))
+		sb.WriteString("\n")
+	}
+
+	// Component Scores (when available)
+	if r.ComponentScores != nil {
+		sb.WriteString("Component Scores:\n")
+		sb.WriteString(fmt.Sprintf("  References:    %.1f%% (weight: %.0f%%)\n",
+			r.ComponentScores.ReferenceScore*100, r.ComponentScores.ReferenceWeight*100))
+		sb.WriteString(fmt.Sprintf("  Connectivity:  %.1f%% (weight: %.0f%%)\n",
+			r.ComponentScores.ConnectivityScore*100, r.ComponentScores.ConnectivityWeight*100))
+		sb.WriteString(fmt.Sprintf("  Definitions:   %.1f%% (weight: %.0f%%)\n",
+			r.ComponentScores.DefinitionScore*100, r.ComponentScores.DefinitionWeight*100))
+		sb.WriteString(fmt.Sprintf("  Semantics:     %.1f%% (weight: %.0f%%)\n",
+			r.ComponentScores.SemanticScore*100, r.ComponentScores.SemanticWeight*100))
+		sb.WriteString(fmt.Sprintf("  Structure:     %.1f%% (weight: %.0f%%)\n",
+			r.ComponentScores.StructureScore*100, r.ComponentScores.StructureWeight*100))
 		sb.WriteString("\n")
 	}
 

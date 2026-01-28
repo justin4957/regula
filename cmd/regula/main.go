@@ -587,18 +587,26 @@ Checks:
   - Graph connectivity (orphan provisions)
   - Definition coverage (term usage)
   - Semantic extraction (rights/obligations)
+  - Structure quality (completeness)
+
+Validation Profiles:
+  GDPR     - European General Data Protection Regulation
+  CCPA     - California Consumer Privacy Act
+  Generic  - Minimal criteria for unknown regulations
 
 Example:
   regula validate --source gdpr.txt
   regula validate --source gdpr.txt --threshold 0.85
   regula validate --source gdpr.txt --format json
-  regula validate --source gdpr.txt --check references`,
+  regula validate --source gdpr.txt --check references
+  regula validate --source ccpa.txt --profile CCPA`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			source, _ := cmd.Flags().GetString("source")
 			checkType, _ := cmd.Flags().GetString("check")
 			formatStr, _ := cmd.Flags().GetString("format")
 			baseURI, _ := cmd.Flags().GetString("base-uri")
 			threshold, _ := cmd.Flags().GetFloat64("threshold")
+			profileName, _ := cmd.Flags().GetString("profile")
 
 			if source == "" {
 				return fmt.Errorf("--source flag is required")
@@ -673,6 +681,18 @@ Example:
 
 			// Full validation
 			validator := validate.NewValidator(threshold)
+
+			// Set profile if specified, otherwise auto-detect
+			if profileName != "" {
+				regType := validate.RegulationType(profileName)
+				if profile, ok := validate.ValidationProfiles[regType]; ok {
+					validator.SetRegulationType(regType)
+					validator.SetProfile(profile)
+				} else {
+					return fmt.Errorf("unknown validation profile: %s\nAvailable profiles: GDPR, CCPA, Generic", profileName)
+				}
+			}
+
 			result := validator.Validate(doc, resolved, definitions, usages, annotations, ts)
 
 			// Output result
@@ -701,6 +721,7 @@ Example:
 	cmd.Flags().StringP("format", "f", "text", "Output format (text, json)")
 	cmd.Flags().String("base-uri", "https://regula.dev/regulations/", "Base URI for the graph")
 	cmd.Flags().Float64("threshold", 0.80, "Pass/fail threshold (0.0-1.0)")
+	cmd.Flags().String("profile", "", "Validation profile (GDPR, CCPA, Generic) - auto-detected if not specified")
 
 	return cmd
 }
