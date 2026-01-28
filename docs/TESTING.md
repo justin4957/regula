@@ -90,6 +90,39 @@ go test ./pkg/eurlex/... -run "TestValidate|TestFetch|TestUserAgent|TestHTTPMeth
 go test ./pkg/eurlex/... -run TestELIDoesNotPadNumbers -v
 ```
 
+### Validation Gate Tests
+
+Test the validation checkpoint/gate system with per-stage quality metrics:
+
+```bash
+# Run all gate tests
+go test ./pkg/validate/... -v -run TestGate
+
+# Run individual gate tests
+go test ./pkg/validate/... -run TestSchemaGate -v    # V0: Schema validation
+go test ./pkg/validate/... -run TestStructureGate -v  # V1: Structure validation
+go test ./pkg/validate/... -run TestCoverageGate -v   # V2: Coverage validation
+go test ./pkg/validate/... -run TestQualityGate -v    # V3: Quality validation
+
+# Run pipeline behavior tests
+go test ./pkg/validate/... -run TestGatePipeline -v
+
+# Run gate report serialization tests
+go test ./pkg/validate/... -run TestGateReport -v
+
+# Run GDPR integration test with all 4 gates
+go test ./pkg/validate/... -run TestGatePipeline_GDPRIntegration -v
+
+# CLI: Run ingestion with gates enabled
+go run cmd/regula/main.go ingest --source testdata/gdpr.txt --gates
+go run cmd/regula/main.go ingest --source testdata/gdpr.txt --gates --strict
+go run cmd/regula/main.go ingest --source testdata/gdpr.txt --gates --skip-gates V0
+
+# CLI: Run gate-based validation
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --check gates
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --check gates --format json
+```
+
 ### E2E Tests
 
 The E2E test script validates the complete MVP functionality:

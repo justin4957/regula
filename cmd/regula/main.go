@@ -115,18 +115,56 @@ Example:
 			output, _ := cmd.Flags().GetString("output")
 			showStats, _ := cmd.Flags().GetBool("stats")
 			baseURI, _ := cmd.Flags().GetString("base-uri")
+			enableGates, _ := cmd.Flags().GetBool("gates")
+			skipGates, _ := cmd.Flags().GetStringSlice("skip-gates")
+			strictMode, _ := cmd.Flags().GetBool("strict")
+			failOnWarn, _ := cmd.Flags().GetBool("fail-on-warn")
 
 			if source == "" {
 				return fmt.Errorf("--source flag is required")
 			}
 
 			// Check if file exists
-			if _, err := os.Stat(source); os.IsNotExist(err) {
+			fileInfo, err := os.Stat(source)
+			if os.IsNotExist(err) {
 				return fmt.Errorf("source file not found: %s", source)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to stat source: %w", err)
 			}
 
 			fmt.Printf("Ingesting regulation from: %s\n", source)
 			startTime := time.Now()
+
+			// Set up validation gates if enabled.
+			var gatePipeline *validate.GatePipeline
+			var gateContext *validate.ValidationContext
+			if enableGates {
+				gateConfig := &validate.ValidationConfig{
+					Thresholds: make(map[string]float64),
+					SkipGates:  skipGates,
+					StrictMode: strictMode,
+					FailOnWarn: failOnWarn,
+				}
+				gatePipeline = validate.NewGatePipeline(gateConfig)
+				gatePipeline.RegisterDefaultGates()
+				gateContext = &validate.ValidationContext{
+					SourcePath: source,
+					SourceSize: fileInfo.Size(),
+					Config:     gateConfig,
+				}
+			}
+
+			// Gate V0: Schema validation (after file load, before parsing).
+			if gatePipeline != nil {
+				v0Result := gatePipeline.RunGate("V0", gateContext)
+				if v0Result != nil && !v0Result.Skipped {
+					printGateResult(v0Result)
+					if !v0Result.Passed && strictMode {
+						return fmt.Errorf("pipeline halted: gate V0 (schema) failed")
+					}
+				}
+			}
 
 			// Step 1: Parse document
 			fmt.Print("  1. Parsing document structure... ")
@@ -136,12 +174,27 @@ Example:
 			}
 			defer file.Close()
 
+			parseStart := time.Now()
 			parser := extract.NewParser()
 			doc, err := parser.Parse(file)
 			if err != nil {
 				return fmt.Errorf("failed to parse document: %w", err)
 			}
+			parseDuration := time.Since(parseStart)
 			fmt.Printf("done (%d chapters, %d articles)\n", len(doc.Chapters), countArticles(doc))
+
+			// Gate V1: Structure validation (after parsing).
+			if gatePipeline != nil {
+				gateContext.Document = doc
+				gateContext.ParseDuration = parseDuration
+				v1Result := gatePipeline.RunGate("V1", gateContext)
+				if v1Result != nil && !v1Result.Skipped {
+					printGateResult(v1Result)
+					if !v1Result.Passed && strictMode {
+						return fmt.Errorf("pipeline halted: gate V1 (structure) failed")
+					}
+				}
+			}
 
 			// Step 2: Extract definitions
 			fmt.Print("  2. Extracting defined terms... ")
@@ -162,6 +215,20 @@ Example:
 			semStats := extract.CalculateSemanticStats(semantics)
 			fmt.Printf("done (%d rights, %d obligations)\n", semStats.Rights, semStats.Obligations)
 
+			// Gate V2: Coverage validation (after extraction).
+			if gatePipeline != nil {
+				gateContext.Definitions = definitions
+				gateContext.References = references
+				gateContext.Semantics = semantics
+				v2Result := gatePipeline.RunGate("V2", gateContext)
+				if v2Result != nil && !v2Result.Skipped {
+					printGateResult(v2Result)
+					if !v2Result.Passed && strictMode {
+						return fmt.Errorf("pipeline halted: gate V2 (coverage) failed")
+					}
+				}
+			}
+
 			// Step 5: Resolve references
 			fmt.Print("  5. Resolving cross-references... ")
 			resolver := extract.NewReferenceResolver(baseURI, "GDPR")
@@ -179,6 +246,16 @@ Example:
 				return fmt.Errorf("failed to build graph: %w", err)
 			}
 			fmt.Printf("done (%d triples)\n", stats.TotalTriples)
+
+			// Gate V3: Quality validation (after resolution + graph).
+			if gatePipeline != nil {
+				gateContext.ResolvedReferences = resolved
+				gateContext.TripleStore = tripleStore
+				v3Result := gatePipeline.RunGate("V3", gateContext)
+				if v3Result != nil && !v3Result.Skipped {
+					printGateResult(v3Result)
+				}
+			}
 
 			// Initialize executor
 			executor = query.NewExecutor(tripleStore)
@@ -221,6 +298,10 @@ Example:
 	cmd.Flags().StringP("output", "o", "", "Output graph file (JSON)")
 	cmd.Flags().Bool("stats", false, "Show detailed statistics")
 	cmd.Flags().String("base-uri", "https://regula.dev/regulations/", "Base URI for the graph")
+	cmd.Flags().Bool("gates", false, "Enable validation gates during ingestion")
+	cmd.Flags().StringSlice("skip-gates", []string{}, "Gates to skip (V0,V1,V2,V3)")
+	cmd.Flags().Bool("strict", false, "Halt pipeline on gate failure")
+	cmd.Flags().Bool("fail-on-warn", false, "Halt pipeline on gate warnings")
 
 	return cmd
 }
@@ -556,6 +637,23 @@ func countArticles(doc *extract.Document) int {
 	return count
 }
 
+func printGateResult(gateResult *validate.GateResult) {
+	statusLabel := "PASS"
+	if !gateResult.Passed {
+		statusLabel = "FAIL"
+	}
+	if gateResult.Skipped {
+		statusLabel = "SKIP"
+	}
+	fmt.Printf("  [%s] Gate %s (score: %.0f%%)\n", statusLabel, gateResult.Gate, gateResult.Score*100)
+	for _, gateError := range gateResult.Errors {
+		fmt.Printf("    ERROR: %s\n", gateError.Message)
+	}
+	for _, gateWarning := range gateResult.Warnings {
+		fmt.Printf("    WARN: %s\n", gateWarning.Message)
+	}
+}
+
 func saveGraph(ts *store.TripleStore, path string) error {
 	triples := ts.All()
 	data := make([]map[string]string, len(triples))
@@ -601,7 +699,8 @@ Example:
   regula validate --source gdpr.txt --threshold 0.85
   regula validate --source gdpr.txt --format json
   regula validate --source gdpr.txt --check references
-  regula validate --source ccpa.txt --profile CCPA`,
+  regula validate --source ccpa.txt --profile CCPA
+  regula validate --source gdpr.txt --check gates`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			source, _ := cmd.Flags().GetString("source")
 			checkType, _ := cmd.Flags().GetString("check")
@@ -609,14 +708,21 @@ Example:
 			baseURI, _ := cmd.Flags().GetString("base-uri")
 			threshold, _ := cmd.Flags().GetFloat64("threshold")
 			profileName, _ := cmd.Flags().GetString("profile")
+			skipGates, _ := cmd.Flags().GetStringSlice("skip-gates")
+			strictMode, _ := cmd.Flags().GetBool("strict")
+			failOnWarn, _ := cmd.Flags().GetBool("fail-on-warn")
 
 			if source == "" {
 				return fmt.Errorf("--source flag is required")
 			}
 
 			// Check if file exists
-			if _, err := os.Stat(source); os.IsNotExist(err) {
+			fileInfo, err := os.Stat(source)
+			if os.IsNotExist(err) {
 				return fmt.Errorf("source file not found: %s", source)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to stat source: %w", err)
 			}
 
 			// Parse document
@@ -681,6 +787,48 @@ Example:
 				return nil
 			}
 
+			// Gate-based validation
+			if checkType == "gates" {
+				gateConfig := &validate.ValidationConfig{
+					Thresholds: make(map[string]float64),
+					SkipGates:  skipGates,
+					StrictMode: strictMode,
+					FailOnWarn: failOnWarn,
+				}
+				gatePipeline := validate.NewGatePipeline(gateConfig)
+				gatePipeline.RegisterDefaultGates()
+
+				gateContext := &validate.ValidationContext{
+					SourcePath:         source,
+					SourceSize:         fileInfo.Size(),
+					Document:           doc,
+					Definitions:        definitions,
+					References:         refs,
+					Semantics:          annotations,
+					TermUsages:         usages,
+					ResolvedReferences: resolved,
+					TripleStore:        ts,
+					Config:             gateConfig,
+				}
+
+				gateReport := gatePipeline.Run(gateContext)
+
+				if formatStr == "json" {
+					jsonData, err := gateReport.ToJSON()
+					if err != nil {
+						return fmt.Errorf("failed to serialize gate report: %w", err)
+					}
+					fmt.Println(string(jsonData))
+				} else {
+					fmt.Print(gateReport.String())
+				}
+
+				if !gateReport.OverallPass {
+					return fmt.Errorf("gate validation failed: overall score %.1f%%", gateReport.TotalScore*100)
+				}
+				return nil
+			}
+
 			// Full validation
 			validator := validate.NewValidator(threshold)
 
@@ -719,11 +867,14 @@ Example:
 	}
 
 	cmd.Flags().StringP("source", "s", "", "Source document path")
-	cmd.Flags().String("check", "all", "What to check (all, references)")
+	cmd.Flags().String("check", "all", "What to check (all, references, gates)")
 	cmd.Flags().StringP("format", "f", "text", "Output format (text, json)")
 	cmd.Flags().String("base-uri", "https://regula.dev/regulations/", "Base URI for the graph")
 	cmd.Flags().Float64("threshold", 0.80, "Pass/fail threshold (0.0-1.0)")
 	cmd.Flags().String("profile", "", "Validation profile (GDPR, CCPA, Generic) - auto-detected if not specified")
+	cmd.Flags().StringSlice("skip-gates", []string{}, "Gates to skip (V0,V1,V2,V3)")
+	cmd.Flags().Bool("strict", false, "Halt pipeline on gate failure")
+	cmd.Flags().Bool("fail-on-warn", false, "Halt pipeline on gate warnings")
 
 	return cmd
 }
