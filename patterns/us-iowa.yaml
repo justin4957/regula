@@ -1,0 +1,139 @@
+# US Iowa Code Format Pattern
+# Detects and parses Iowa state legislation (including ICDPA)
+#
+# This pattern file defines Iowa-specific patterns for:
+#   - pkg/extract/parser.go (format detection, section parsing, definition extraction)
+#   - pkg/extract/reference.go (internal and external cross-references)
+
+name: "Iowa Code"
+format_id: "us-iowa"
+version: "2.0.0"
+jurisdiction: "US-IA"
+
+detection:
+  required_indicators:
+    - pattern: '(?i)\bIOWA\b'
+      weight: 25
+    - pattern: '(?i)(?:Section|§)\s*715D\.\d+'
+      weight: 30
+
+  optional_indicators:
+    - pattern: '(?i)\bIowa\s+Consumer\s+Data\s+Protection\s+Act\b'
+      weight: 15
+    - pattern: '\bICDPA\b'
+      weight: 12
+    - pattern: '(?i)\bIowa\s+Code\b'
+      weight: 10
+    - pattern: '(?i)\bChapter\s+715D\b'
+      weight: 15
+    - pattern: '(?i)\bIowa\s+Code\s+Ann\.?'
+      weight: 10
+    - pattern: '\bsubsection\s+\(\d+\)'
+      weight: 5
+    - pattern: '(?i)\bSenate\s+File\s+262\b'
+      weight: 10
+
+  negative_indicators:
+    - pattern: '\bEuropean\s+(Union|Parliament)\b'
+      weight: -20
+    - pattern: '(?i)\bRegulation\s+\(E[CU]\)'
+      weight: -25
+    - pattern: '(?i)\bDirective\s+\d{4}/\d+/(EC|EU)\b'
+      weight: -20
+    - pattern: '(?i)\bCALIFORNIA\b'
+      weight: -10
+    - pattern: '(?i)\bVIRGINIA\b'
+      weight: -10
+    - pattern: '(?i)\bCOLORADO\b'
+      weight: -10
+    - pattern: '(?i)\bCONNECTICUT\b'
+      weight: -10
+    - pattern: '(?i)\bTEXAS\b'
+      weight: -10
+    - pattern: '(?i)\bUTAH\b'
+      weight: -10
+    - pattern: '(?i)\bSection\s+1798\.'
+      weight: -15
+    - pattern: '(?i)\bSection\s+59\.1-'
+      weight: -15
+    - pattern: '(?i)\bSection\s+6-1-1[23]\d{2}'
+      weight: -10
+    - pattern: '(?i)\bSection\s+42-5\d{2}'
+      weight: -10
+    - pattern: '(?i)\bSection\s+541\.\d+'
+      weight: -10
+    - pattern: '(?i)\bSection\s+13-61-'
+      weight: -10
+
+structure:
+  hierarchy:
+    # Iowa Code: Section 715D.1
+    - type: "section"
+      pattern: '^(?:Section|§)\s*(\d+[A-Z])\.(\d+)$'
+      number_group: 2
+      title_follows: true
+
+    - type: "subdivision"
+      pattern: '^\((\d+)\)\s+'
+      number_group: 1
+
+    - type: "paragraph"
+      pattern: '^\(([a-z])\)\s+'
+      number_group: 1
+
+definitions:
+  location:
+    - section_title: '(?i)definitions?'
+    - section_number: 1
+
+  # Iowa style: (1) "term" means or (1) 'term' means
+  pattern: "^\\((\\d+)\\)\\s+[\\x{2018}\\x{2019}''\"]([^\\x{2018}\\x{2019}''\"]+)[\\x{2018}\\x{2019}''\"]\\s+means"
+
+references:
+  internal:
+    # Section with subsection: Section 715D.1(1)(a)
+    - pattern: '(?:Section|§)\s*(\d+[A-Z])\.(\d+)\((\d+)\)(?:\(([a-z])\))?'
+      target: "section"
+      groups:
+        chapter: 1
+        section: 2
+        subdivision: 3
+        paragraph: 4
+
+    # Simple section reference: Section 715D.1
+    - pattern: '(?:Section|§)\s*(\d+[A-Z])\.(\d+)'
+      target: "section"
+      groups:
+        chapter: 1
+        section: 2
+
+    # Subsection reference: subsection (1)
+    - pattern: 'subsection\s+\((\d+)\)'
+      target: "subdivision"
+      groups:
+        number: 1
+
+  external:
+    # US Code: 15 U.S.C. Section 6801
+    - pattern: '(\d+)\s+U\.?S\.?C\.?\s+(?:Section|Sec\.?|§)\s*(\d+[a-z]?)'
+      type: "usc"
+      uri_template: "https://www.law.cornell.edu/uscode/text/{title}/{section}"
+      groups:
+        title: 1
+        section: 2
+
+    # CFR: 16 C.F.R. Part 314
+    - pattern: '(\d+)\s+C\.?F\.?R\.?\s+(?:Part[s]?\s+)?(\d+)'
+      type: "cfr"
+      uri_template: ""
+      groups:
+        title: 1
+        part: 2
+
+    # Public Law: Public Law 104-191
+    - pattern: '(?:Public\s+Law|P\.L\.)\s+(\d+)-(\d+)'
+      type: "public_law"
+      uri_template: "https://www.congress.gov/public-laws/{congress}/pl{number}"
+      groups:
+        congress: 1
+        number: 2

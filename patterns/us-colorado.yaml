@@ -1,0 +1,157 @@
+# US Colorado Code Format Pattern
+# Detects and parses Colorado state legislation (including CPA)
+#
+# This pattern file defines Colorado-specific patterns for:
+#   - pkg/extract/parser.go (format detection, section parsing, definition extraction)
+#   - pkg/extract/reference.go (internal and external cross-references)
+
+name: "Colorado Revised Statutes"
+format_id: "us-colorado"
+version: "2.0.0"
+jurisdiction: "US-CO"
+
+detection:
+  required_indicators:
+    - pattern: '(?i)\bCOLORADO\b'
+      weight: 25
+    - pattern: '(?i)(?:Section|§)\s*6-1-1[23]\d{2}'
+      weight: 30
+
+  optional_indicators:
+    - pattern: '(?i)\bC\.R\.S\.?\s*(?:§\s*)?6-1-1[23]\d{2}'
+      weight: 15
+    - pattern: '(?i)\bColorado\s+Privacy\s+Act\b'
+      weight: 15
+    - pattern: '(?i)\bColorado\s+Revised\s+Statutes\b'
+      weight: 10
+    - pattern: '(?i)\bTitle\s+6\b'
+      weight: 8
+    - pattern: '(?i)\bArticle\s+1\b'
+      weight: 5
+    - pattern: '(?i)\bPart\s+13\b'
+      weight: 10
+    - pattern: '\bCPA\b'
+      weight: 8
+    - pattern: '(?im)^PART\s+\d+'
+      weight: 5
+    - pattern: '\bsubsection\s+\(\d+\)'
+      weight: 5
+
+  negative_indicators:
+    - pattern: '\bEuropean\s+(Union|Parliament)\b'
+      weight: -20
+    - pattern: '(?i)\bRegulation\s+\(E[CU]\)'
+      weight: -25
+    - pattern: '(?i)\bDirective\s+\d{4}/\d+/(EC|EU)\b'
+      weight: -20
+    - pattern: '(?i)\bCALIFORNIA\b'
+      weight: -10
+    - pattern: '(?i)\bVIRGINIA\b'
+      weight: -10
+    - pattern: '(?i)\bCONNECTICUT\b'
+      weight: -10
+    - pattern: '(?i)\bTEXAS\b'
+      weight: -10
+    - pattern: '(?i)\bUTAH\b'
+      weight: -10
+    - pattern: '(?i)\bIOWA\b'
+      weight: -10
+    - pattern: '(?i)\bSection\s+1798\.'
+      weight: -15
+    - pattern: '(?i)\bSection\s+59\.1-'
+      weight: -15
+    - pattern: '(?i)\bSection\s+42-5\d{2}'
+      weight: -10
+    - pattern: '(?i)\bSection\s+541\.\d+'
+      weight: -10
+    - pattern: '(?i)\bSection\s+13-61-'
+      weight: -10
+
+structure:
+  hierarchy:
+    - type: "part"
+      pattern: '^PART\s+(\d+)$'
+      number_group: 1
+      title_follows: true
+
+    - type: "section"
+      pattern: '^(?:Section|§)\s*(\d+)-(\d+)-(\d+)\.?$'
+      number_group: 3
+      title_follows: true
+
+    - type: "subdivision"
+      pattern: '^\((\d+)\)\s+'
+      number_group: 1
+
+    - type: "paragraph"
+      pattern: '^\(([a-z])\)\s+'
+      number_group: 1
+
+    - type: "subparagraph"
+      pattern: '^\(([IVX]+)\)\s+'
+      number_group: 1
+
+definitions:
+  location:
+    - section_title: '(?i)definitions?'
+    - section_number: 1303
+
+  # Colorado style: (1) "term" means or (1) 'term' means
+  pattern: "^\\((\\d+)\\)\\s+[\\x{2018}\\x{2019}''\"']([^\\x{2018}\\x{2019}''\"']+)[\\x{2018}\\x{2019}''\"']\\s+means"
+
+references:
+  internal:
+    # Section with subsection: Section 6-1-1303(1)(a)
+    - pattern: '(?:Section|§)\s*(\d+)-(\d+)-(\d+)\((\d+)\)(?:\(([a-z])\))?'
+      target: "section"
+      groups:
+        title: 1
+        article: 2
+        section: 3
+        subdivision: 4
+        paragraph: 5
+
+    # Simple section reference: Section 6-1-1303
+    - pattern: '(?:Section|§)\s*(\d+)-(\d+)-(\d+)'
+      target: "section"
+      groups:
+        title: 1
+        article: 2
+        section: 3
+
+    # Subsection reference: subsection (1)
+    - pattern: 'subsection\s+\((\d+)\)'
+      target: "subdivision"
+      groups:
+        number: 1
+
+    # Part reference: part 13
+    - pattern: '(?i)part\s+(\d+)'
+      target: "part"
+      groups:
+        number: 1
+
+  external:
+    # US Code: 15 U.S.C. Section 6801
+    - pattern: '(\d+)\s+U\.?S\.?C\.?\s+(?:Section|Sec\.?|§)\s*(\d+[a-z]?)'
+      type: "usc"
+      uri_template: "https://www.law.cornell.edu/uscode/text/{title}/{section}"
+      groups:
+        title: 1
+        section: 2
+
+    # CFR: 16 C.F.R. Part 314
+    - pattern: '(\d+)\s+C\.?F\.?R\.?\s+(?:Part[s]?\s+)?(\d+)'
+      type: "cfr"
+      uri_template: ""
+      groups:
+        title: 1
+        part: 2
+
+    # Public Law: Public Law 104-191
+    - pattern: '(?:Public\s+Law|P\.L\.)\s+(\d+)-(\d+)'
+      type: "public_law"
+      uri_template: "https://www.congress.gov/public-laws/{congress}/pl{number}"
+      groups:
+        congress: 1
+        number: 2
