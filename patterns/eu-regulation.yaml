@@ -1,0 +1,114 @@
+# EU Regulation Format Pattern
+# Detects and parses European Union Regulation documents (including GDPR)
+
+name: "EU Regulation"
+format_id: "eu-regulation"
+version: "1.0.0"
+jurisdiction: "EU"
+
+detection:
+  required_indicators:
+    - pattern: '\bRegulation\s+\(E[CU]\)\s+(?:No\s+)?(\d+)/(\d{4})\b'
+      weight: 30
+    - pattern: '\bRegulation\s+\(EU\)\s+(\d{4})/(\d+)\b'
+      weight: 30
+
+  optional_indicators:
+    - pattern: '\bEuropean\s+Parliament\b'
+      weight: 15
+    - pattern: '\bCouncil\s+of\s+the\s+European\s+Union\b'
+      weight: 15
+    - pattern: '\bOfficial\s+Journal\s+of\s+the\s+European\s+Union\b'
+      weight: 10
+    - pattern: '\bGDPR\b'
+      weight: 12
+    - pattern: '\bGeneral\s+Data\s+Protection\s+Regulation\b'
+      weight: 15
+    - pattern: '\bArticle\s+\d+'
+      weight: 5
+    - pattern: '\bRecital\s*\(\d+\)'
+      weight: 8
+    - pattern: '\bHAVE\s+ADOPTED\s+THIS\s+REGULATION\b'
+      weight: 12
+
+  negative_indicators:
+    - pattern: '\bU\.?S\.?\s+Code\b'
+      weight: -20
+    - pattern: '\bDirective\s+\d{4}/\d+/(EC|EU)\b'
+      weight: -5
+
+structure:
+  preamble:
+    start_pattern: '^THE\s+EUROPEAN\s+PARLIAMENT\s+AND\s+THE\s+COUNCIL'
+    end_pattern: '^HAVE\s+ADOPTED\s+THIS\s+REGULATION'
+    recital_pattern: '^\((\d+)\)\s+'
+
+  hierarchy:
+    - type: "chapter"
+      pattern: '^CHAPTER\s+([IVXLCDM]+)\s*$'
+      number_group: 1
+      title_follows: true
+
+    - type: "section"
+      pattern: '^Section\s+(\d+)\s*$'
+      number_group: 1
+      title_follows: true
+
+    - type: "article"
+      pattern: '^Article\s+(\d+)\s*$'
+      number_group: 1
+      title_follows: true
+
+    - type: "paragraph"
+      pattern: '^(\d+)\.\s+'
+      number_group: 1
+
+    - type: "point"
+      pattern: '^\(([a-z])\)\s+'
+      number_group: 1
+
+    - type: "subpoint"
+      pattern: '^\(([ivx]+)\)\s+'
+      number_group: 1
+
+definitions:
+  location:
+    - section_title: '(?i)definitions?'
+    - section_number: 4
+
+  pattern: '^\((\d+)\)\s*[''"]([^''"]+)[''"]\s+means?\s+'
+
+references:
+  internal:
+    - pattern: 'Article\s+(\d+)(?:\((\d+)\))?'
+      target: "article"
+      groups:
+        article: 1
+        paragraph: 2
+
+    - pattern: 'point\s*\(([a-z])\)\s+of\s+Article\s+(\d+)'
+      target: "point"
+      groups:
+        point: 1
+        article: 2
+
+    - pattern: 'Chapter\s+([IVXLCDM]+)'
+      target: "chapter"
+      groups:
+        number: 1
+
+  external:
+    - pattern: 'Directive\s+(\d{4})/(\d+)/(EC|EU)'
+      type: "directive"
+      uri_template: "http://data.europa.eu/eli/dir/{year}/{number}/oj"
+      groups:
+        year: 1
+        number: 2
+        authority: 3
+
+    - pattern: 'Regulation\s+\(E[CU]\)\s+(?:No\s+)?(\d+)/(\d{4})'
+      type: "regulation"
+      uri_template: "http://data.europa.eu/eli/reg/{year}/{number}/oj"
+      groups:
+        number: 1
+        year: 2
