@@ -1,0 +1,193 @@
+Data Protection Act 2018
+
+[2018 c. 12]
+
+An Act to make provision for the regulation of the processing of information relating to individuals; to make provision in connection with the Information Commissioner's functions under certain regulations relating to information; to make provision for a direct marketing code of practice; and for connected purposes.
+
+BE IT ENACTED by the Queen's most Excellent Majesty, by and with the advice and consent of the Lords Spiritual and Temporal, and Commons, in this present Parliament assembled, and by the authority of the same, as follows:
+
+PART 1
+
+Preliminary
+
+1. Overview
+
+(1) This Act makes provision about the processing of personal data.
+
+(2) Most processing of personal data is subject to the GDPR.
+
+(3) Part 2 supplements the GDPR (see Chapter 2) and applies a broadly equivalent regime to certain types of processing to which the GDPR does not apply (see Chapter 3).
+
+(4) Part 3 makes provision about the processing of personal data by competent authorities for law enforcement purposes and implements the Law Enforcement Directive.
+
+(5) Part 4 makes provision about the processing of personal data by the intelligence services.
+
+(6) Part 5 makes provision about the Information Commissioner.
+
+(7) Part 6 makes provision about the enforcement of data protection legislation.
+
+(8) Part 7 supplementary and final provision.
+
+2. Protection of personal data
+
+(1) The GDPR, the applied GDPR and this Act protect individuals with regard to the processing of personal data, in particular by—
+
+(a) requiring personal data to be processed lawfully and fairly, on the basis of the data subject's consent or another specified basis,
+
+(b) conferring rights on the data subject to obtain information about the processing of personal data, to obtain and rectify personal data and to object to processing in certain circumstances, and
+
+(c) conferring functions on the Commissioner, giving the holder of that office responsibility for monitoring and enforcing their provisions.
+
+(2) When carrying out functions under the GDPR, the applied GDPR and this Act, the Commissioner must have regard to the importance of securing an appropriate level of protection for personal data, taking account of the interests of data subjects, controllers and others and matters of general public interest.
+
+3. Terms used in this Act
+
+(1) This section defines terms for use in this Act.
+
+(2) "Personal data" means any information relating to an identified or identifiable living individual.
+
+(3) "Controller" means the natural or legal person, public authority, agency or other body which, alone or jointly with others, determines the purposes and means of the processing of personal data.
+
+(4) "Processor" means a natural or legal person, public authority, agency or other body which processes personal data on behalf of the controller.
+
+(5) "Commissioner" means the Information Commissioner (see section 114).
+
+PART 2
+
+General Processing
+
+4. "The GDPR" and "the applied GDPR"
+
+(1) In this Act, "the GDPR" means Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation).
+
+(2) In this Act, "the applied GDPR" has the meaning given in section 21.
+
+5. Definitions for Part 2
+
+In this Part, each of the terms listed in the left-hand column of the following table has the meaning given by, or is to be interpreted in accordance with, the provision of the GDPR listed in the right-hand column.
+
+PART 3
+
+Law Enforcement Processing
+
+6. Meaning of "competent authority"
+
+(1) In this Part, "competent authority" means any person who is—
+
+(a) a person specified or described in Schedule 7, and
+
+(b) a person who has statutory functions for any of the law enforcement purposes.
+
+7. Meaning of "law enforcement purposes"
+
+In this Part, "the law enforcement purposes" are the purposes of the prevention, investigation, detection or prosecution of criminal offences or the execution of criminal penalties, including the safeguarding against and the prevention of threats to public security.
+
+8. Lawfulness of processing
+
+(1) This section applies for the purposes of this Part.
+
+(2) The processing of personal data for any of the law enforcement purposes is lawful only if and to the extent that it is based on law and either—
+
+(a) the data subject has given consent to the processing for that purpose, or
+
+(b) the processing is necessary for the performance of a task carried out for that purpose by a competent authority.
+
+PART 4
+
+Intelligence Services Processing
+
+9. Overview
+
+This Part makes provision about the processing of personal data by the intelligence services.
+
+10. Interpretation of this Part
+
+(1) In this Part, "the intelligence services" means—
+
+(a) the Security Service,
+
+(b) the Secret Intelligence Service, and
+
+(c) the Government Communications Headquarters.
+
+PART 5
+
+The Information Commissioner
+
+11. The Commissioner
+
+(1) There is to continue to be an Information Commissioner.
+
+(2) Schedule 12 makes provision about the Commissioner.
+
+12. Commissioner's general duties
+
+(1) The Commissioner must—
+
+(a) monitor and enforce Part 3 and Part 4,
+
+(b) promote public awareness and understanding of the risks, rules, safeguards and rights in relation to processing,
+
+(c) advise Parliament, the government and other institutions and bodies on legislative and administrative measures,
+
+(d) promote the awareness of controllers and processors of their obligations,
+
+(e) on request, provide information to a data subject concerning the exercise of the data subject's rights, and
+
+(f) conduct investigations on the application of the data protection legislation.
+
+PART 6
+
+Enforcement
+
+13. Information notices
+
+(1) The Commissioner may, by written notice (an "information notice")—
+
+(a) require a controller or processor to provide the Commissioner with information that the Commissioner reasonably requires for the purposes of carrying out the Commissioner's functions, or
+
+(b) require any person to provide the Commissioner with information that the Commissioner reasonably requires for the purposes of—
+
+(i) investigating a suspected failure to comply, or
+
+(ii) determining whether the data protection legislation has been complied with.
+
+14. Assessment notices
+
+(1) The Commissioner may, by written notice (an "assessment notice"), require a controller or processor to permit the Commissioner to carry out an assessment of whether the controller or processor has complied or is complying with the data protection legislation.
+
+PART 7
+
+Supplementary and Final
+
+15. Commencement
+
+(1) The following provisions of this Act come into force on the day on which this Act is passed—
+
+(a) Part 1,
+
+(b) this Part.
+
+(2) The remaining provisions of this Act come into force on such day as the Secretary of State may by regulations made by statutory instrument appoint.
+
+16. Short title
+
+This Act may be cited as the Data Protection Act 2018.
+
+SCHEDULE 1
+
+Conditions for sensitive processing
+
+1. The processing is necessary for the exercise or performance of a right or obligation which is imposed or conferred by law on the controller or the data subject in connection with employment.
+
+2. The processing is necessary for reasons of substantial public interest.
+
+3. The processing is necessary to protect the vital interests of the data subject or of another individual.
+
+SCHEDULE 2
+
+Exemptions
+
+1. This Schedule makes provision about exemptions from specified provisions of the data protection legislation.
+
+2. Processing for the purposes of journalism, academic, artistic or literary purposes is exempt from certain provisions of the GDPR.

@@ -1,14 +1,17 @@
 # UK Statutory Instrument Format Pattern
 # Detects and parses UK secondary legislation (Statutory Instruments)
+#
+# This pattern file consolidates UK SI patterns for format detection,
+# structure parsing, definition extraction, and cross-reference resolution.
 
 name: "UK Statutory Instrument"
 format_id: "uk-si"
-version: "1.0.0"
+version: "2.0.0"
 jurisdiction: "GB"
 
 detection:
   required_indicators:
-    - pattern: '\bStatutory\s+Instrument[s]?\s+\d{4}\s+No\.\s*\d+'
+    - pattern: '(?i)\bStatutory\s+Instrument[s]?\s+\d{4}\s+No\.\s*\d+'
       weight: 30
     - pattern: '\bS\.?I\.?\s+\d{4}/\d+'
       weight: 25
@@ -16,25 +19,36 @@ detection:
   optional_indicators:
     - pattern: '\bMade\s+\d{1,2}(?:st|nd|rd|th)?\s+\w+\s+\d{4}'
       weight: 10
-    - pattern: '\bLaid\s+before\s+Parliament'
+    - pattern: '(?i)\bLaid\s+before\s+Parliament'
       weight: 15
-    - pattern: '\bComing\s+into\s+force'
+    - pattern: '(?i)\bComing\s+into\s+force'
       weight: 10
-    - pattern: '\bSecretary\s+of\s+State'
+    - pattern: '(?i)\bSecretary\s+of\s+State'
       weight: 8
-    - pattern: '\bregulation\s+\d+'
+    - pattern: '(?i)\bregulation\s+\d+'
       weight: 5
-    - pattern: '\bSchedule\s+\d+'
+    - pattern: '(?i)\bSchedule\s+\d+'
       weight: 5
-    - pattern: '\bEXPLANATORY\s+NOTE'
+    - pattern: '(?i)\bEXPLANATORY\s+NOTE'
       weight: 10
+    - pattern: '(?i)\bMade\s+under'
+      weight: 8
+    - pattern: '(?i)\bScottish\s+Statutory\s+Instrument'
+      weight: 5
 
   negative_indicators:
-    - pattern: '\bU\.?S\.?\s+Code\b'
+    - pattern: '(?i)\bU\.?S\.?\s+Code\b'
       weight: -20
-    - pattern: '\bEuropean\s+Parliament\b'
+    - pattern: '(?i)\bEuropean\s+Parliament\b'
       weight: -10
-    - pattern: '\bCalifornia\s+Civil\s+Code\b'
+    - pattern: '(?i)\bCalifornia\b'
+      weight: -20
+    - pattern: '(?i)\bVIRGINIA\b'
+      weight: -10
+    # Penalize when document is an Act, not an SI
+    - pattern: '(?i)\bBE\s+IT\s+ENACTED\b'
+      weight: -25
+    - pattern: '\[\d{4}\s+c\.\s*\d+\]'
       weight: -20
 
 structure:

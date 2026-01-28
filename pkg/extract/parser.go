@@ -30,6 +30,7 @@ type DocumentFormat string
 const (
 	FormatEU      DocumentFormat = "eu" // EU-style: CHAPTER I, Article 1
 	FormatUS      DocumentFormat = "us" // US-style: CHAPTER 1, Section 1798.100
+	FormatUK      DocumentFormat = "uk" // UK-style: PART 1, numbered sections
 	FormatUnknown DocumentFormat = "unknown"
 )
 
@@ -115,6 +116,12 @@ type Parser struct {
 	// Virginia Code style patterns (Section 59.1-575)
 	vaSectionPattern *regexp.Regexp
 
+	// UK-style patterns (Acts and Statutory Instruments)
+	ukPartPattern       *regexp.Regexp
+	ukSectionPattern    *regexp.Regexp
+	ukSchedulePattern   *regexp.Regexp
+	ukDefinitionPattern *regexp.Regexp
+
 	// Common patterns
 	paragraphPattern    *regexp.Regexp
 	pointPattern        *regexp.Regexp
@@ -146,6 +153,12 @@ func NewParser() *Parser {
 
 		// Virginia Code style: Section 59.1-575 or § 59.1-575
 		vaSectionPattern: regexp.MustCompile(`^(?:Section|§)\s*(\d+\.\d+)-(\d+)\.?$`),
+
+		// UK-style patterns (Acts and Statutory Instruments)
+		ukPartPattern:       regexp.MustCompile(`^PART\s+(\d+)\s*$`),
+		ukSectionPattern:    regexp.MustCompile(`^(\d+)\.\s*[-—]?\s*(.+)$`),
+		ukSchedulePattern:   regexp.MustCompile(`^SCHEDULE\s+(\d+)\s*$`),
+		ukDefinitionPattern: regexp.MustCompile(`(?m)^(?:\(\d+\)\s+)?[\x{201c}\x{201d}""]([^\x{201c}\x{201d}""]+)[\x{201c}\x{201d}""]\s+(?:means?|has\s+the\s+(?:same\s+)?meaning)`),
 
 		// Common patterns
 		paragraphPattern:    regexp.MustCompile(`^(\d+)\.\s+(.*)$`),
@@ -234,6 +247,32 @@ func (p *Parser) applyUSPatternBridge(bridge *pattern.PatternBridge) {
 	}
 }
 
+// applyUKPatternBridge configures the parser to use compiled patterns from the
+// pattern bridge for UK document parsing. This replaces the hardcoded UK regex
+// patterns with the ones loaded from the YAML pattern library.
+func (p *Parser) applyUKPatternBridge(bridge *pattern.PatternBridge) {
+	if bridge == nil {
+		return
+	}
+	p.patternBridge = bridge
+
+	// Override UK hierarchy patterns from the pattern library
+	if partPattern := bridge.HierarchyPattern("part"); partPattern != nil {
+		p.ukPartPattern = partPattern
+	}
+	if sectionPattern := bridge.HierarchyPattern("section"); sectionPattern != nil {
+		p.ukSectionPattern = sectionPattern
+	}
+	if schedulePattern := bridge.HierarchyPattern("schedule"); schedulePattern != nil {
+		p.ukSchedulePattern = schedulePattern
+	}
+
+	// Override UK definition pattern from pattern library
+	if defPattern := bridge.DefinitionPattern(); defPattern != nil {
+		p.ukDefinitionPattern = defPattern
+	}
+}
+
 // Parse parses the regulatory text from a reader and returns a structured Document.
 func (p *Parser) Parse(r io.Reader) (*Document, error) {
 	scanner := bufio.NewScanner(r)
@@ -268,6 +307,8 @@ func (p *Parser) Parse(r io.Reader) (*Document, error) {
 	switch p.format {
 	case FormatUS:
 		p.parseUSDocument(doc, lines)
+	case FormatUK:
+		p.parseUKDocument(doc, lines)
 	default:
 		// EU format (default)
 		p.parseEUDocument(doc, lines)
@@ -296,6 +337,9 @@ func (p *Parser) detectFormat(lines []string) DocumentFormat {
 			case "US", "US-Federal":
 				p.applyUSPatternBridge(bridge)
 				return FormatUS
+			case "GB", "GB-SCT":
+				p.applyUKPatternBridge(bridge)
+				return FormatUK
 			}
 		}
 	}
@@ -309,8 +353,11 @@ func (p *Parser) detectFormat(lines []string) DocumentFormat {
 func (p *Parser) detectFormatLegacy(lines []string) DocumentFormat {
 	euIndicators := 0
 	usIndicators := 0
+	ukIndicators := 0
 
 	for _, line := range lines {
+		upper := strings.ToUpper(strings.TrimSpace(line))
+
 		// EU indicators
 		if p.euChapterPattern.MatchString(line) {
 			euIndicators += 2
@@ -332,10 +379,10 @@ func (p *Parser) detectFormatLegacy(lines []string) DocumentFormat {
 		if p.usSectionNumPattern.MatchString(line) {
 			usIndicators += 2
 		}
-		if strings.Contains(strings.ToUpper(line), "CALIFORNIA") {
+		if strings.Contains(upper, "CALIFORNIA") {
 			usIndicators += 2
 		}
-		if strings.Contains(strings.ToUpper(line), "VIRGINIA") {
+		if strings.Contains(upper, "VIRGINIA") {
 			usIndicators += 2
 		}
 		if strings.Contains(line, "TITLE 1.81") || strings.Contains(line, "Section 1798") {
@@ -345,8 +392,42 @@ func (p *Parser) detectFormatLegacy(lines []string) DocumentFormat {
 		if strings.Contains(line, "Section 59.1-") || strings.Contains(line, "§ 59.1-") {
 			usIndicators += 3
 		}
+
+		// UK indicators
+		if strings.Contains(upper, "BE IT ENACTED") {
+			ukIndicators += 3
+		}
+		if strings.Contains(upper, "STATUTORY INSTRUMENT") {
+			ukIndicators += 3
+		}
+		if strings.Contains(upper, "ROYAL ASSENT") {
+			ukIndicators += 2
+		}
+		if strings.Contains(upper, "LORDS SPIRITUAL AND TEMPORAL") {
+			ukIndicators += 2
+		}
+		if strings.Contains(upper, "HOUSE OF COMMONS") {
+			ukIndicators += 2
+		}
+		if p.ukPartPattern.MatchString(strings.TrimSpace(line)) {
+			ukIndicators++
+		}
+		if p.ukSchedulePattern.MatchString(strings.TrimSpace(line)) {
+			ukIndicators++
+		}
+		// Chapter citation: [2018 c. 12]
+		if matched, _ := regexp.MatchString(`\[\d{4}\s+c\.\s*\d+\]`, line); matched {
+			ukIndicators += 3
+		}
+		// SI number: S.I. 2018/1234
+		if matched, _ := regexp.MatchString(`S\.?I\.?\s+\d{4}/\d+`, line); matched {
+			ukIndicators += 3
+		}
 	}
 
+	if ukIndicators > euIndicators && ukIndicators > usIndicators {
+		return FormatUK
+	}
 	if usIndicators > euIndicators {
 		return FormatUS
 	}
@@ -379,6 +460,8 @@ func (p *Parser) detectDocumentType(lines []string) DocumentType {
 // extractIdentifier extracts the document identifier based on format.
 func (p *Parser) extractIdentifier(lines []string) string {
 	switch p.format {
+	case FormatUK:
+		return p.extractUKIdentifier(lines)
 	case FormatUS:
 		// Look for Virginia Code style identifiers first
 		for i := 0; i < min(20, len(lines)); i++ {
@@ -581,6 +664,277 @@ func (p *Parser) parseUSDocument(doc *Document, lines []string) {
 
 	// Extract definitions
 	doc.Definitions = p.extractUSDefinitions(doc)
+}
+
+// extractUKIdentifier extracts an identifier from UK legislation.
+// For Acts: chapter citation like [2018 c. 12]
+// For SIs: SI number like S.I. 2019/419 or Statutory Instruments 2019 No. 419
+func (p *Parser) extractUKIdentifier(lines []string) string {
+	chapterCitationPattern := regexp.MustCompile(`\[(\d{4})\s+c\.\s*(\d+)\]`)
+	siShortPattern := regexp.MustCompile(`S\.?I\.?\s+(\d{4})/(\d+)`)
+	siLongPattern := regexp.MustCompile(`(?i)Statutory\s+Instruments?\s+(\d{4})\s+No\.\s*(\d+)`)
+
+	for i := 0; i < min(30, len(lines)); i++ {
+		// Check for chapter citation: [2018 c. 12]
+		if m := chapterCitationPattern.FindStringSubmatch(lines[i]); m != nil {
+			return fmt.Sprintf("%s c. %s", m[1], m[2])
+		}
+		// Check for short SI number: S.I. 2019/419
+		if m := siShortPattern.FindStringSubmatch(lines[i]); m != nil {
+			return fmt.Sprintf("S.I. %s/%s", m[1], m[2])
+		}
+		// Check for long SI number: Statutory Instruments 2019 No. 419
+		if m := siLongPattern.FindStringSubmatch(lines[i]); m != nil {
+			return fmt.Sprintf("S.I. %s/%s", m[1], m[2])
+		}
+	}
+	return ""
+}
+
+// parseUKDocument parses a UK-style document (Acts of Parliament, Statutory Instruments).
+// UK Acts use numbered sections (1, 2, 3...) with inline titles, grouped into Parts.
+// UK SIs use numbered regulations with similar structure.
+func (p *Parser) parseUKDocument(doc *Document, lines []string) {
+	var currentChapter *Chapter // Parts map to Chapters in our model
+	var currentArticle *Article // Sections/Regulations map to Articles
+	var articleText strings.Builder
+
+	// Track section title for next line (when title_follows is true)
+	pendingSectionTitle := false
+	var pendingArticle *Article
+
+	// Find where preamble ends and main body starts
+	mainBodyStart := 0
+	enactingPattern := regexp.MustCompile(`(?i)BE\s+IT\s+ENACTED`)
+	madePattern := regexp.MustCompile(`(?i)^Made\s+\d`)
+
+	for i, line := range lines {
+		if enactingPattern.MatchString(line) || madePattern.MatchString(line) {
+			mainBodyStart = i + 1
+			break
+		}
+	}
+
+	for i := mainBodyStart; i < len(lines); i++ {
+		line := lines[i]
+		trimmedLine := strings.TrimSpace(line)
+
+		// Check for PART (maps to Chapter in our model)
+		if m := p.ukPartPattern.FindStringSubmatch(trimmedLine); m != nil {
+			// Save previous article
+			if currentArticle != nil {
+				currentArticle.Text = strings.TrimSpace(articleText.String())
+				p.addArticle(currentChapter, nil, currentArticle)
+				currentArticle = nil
+				articleText.Reset()
+			}
+
+			// Get part title (next non-empty line)
+			title := ""
+			for j := i + 1; j < len(lines) && j < i+5; j++ {
+				if strings.TrimSpace(lines[j]) != "" {
+					title = strings.TrimSpace(lines[j])
+					break
+				}
+			}
+
+			currentChapter = &Chapter{
+				Number:   m[1],
+				Title:    title,
+				Sections: make([]*Section, 0),
+				Articles: make([]*Article, 0),
+			}
+			doc.Chapters = append(doc.Chapters, currentChapter)
+			continue
+		}
+
+		// Check for SCHEDULE (also maps to Chapter)
+		if m := p.ukSchedulePattern.FindStringSubmatch(trimmedLine); m != nil {
+			// Save previous article
+			if currentArticle != nil {
+				currentArticle.Text = strings.TrimSpace(articleText.String())
+				p.addArticle(currentChapter, nil, currentArticle)
+				currentArticle = nil
+				articleText.Reset()
+			}
+
+			// Get schedule title (next non-empty line)
+			title := ""
+			for j := i + 1; j < len(lines) && j < i+5; j++ {
+				if strings.TrimSpace(lines[j]) != "" {
+					title = strings.TrimSpace(lines[j])
+					break
+				}
+			}
+
+			currentChapter = &Chapter{
+				Number:   "S" + m[1], // Prefix with S to distinguish from Parts
+				Title:    title,
+				Sections: make([]*Section, 0),
+				Articles: make([]*Article, 0),
+			}
+			doc.Chapters = append(doc.Chapters, currentChapter)
+			continue
+		}
+
+		// Check for numbered section (UK Acts: "1 Overview" or "1.—(1) Citation")
+		if m := p.ukSectionPattern.FindStringSubmatch(trimmedLine); m != nil {
+			// Save previous article
+			if currentArticle != nil {
+				currentArticle.Text = strings.TrimSpace(articleText.String())
+				p.addArticle(currentChapter, nil, currentArticle)
+			}
+
+			sectionNum, _ := strconv.Atoi(m[1])
+
+			// Title is inline in group 2 for UK Acts
+			sectionTitle := ""
+			if len(m) > 2 {
+				sectionTitle = strings.TrimSpace(m[2])
+				// Remove any leading dash/em-dash followed by content
+				sectionTitle = strings.TrimLeft(sectionTitle, "—-")
+				sectionTitle = strings.TrimSpace(sectionTitle)
+			}
+
+			// If title is empty, look at the next non-empty line
+			if sectionTitle == "" {
+				pendingSectionTitle = true
+			}
+
+			currentArticle = &Article{
+				Number: sectionNum,
+				Title:  sectionTitle,
+			}
+			if pendingSectionTitle {
+				pendingArticle = currentArticle
+			}
+			articleText.Reset()
+
+			// Ensure there's at least a default chapter
+			if currentChapter == nil {
+				currentChapter = &Chapter{
+					Number:   "1",
+					Title:    "",
+					Sections: make([]*Section, 0),
+					Articles: make([]*Article, 0),
+				}
+				doc.Chapters = append(doc.Chapters, currentChapter)
+			}
+			continue
+		}
+
+		// Set section title from line after section header (when title_follows)
+		if pendingSectionTitle && pendingArticle != nil && trimmedLine != "" {
+			pendingArticle.Title = trimmedLine
+			pendingSectionTitle = false
+			pendingArticle = nil
+			continue
+		}
+
+		// Accumulate article text
+		if currentArticle != nil && trimmedLine != "" {
+			// Skip lines that are the section title
+			if currentArticle.Title != "" && trimmedLine == currentArticle.Title {
+				continue
+			}
+			if articleText.Len() > 0 {
+				articleText.WriteString("\n")
+			}
+			articleText.WriteString(trimmedLine)
+		}
+	}
+
+	// Save last article
+	if currentArticle != nil {
+		currentArticle.Text = strings.TrimSpace(articleText.String())
+		p.addArticle(currentChapter, nil, currentArticle)
+	}
+
+	// Extract definitions
+	doc.Definitions = p.extractUKDefinitions(doc)
+}
+
+// extractUKDefinitions extracts defined terms from UK legislation.
+// UK Acts typically define terms in an "Interpretation" section using the pattern:
+//
+//	"term" means ...
+func (p *Parser) extractUKDefinitions(doc *Document) []*Definition {
+	definitions := make([]*Definition, 0)
+
+	// Determine definition locations from pattern bridge or search by title
+	defArticleNumbers := []int{}
+	var defTitleRegexps []*regexp.Regexp
+
+	if p.patternBridge != nil {
+		bridgeLocations := p.patternBridge.DefinitionLocations()
+		for _, loc := range bridgeLocations {
+			if loc.SectionNumber > 0 {
+				defArticleNumbers = append(defArticleNumbers, loc.SectionNumber)
+			}
+			if loc.SectionTitle != "" {
+				compiled, err := regexp.Compile(loc.SectionTitle)
+				if err == nil {
+					defTitleRegexps = append(defTitleRegexps, compiled)
+				}
+			}
+		}
+	}
+
+	// Fallback title patterns if bridge doesn't provide any
+	if len(defTitleRegexps) == 0 {
+		defTitleRegexps = []*regexp.Regexp{
+			regexp.MustCompile(`(?i)interpretation|definitions?|terms`),
+		}
+	}
+
+	// Find the definitions article
+	var defArticle *Article
+	for _, chapter := range doc.Chapters {
+		for _, article := range chapter.Articles {
+			// Check by section number
+			for _, defNum := range defArticleNumbers {
+				if article.Number == defNum {
+					defArticle = article
+					break
+				}
+			}
+			if defArticle != nil {
+				break
+			}
+			// Check by title pattern
+			for _, titleRegexp := range defTitleRegexps {
+				if titleRegexp.MatchString(article.Title) {
+					defArticle = article
+					break
+				}
+			}
+			if defArticle != nil {
+				break
+			}
+		}
+		if defArticle != nil {
+			break
+		}
+	}
+
+	if defArticle == nil || defArticle.Text == "" {
+		return definitions
+	}
+
+	// Parse UK-style definitions: "term" means ...
+	allLines := strings.Split(defArticle.Text, "\n")
+	defNum := 0
+	for _, line := range allLines {
+		if m := p.ukDefinitionPattern.FindStringSubmatch(line); m != nil {
+			defNum++
+			definitions = append(definitions, &Definition{
+				Number: defNum,
+				Term:   strings.TrimSpace(m[1]),
+			})
+		}
+	}
+
+	return definitions
 }
 
 // preambleEndPattern returns the compiled preamble end pattern from the
