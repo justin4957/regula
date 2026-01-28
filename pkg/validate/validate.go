@@ -128,7 +128,8 @@ type SemanticValidation struct {
 	ArticlesWithRights int    `json:"articles_with_rights"`
 	ArticlesWithOblig  int    `json:"articles_with_obligations"`
 
-	// Known GDPR rights validation
+	// Known rights validation (regulation-aware)
+	RegulationType    string   `json:"regulation_type"` // "GDPR", "CCPA", etc.
 	KnownRightsFound  int      `json:"known_rights_found"`
 	KnownRightsTotal  int      `json:"known_rights_total"`
 	MissingRights     []string `json:"missing_rights,omitempty"`
@@ -138,9 +139,19 @@ type SemanticValidation struct {
 	ObligationTypes []string `json:"obligation_types,omitempty"`
 }
 
+// RegulationType indicates the type of regulation being validated.
+type RegulationType string
+
+const (
+	RegulationGDPR    RegulationType = "GDPR"
+	RegulationCCPA    RegulationType = "CCPA"
+	RegulationGeneric RegulationType = "Generic"
+)
+
 // Validator performs comprehensive validation on regulatory data.
 type Validator struct {
-	threshold float64
+	threshold      float64
+	regulationType RegulationType
 }
 
 // NewValidator creates a new Validator with the specified threshold.
@@ -148,7 +159,43 @@ func NewValidator(threshold float64) *Validator {
 	if threshold <= 0 || threshold > 1.0 {
 		threshold = 0.80 // Default 80% threshold
 	}
-	return &Validator{threshold: threshold}
+	return &Validator{
+		threshold:      threshold,
+		regulationType: RegulationGeneric,
+	}
+}
+
+// SetRegulationType sets the regulation type for regulation-aware validation.
+func (v *Validator) SetRegulationType(regType RegulationType) {
+	v.regulationType = regType
+}
+
+// DetectRegulationType auto-detects the regulation type from the document.
+func (v *Validator) DetectRegulationType(doc *extract.Document) RegulationType {
+	if doc == nil {
+		return RegulationGeneric
+	}
+
+	identifier := strings.ToLower(doc.Identifier)
+	title := strings.ToLower(doc.Title)
+
+	// Check for GDPR
+	if strings.Contains(identifier, "2016/679") ||
+		strings.Contains(title, "gdpr") ||
+		strings.Contains(title, "general data protection regulation") {
+		return RegulationGDPR
+	}
+
+	// Check for CCPA
+	if strings.Contains(identifier, "1798") ||
+		strings.Contains(identifier, "cal.") ||
+		strings.Contains(title, "ccpa") ||
+		strings.Contains(title, "california consumer privacy act") ||
+		strings.Contains(title, "california privacy") {
+		return RegulationCCPA
+	}
+
+	return RegulationGeneric
 }
 
 // Validate performs full validation and returns a comprehensive report.
@@ -166,6 +213,11 @@ func (v *Validator) Validate(
 		Warnings:  make([]ValidationIssue, 0),
 	}
 
+	// Auto-detect regulation type if not set
+	if v.regulationType == RegulationGeneric {
+		v.regulationType = v.DetectRegulationType(doc)
+	}
+
 	// Validate references
 	result.References = v.validateReferences(resolvedRefs)
 
@@ -175,7 +227,7 @@ func (v *Validator) Validate(
 	// Validate definitions
 	result.Definitions = v.validateDefinitions(definitions, termUsages)
 
-	// Validate semantics
+	// Validate semantics (regulation-aware)
 	result.Semantics = v.validateSemantics(semantics)
 
 	// Calculate overall score and status
@@ -403,10 +455,10 @@ func (v *Validator) validateDefinitions(definitions []*extract.DefinedTerm, usag
 // validateSemantics validates semantic extraction.
 func (v *Validator) validateSemantics(annotations []*extract.SemanticAnnotation) *SemanticValidation {
 	val := &SemanticValidation{
-		MissingRights:     make([]string, 0),
-		RightTypes:        make([]string, 0),
-		ObligationTypes:   make([]string, 0),
-		KnownRightsTotal:  6, // Known GDPR data subject rights
+		MissingRights:   make([]string, 0),
+		RightTypes:      make([]string, 0),
+		ObligationTypes: make([]string, 0),
+		RegulationType:  string(v.regulationType),
 	}
 
 	articlesWithRights := make(map[int]bool)
@@ -441,15 +493,9 @@ func (v *Validator) validateSemantics(annotations []*extract.SemanticAnnotation)
 	}
 	sort.Strings(val.ObligationTypes)
 
-	// Check for known GDPR rights
-	knownRights := map[string]bool{
-		string(extract.RightAccess):        false,
-		string(extract.RightRectification): false,
-		string(extract.RightErasure):       false,
-		string(extract.RightRestriction):   false,
-		string(extract.RightPortability):   false,
-		string(extract.RightObject):        false,
-	}
+	// Get known rights based on regulation type
+	knownRights := v.getKnownRights()
+	val.KnownRightsTotal = len(knownRights)
 
 	for rt := range rightTypesFound {
 		if _, ok := knownRights[rt]; ok {
@@ -464,8 +510,35 @@ func (v *Validator) validateSemantics(annotations []*extract.SemanticAnnotation)
 			val.MissingRights = append(val.MissingRights, right)
 		}
 	}
+	sort.Strings(val.MissingRights)
 
 	return val
+}
+
+// getKnownRights returns the known rights for the current regulation type.
+func (v *Validator) getKnownRights() map[string]bool {
+	switch v.regulationType {
+	case RegulationGDPR:
+		return map[string]bool{
+			string(extract.RightAccess):        false,
+			string(extract.RightRectification): false,
+			string(extract.RightErasure):       false,
+			string(extract.RightRestriction):   false,
+			string(extract.RightPortability):   false,
+			string(extract.RightObject):        false,
+		}
+	case RegulationCCPA:
+		return map[string]bool{
+			string(extract.RightToKnow):              false,
+			string(extract.RightToDelete):           false,
+			string(extract.RightToOptOut):           false,
+			string(extract.RightToNonDiscrimination): false,
+			string(extract.RightToKnowAboutSales):   false,
+		}
+	default:
+		// For generic regulations, don't require specific rights
+		return make(map[string]bool)
+	}
 }
 
 // calculateOverallScore computes the overall validation score and status.
@@ -537,10 +610,14 @@ func (v *Validator) calculateOverallScore(result *ValidationResult) {
 		scores = append(scores, semanticScore)
 
 		if len(result.Semantics.MissingRights) > 0 {
+			regulationName := result.Semantics.RegulationType
+			if regulationName == "" {
+				regulationName = "known"
+			}
 			result.Warnings = append(result.Warnings, ValidationIssue{
 				Category: "semantics",
 				Severity: "warning",
-				Message:  fmt.Sprintf("%d known GDPR rights were not detected", len(result.Semantics.MissingRights)),
+				Message:  fmt.Sprintf("%d %s rights were not detected", len(result.Semantics.MissingRights), regulationName),
 				Count:    len(result.Semantics.MissingRights),
 				Examples: result.Semantics.MissingRights,
 			})
@@ -654,8 +731,12 @@ func (r *ValidationResult) String() string {
 			r.Semantics.RightsCount, r.Semantics.ArticlesWithRights))
 		sb.WriteString(fmt.Sprintf("  Obligations found: %d (in %d articles)\n",
 			r.Semantics.ObligationsCount, r.Semantics.ArticlesWithOblig))
-		sb.WriteString(fmt.Sprintf("  Known GDPR rights: %d/%d\n",
-			r.Semantics.KnownRightsFound, r.Semantics.KnownRightsTotal))
+		regulationLabel := r.Semantics.RegulationType
+		if regulationLabel == "" {
+			regulationLabel = "known"
+		}
+		sb.WriteString(fmt.Sprintf("  Known %s rights: %d/%d\n",
+			regulationLabel, r.Semantics.KnownRightsFound, r.Semantics.KnownRightsTotal))
 
 		if len(r.Semantics.MissingRights) > 0 {
 			sb.WriteString("  Missing rights:\n")

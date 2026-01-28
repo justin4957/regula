@@ -20,6 +20,7 @@ const (
 type EntityType string
 
 const (
+	// GDPR Entities
 	EntityDataSubject       EntityType = "DataSubject"
 	EntityController        EntityType = "Controller"
 	EntityProcessor         EntityType = "Processor"
@@ -29,13 +30,22 @@ const (
 	EntityRecipient         EntityType = "Recipient"
 	EntityRepresentative    EntityType = "Representative"
 	EntityDataProtectionOff EntityType = "DataProtectionOfficer"
-	EntityUnspecified       EntityType = "Unspecified"
+
+	// CCPA Entities
+	EntityConsumer        EntityType = "Consumer"
+	EntityBusiness        EntityType = "Business"
+	EntityServiceProvider EntityType = "ServiceProvider"
+	EntityAttorneyGeneral EntityType = "AttorneyGeneral"
+
+	// Generic
+	EntityUnspecified EntityType = "Unspecified"
 )
 
 // RightType represents specific types of rights.
 type RightType string
 
 const (
+	// GDPR Rights
 	RightAccess          RightType = "RightOfAccess"
 	RightRectification   RightType = "RightToRectification"
 	RightErasure         RightType = "RightToErasure"
@@ -49,13 +59,25 @@ const (
 	RightCompensation    RightType = "RightToCompensation"
 	RightInformation     RightType = "RightToInformation"
 	RightNotification    RightType = "RightToNotification"
-	RightGeneric         RightType = "Right"
+
+	// CCPA Rights
+	RightToKnow              RightType = "RightToKnow"
+	RightToKnowAboutSales    RightType = "RightToKnowAboutSales"
+	RightToDelete            RightType = "RightToDelete"
+	RightToOptOut            RightType = "RightToOptOut"
+	RightToNonDiscrimination RightType = "RightToNonDiscrimination"
+	RightToCorrect           RightType = "RightToCorrect"
+	RightToLimit             RightType = "RightToLimitUse"
+
+	// Generic
+	RightGeneric RightType = "Right"
 )
 
 // ObligationType represents specific types of obligations.
 type ObligationType string
 
 const (
+	// GDPR Obligations
 	ObligationLawfulProcessing   ObligationType = "LawfulProcessingObligation"
 	ObligationConsent            ObligationType = "ConsentObligation"
 	ObligationTransparency       ObligationType = "TransparencyObligation"
@@ -71,7 +93,19 @@ const (
 	ObligationEnsure             ObligationType = "EnsureObligation"
 	ObligationImplement          ObligationType = "ImplementationObligation"
 	ObligationVerify             ObligationType = "VerificationObligation"
-	ObligationGeneric            ObligationType = "Obligation"
+
+	// CCPA Obligations
+	ObligationNoticeAtCollection ObligationType = "NoticeAtCollectionObligation"
+	ObligationPrivacyPolicy      ObligationType = "PrivacyPolicyObligation"
+	ObligationOptOutLink         ObligationType = "OptOutLinkObligation"
+	ObligationServiceProvider    ObligationType = "ServiceProviderObligation"
+	ObligationNonDiscrimination  ObligationType = "NonDiscriminationObligation"
+	ObligationVerifyRequest      ObligationType = "VerifyRequestObligation"
+	ObligationTrainPersonnel     ObligationType = "TrainPersonnelObligation"
+	ObligationDataMinimization   ObligationType = "DataMinimizationObligation"
+
+	// Generic
+	ObligationGeneric ObligationType = "Obligation"
 )
 
 // SemanticAnnotation represents an extracted right or obligation.
@@ -241,6 +275,104 @@ func (e *SemanticExtractor) initRightPatterns() {
 			Confidence:  0.9,
 			Description: "Right to be notified",
 		},
+		// CCPA-specific rights
+		{
+			Pattern:     regexp.MustCompile(`(?i)consumer\s+shall\s+have\s+the\s+right\s+to\s+request.*(?:disclose|disclosure)`),
+			Type:        SemanticRight,
+			RightType:   RightToKnow,
+			Beneficiary: EntityConsumer,
+			Confidence:  1.0,
+			Description: "CCPA Right to Know",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)right\s+to\s+(?:request\s+)?(?:know|disclosure)`),
+			Type:        SemanticRight,
+			RightType:   RightToKnow,
+			Beneficiary: EntityConsumer,
+			Confidence:  0.9,
+			Description: "Right to Know",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)consumer\s+shall\s+have\s+the\s+right\s+to\s+request.*(?:sell|sold|disclose)`),
+			Type:        SemanticRight,
+			RightType:   RightToKnowAboutSales,
+			Beneficiary: EntityConsumer,
+			Confidence:  1.0,
+			Description: "CCPA Right to Know About Sales",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)right\s+to\s+(?:request\s+)?(?:know|request).*(?:sold|shared|disclosed)`),
+			Type:        SemanticRight,
+			RightType:   RightToKnowAboutSales,
+			Beneficiary: EntityConsumer,
+			Confidence:  0.9,
+			Description: "Right to Know About Sales/Sharing",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)consumer\s+shall\s+have\s+the\s+right\s+to\s+request.*delete`),
+			Type:        SemanticRight,
+			RightType:   RightToDelete,
+			Beneficiary: EntityConsumer,
+			Confidence:  1.0,
+			Description: "CCPA Right to Delete",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)right\s+to\s+(?:request\s+)?delet(?:e|ion)`),
+			Type:        SemanticRight,
+			RightType:   RightToDelete,
+			Beneficiary: EntityConsumer,
+			Confidence:  0.95,
+			Description: "Right to Deletion",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)consumer\s+shall\s+have\s+the\s+right.*(?:opt[- ]?out|direct.*not\s+(?:to\s+)?sell)`),
+			Type:        SemanticRight,
+			RightType:   RightToOptOut,
+			Beneficiary: EntityConsumer,
+			Confidence:  1.0,
+			Description: "CCPA Right to Opt-Out",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)right\s+(?:to\s+)?opt[- ]?out`),
+			Type:        SemanticRight,
+			RightType:   RightToOptOut,
+			Beneficiary: EntityConsumer,
+			Confidence:  0.95,
+			Description: "Right to Opt-Out",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)(?:shall\s+)?not\s+(?:be\s+)?discriminat(?:e|ed)`),
+			Type:        SemanticRight,
+			RightType:   RightToNonDiscrimination,
+			Beneficiary: EntityConsumer,
+			Confidence:  1.0,
+			Description: "CCPA Right to Non-Discrimination",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)right\s+to\s+(?:equal\s+)?(?:service|price|non[- ]?discrimination)`),
+			Type:        SemanticRight,
+			RightType:   RightToNonDiscrimination,
+			Beneficiary: EntityConsumer,
+			Confidence:  0.95,
+			Description: "Right to Non-Discrimination",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)right\s+to\s+(?:request\s+)?correct(?:ion)?`),
+			Type:        SemanticRight,
+			RightType:   RightToCorrect,
+			Beneficiary: EntityConsumer,
+			Confidence:  0.95,
+			Description: "Right to Correction",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)right\s+to\s+limit.*(?:sensitive|use)`),
+			Type:        SemanticRight,
+			RightType:   RightToLimit,
+			Beneficiary: EntityConsumer,
+			Confidence:  0.95,
+			Description: "Right to Limit Use",
+		},
+
 		// Generic right patterns
 		{
 			Pattern:     regexp.MustCompile(`(?i)(?:the\s+)?data\s+subject\s+(?:shall\s+)?ha(?:s|ve)\s+the\s+right`),
@@ -249,6 +381,14 @@ func (e *SemanticExtractor) initRightPatterns() {
 			Beneficiary: EntityDataSubject,
 			Confidence:  0.9,
 			Description: "Data subject right (generic)",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)(?:the\s+)?consumer\s+(?:shall\s+)?ha(?:s|ve)\s+the\s+right`),
+			Type:        SemanticRight,
+			RightType:   RightGeneric,
+			Beneficiary: EntityConsumer,
+			Confidence:  0.9,
+			Description: "Consumer right (generic)",
 		},
 		{
 			Pattern:     regexp.MustCompile(`(?i)shall\s+have\s+the\s+right\s+to`),
@@ -369,6 +509,104 @@ func (e *SemanticExtractor) initObligationPatterns() {
 			Confidence:  0.9,
 			Description: "Information provision obligation",
 		},
+		// CCPA-specific obligations
+		{
+			Pattern:     regexp.MustCompile(`(?i)business.*shall.*(?:at\s+or\s+before\s+the\s+point\s+of\s+collection|inform.*consumer)`),
+			Type:        SemanticObligation,
+			ObligType:   ObligationNoticeAtCollection,
+			DutyBearer:  EntityBusiness,
+			Confidence:  1.0,
+			Description: "CCPA Notice at Collection",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)(?:at\s+or\s+before\s+the\s+point\s+of\s+collection|before\s+collecting)`),
+			Type:        SemanticObligation,
+			ObligType:   ObligationNoticeAtCollection,
+			DutyBearer:  EntityBusiness,
+			Confidence:  0.9,
+			Description: "Notice at Collection",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)(?:provide|give)\s+notice\s+at\s+collection`),
+			Type:        SemanticObligation,
+			ObligType:   ObligationNoticeAtCollection,
+			DutyBearer:  EntityBusiness,
+			Confidence:  0.9,
+			Description: "Notice at Collection",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)business.*shall.*(?:make\s+available|post|provide).*privacy\s+policy`),
+			Type:        SemanticObligation,
+			ObligType:   ObligationPrivacyPolicy,
+			DutyBearer:  EntityBusiness,
+			Confidence:  1.0,
+			Description: "CCPA Privacy Policy",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)(?:privacy\s+policy|online\s+privacy\s+notice)`),
+			Type:        SemanticObligation,
+			ObligType:   ObligationPrivacyPolicy,
+			DutyBearer:  EntityBusiness,
+			Confidence:  0.8,
+			Description: "Privacy Policy requirement",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)(?:shall\s+)?(?:provide|include).*(?:clear\s+and\s+conspicuous\s+)?link.*(?:do\s+not\s+sell|opt[- ]?out)`),
+			Type:        SemanticObligation,
+			ObligType:   ObligationOptOutLink,
+			DutyBearer:  EntityBusiness,
+			Confidence:  1.0,
+			Description: "CCPA Opt-Out Link",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)do\s+not\s+sell.*(?:link|button|mechanism)`),
+			Type:        SemanticObligation,
+			ObligType:   ObligationOptOutLink,
+			DutyBearer:  EntityBusiness,
+			Confidence:  0.9,
+			Description: "Do Not Sell Link",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)service\s+provider.*shall(?:\s+not)?`),
+			Type:        SemanticObligation,
+			ObligType:   ObligationServiceProvider,
+			DutyBearer:  EntityServiceProvider,
+			Confidence:  0.9,
+			Description: "Service Provider obligation",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)business.*shall\s+not\s+discriminate`),
+			Type:        SemanticObligation,
+			ObligType:   ObligationNonDiscrimination,
+			DutyBearer:  EntityBusiness,
+			Confidence:  1.0,
+			Description: "CCPA Non-Discrimination",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)(?:shall|must)\s+(?:verify|establish.*verify)`),
+			Type:        SemanticObligation,
+			ObligType:   ObligationVerifyRequest,
+			DutyBearer:  EntityBusiness,
+			Confidence:  0.9,
+			Description: "Verification of requests",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)(?:shall|must)\s+(?:train|ensure.*personnel.*informed)`),
+			Type:        SemanticObligation,
+			ObligType:   ObligationTrainPersonnel,
+			DutyBearer:  EntityBusiness,
+			Confidence:  0.9,
+			Description: "Personnel training",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)(?:shall\s+)?(?:not\s+)?collect.*(?:more\s+than|necessary|reasonably)`),
+			Type:        SemanticObligation,
+			ObligType:   ObligationDataMinimization,
+			DutyBearer:  EntityBusiness,
+			Confidence:  0.8,
+			Description: "Data minimization",
+		},
+
 		// Generic obligation patterns
 		{
 			Pattern:     regexp.MustCompile(`(?i)(?:the\s+)?controller\s+shall(?:\s+be\s+responsible)?`),
@@ -385,6 +623,14 @@ func (e *SemanticExtractor) initObligationPatterns() {
 			DutyBearer:  EntityProcessor,
 			Confidence:  0.9,
 			Description: "Processor obligation",
+		},
+		{
+			Pattern:     regexp.MustCompile(`(?i)(?:a\s+)?business\s+(?:that\s+[^.]*)?shall`),
+			Type:        SemanticObligation,
+			ObligType:   ObligationGeneric,
+			DutyBearer:  EntityBusiness,
+			Confidence:  0.9,
+			Description: "Business obligation",
 		},
 		{
 			Pattern:     regexp.MustCompile(`(?i)(?:shall|must)\s+ensure\s+(?:that)?`),
@@ -411,10 +657,10 @@ func (e *SemanticExtractor) initObligationPatterns() {
 			Description: "Verification obligation",
 		},
 		{
-			Pattern:     regexp.MustCompile(`(?i)(?:shall|must)\s+(?:respond|reply)\s+(?:to\s+(?:the\s+)?(?:data\s+subject|request))?`),
+			Pattern:     regexp.MustCompile(`(?i)(?:shall|must)\s+(?:respond|reply)\s+(?:to\s+(?:the\s+)?(?:data\s+subject|consumer|request))?`),
 			Type:        SemanticObligation,
 			ObligType:   ObligationRespond,
-			DutyBearer:  EntityController,
+			DutyBearer:  EntityUnspecified,
 			Confidence:  0.8,
 			Description: "Response obligation",
 		},
@@ -427,7 +673,7 @@ func (e *SemanticExtractor) initObligationPatterns() {
 			Description: "Requirement",
 		},
 		{
-			Pattern:     regexp.MustCompile(`(?i)(?:shall|must)\s+not\s+(?:be\s+)?(?:process|transfer|disclose)`),
+			Pattern:     regexp.MustCompile(`(?i)(?:shall|must)\s+not\s+(?:be\s+)?(?:process|transfer|disclose|sell)`),
 			Type:        SemanticProhibition,
 			ObligType:   ObligationGeneric,
 			DutyBearer:  EntityUnspecified,
@@ -440,6 +686,7 @@ func (e *SemanticExtractor) initObligationPatterns() {
 // initEntityPatterns initializes patterns for detecting entities.
 func (e *SemanticExtractor) initEntityPatterns() {
 	e.entityPatterns = map[EntityType]*regexp.Regexp{
+		// GDPR entities
 		EntityDataSubject:       regexp.MustCompile(`(?i)data\s+subject`),
 		EntityController:        regexp.MustCompile(`(?i)(?:the\s+)?controller`),
 		EntityProcessor:         regexp.MustCompile(`(?i)(?:the\s+)?processor`),
@@ -449,6 +696,11 @@ func (e *SemanticExtractor) initEntityPatterns() {
 		EntityRecipient:         regexp.MustCompile(`(?i)recipient`),
 		EntityRepresentative:    regexp.MustCompile(`(?i)representative`),
 		EntityDataProtectionOff: regexp.MustCompile(`(?i)data\s+protection\s+officer`),
+		// CCPA entities
+		EntityConsumer:        regexp.MustCompile(`(?i)(?:the\s+)?consumer`),
+		EntityBusiness:        regexp.MustCompile(`(?i)(?:a\s+|the\s+)?business`),
+		EntityServiceProvider: regexp.MustCompile(`(?i)service\s+provider`),
+		EntityAttorneyGeneral: regexp.MustCompile(`(?i)attorney\s+general`),
 	}
 }
 
@@ -508,21 +760,34 @@ func (e *SemanticExtractor) extractFromTitle(title string, articleNum int) []*Se
 	var annotations []*SemanticAnnotation
 	lowerTitle := strings.ToLower(title)
 
-	// Title-specific right patterns
+	// Title-specific right patterns (GDPR)
 	titleRightPatterns := []struct {
-		pattern   string
-		rightType RightType
+		pattern     string
+		rightType   RightType
+		beneficiary EntityType
 	}{
-		{"right of access", RightAccess},
-		{"right to access", RightAccess},
-		{"right to rectification", RightRectification},
-		{"right to erasure", RightErasure},
-		{"right to be forgotten", RightErasure},
-		{"right to restriction", RightRestriction},
-		{"right to data portability", RightPortability},
-		{"right to object", RightObject},
-		{"automated individual decision", RightNotAutomated},
-		{"right not to be subject", RightNotAutomated},
+		{"right of access", RightAccess, EntityDataSubject},
+		{"right to access", RightAccess, EntityDataSubject},
+		{"right to rectification", RightRectification, EntityDataSubject},
+		{"right to erasure", RightErasure, EntityDataSubject},
+		{"right to be forgotten", RightErasure, EntityDataSubject},
+		{"right to restriction", RightRestriction, EntityDataSubject},
+		{"right to data portability", RightPortability, EntityDataSubject},
+		{"right to object", RightObject, EntityDataSubject},
+		{"automated individual decision", RightNotAutomated, EntityDataSubject},
+		{"right not to be subject", RightNotAutomated, EntityDataSubject},
+		// CCPA title patterns
+		{"right to know", RightToKnow, EntityConsumer},
+		{"what personal information is", RightToKnow, EntityConsumer},
+		{"personal information is being collected", RightToKnow, EntityConsumer},
+		{"sold or disclosed", RightToKnowAboutSales, EntityConsumer},
+		{"right to delete", RightToDelete, EntityConsumer},
+		{"request deletion", RightToDelete, EntityConsumer},
+		{"opt-out", RightToOptOut, EntityConsumer},
+		{"opt out", RightToOptOut, EntityConsumer},
+		{"right to equal service", RightToNonDiscrimination, EntityConsumer},
+		{"non-discrimination", RightToNonDiscrimination, EntityConsumer},
+		{"right to correct", RightToCorrect, EntityConsumer},
 	}
 
 	for _, p := range titleRightPatterns {
@@ -531,7 +796,7 @@ func (e *SemanticExtractor) extractFromTitle(title string, articleNum int) []*Se
 				Type:           SemanticRight,
 				ArticleNum:     articleNum,
 				RightType:      p.rightType,
-				Beneficiary:    EntityDataSubject,
+				Beneficiary:    p.beneficiary,
 				MatchedText:    title,
 				MatchedPattern: "Title: " + p.pattern,
 				Confidence:     1.0,
@@ -540,18 +805,24 @@ func (e *SemanticExtractor) extractFromTitle(title string, articleNum int) []*Se
 		}
 	}
 
-	// Title-specific obligation patterns
+	// Title-specific obligation patterns (GDPR + CCPA)
 	titleObligPatterns := []struct {
-		pattern   string
-		obligType ObligationType
+		pattern    string
+		obligType  ObligationType
+		dutyBearer EntityType
 	}{
-		{"notification obligation", ObligationNotifyBreach},
-		{"record of processing", ObligationRecord},
-		{"impact assessment", ObligationImpactAssessment},
-		{"data protection officer", ObligationAppoint},
-		{"security of processing", ObligationSecure},
-		{"lawfulness of processing", ObligationLawfulProcessing},
-		{"conditions for consent", ObligationConsent},
+		// GDPR
+		{"notification obligation", ObligationNotifyBreach, EntityController},
+		{"record of processing", ObligationRecord, EntityController},
+		{"impact assessment", ObligationImpactAssessment, EntityController},
+		{"data protection officer", ObligationAppoint, EntityController},
+		{"security of processing", ObligationSecure, EntityController},
+		{"lawfulness of processing", ObligationLawfulProcessing, EntityController},
+		{"conditions for consent", ObligationConsent, EntityController},
+		// CCPA
+		{"notice at collection", ObligationNoticeAtCollection, EntityBusiness},
+		{"privacy policy", ObligationPrivacyPolicy, EntityBusiness},
+		{"verification", ObligationVerifyRequest, EntityBusiness},
 	}
 
 	for _, p := range titleObligPatterns {
@@ -560,7 +831,7 @@ func (e *SemanticExtractor) extractFromTitle(title string, articleNum int) []*Se
 				Type:           SemanticObligation,
 				ArticleNum:     articleNum,
 				ObligationType: p.obligType,
-				DutyBearer:     EntityController,
+				DutyBearer:     p.dutyBearer,
 				MatchedText:    title,
 				MatchedPattern: "Title: " + p.pattern,
 				Confidence:     1.0,
@@ -634,16 +905,23 @@ func (e *SemanticExtractor) extractFromText(text string, articleNum, paraNum int
 // identifyEntity tries to identify the primary entity mentioned in text.
 func (e *SemanticExtractor) identifyEntity(text string) EntityType {
 	// Check for each entity type in order of specificity
+	// More specific patterns (like "service provider") should come before less specific ones (like "consumer")
 	entityOrder := []EntityType{
+		// GDPR entities (more specific first)
 		EntityDataSubject,
+		EntityDataProtectionOff,
+		EntitySupervisoryAuth,
 		EntityController,
 		EntityProcessor,
-		EntitySupervisoryAuth,
-		EntityDataProtectionOff,
 		EntityMemberState,
 		EntityThirdParty,
 		EntityRecipient,
 		EntityRepresentative,
+		// CCPA entities (more specific first)
+		EntityServiceProvider, // Must be before "business" since it's more specific
+		EntityAttorneyGeneral,
+		EntityConsumer,
+		EntityBusiness,
 	}
 
 	for _, entityType := range entityOrder {

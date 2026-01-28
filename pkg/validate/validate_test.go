@@ -85,6 +85,7 @@ func TestValidateDefinitions(t *testing.T) {
 
 func TestValidateSemantics(t *testing.T) {
 	validator := NewValidator(0.80)
+	validator.SetRegulationType(RegulationGDPR) // Set GDPR for known rights validation
 
 	annotations := []*extract.SemanticAnnotation{
 		{Type: extract.SemanticRight, RightType: extract.RightAccess, ArticleNum: 15},
@@ -115,6 +116,52 @@ func TestValidateSemantics(t *testing.T) {
 
 	if len(result.MissingRights) != 3 {
 		t.Errorf("Expected 3 missing rights, got %d", len(result.MissingRights))
+	}
+}
+
+func TestValidateSemantics_CCPA(t *testing.T) {
+	validator := NewValidator(0.80)
+	validator.SetRegulationType(RegulationCCPA) // Set CCPA for known rights validation
+
+	annotations := []*extract.SemanticAnnotation{
+		{Type: extract.SemanticRight, RightType: extract.RightToKnow, ArticleNum: 100},
+		{Type: extract.SemanticRight, RightType: extract.RightToDelete, ArticleNum: 105},
+		{Type: extract.SemanticRight, RightType: extract.RightToOptOut, ArticleNum: 120},
+		{Type: extract.SemanticObligation, ObligationType: extract.ObligationNoticeAtCollection, ArticleNum: 100},
+		{Type: extract.SemanticObligation, ObligationType: extract.ObligationVerifyRequest, ArticleNum: 130},
+	}
+
+	result := validator.validateSemantics(annotations)
+
+	if result.RightsCount != 3 {
+		t.Errorf("Expected 3 rights, got %d", result.RightsCount)
+	}
+
+	if result.ObligationsCount != 2 {
+		t.Errorf("Expected 2 obligations, got %d", result.ObligationsCount)
+	}
+
+	if result.ArticlesWithRights != 3 {
+		t.Errorf("Expected 3 articles with rights, got %d", result.ArticlesWithRights)
+	}
+
+	// Should find 3 out of 5 known CCPA rights
+	if result.KnownRightsFound != 3 {
+		t.Errorf("Expected 3 known CCPA rights found, got %d", result.KnownRightsFound)
+	}
+
+	// CCPA has 5 known rights: RightToKnow, RightToDelete, RightToOptOut, RightToNonDiscrimination, RightToKnowAboutSales
+	if result.KnownRightsTotal != 5 {
+		t.Errorf("Expected 5 total known CCPA rights, got %d", result.KnownRightsTotal)
+	}
+
+	if len(result.MissingRights) != 2 {
+		t.Errorf("Expected 2 missing rights (RightToNonDiscrimination, RightToKnowAboutSales), got %d: %v",
+			len(result.MissingRights), result.MissingRights)
+	}
+
+	if result.RegulationType != string(RegulationCCPA) {
+		t.Errorf("Expected regulation type CCPA, got %s", result.RegulationType)
 	}
 }
 
