@@ -30,6 +30,16 @@ jobs:
       - name: Run unit tests
         run: go test ./... -v
 
+      - name: Run brief fuzz tests
+        run: |
+          echo "Running brief fuzz tests (10s each)..."
+          go test ./pkg/extract/... -fuzz=FuzzParser -fuzztime=10s
+          go test ./pkg/extract/... -fuzz=FuzzReferenceExtractor -fuzztime=10s
+          go test ./pkg/citation/... -fuzz=FuzzEUCitationParser -fuzztime=10s
+          go test ./pkg/citation/... -fuzz=FuzzBluebookParser -fuzztime=10s
+          go test ./pkg/query/... -fuzz=FuzzParseQuery -fuzztime=10s
+          echo "All fuzz tests passed!"
+
       - name: Run E2E tests
         run: ./scripts/e2e-test.sh
         env:
