@@ -1152,16 +1152,22 @@ Supported formats:
   - json:    JSON graph format with nodes and edges
   - dot:     DOT format for Graphviz visualization
   - turtle:  W3C Turtle (TTL) RDF serialization
+  - jsonld:  JSON-LD (Linked Data) format with @context
   - summary: Relationship statistics and summary
 
 Use --eli to add ELI (European Legislation Identifier) vocabulary triples
 alongside reg: triples for EU documents (regulation, directive, decision).
+
+JSON-LD Options:
+  --expanded  Output expanded JSON-LD (full URIs, no @context) instead of compact form
 
 Example:
   regula export --source gdpr.txt --format json --output graph.json
   regula export --source gdpr.txt --format dot --output graph.dot
   regula export --source gdpr.txt --format turtle --output graph.ttl
   regula export --source gdpr.txt --format turtle --eli --output graph-eli.ttl
+  regula export --source gdpr.txt --format jsonld --output graph.jsonld
+  regula export --source gdpr.txt --format jsonld --expanded --output graph-expanded.jsonld
   regula export --source gdpr.txt --format summary`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			source, _ := cmd.Flags().GetString("source")
@@ -1169,6 +1175,7 @@ Example:
 			output, _ := cmd.Flags().GetString("output")
 			relationsOnly, _ := cmd.Flags().GetBool("relations-only")
 			enableELI, _ := cmd.Flags().GetBool("eli")
+			expandedJSONLD, _ := cmd.Flags().GetBool("expanded")
 
 			if source == "" {
 				return fmt.Errorf("--source flag is required")
@@ -1247,6 +1254,34 @@ Example:
 					fmt.Print(turtleOutput)
 				}
 
+			case "jsonld":
+				var serializer *store.JSONLDSerializer
+				if expandedJSONLD {
+					serializer = store.NewJSONLDSerializer(store.WithExpandedForm())
+				} else {
+					serializer = store.NewJSONLDSerializer(store.WithCompactForm())
+				}
+
+				jsonldOutput, err := serializer.Serialize(tripleStore)
+				if err != nil {
+					return fmt.Errorf("failed to serialize JSON-LD: %w", err)
+				}
+
+				if output != "" {
+					if err := os.WriteFile(output, jsonldOutput, 0644); err != nil {
+						return fmt.Errorf("failed to write file: %w", err)
+					}
+					fmt.Printf("JSON-LD graph exported to: %s\n", output)
+					fmt.Printf("  Triples: %d\n", tripleStore.Count())
+					if expandedJSONLD {
+						fmt.Println("  Format: expanded (full URIs)")
+					} else {
+						fmt.Println("  Format: compact (with @context)")
+					}
+				} else {
+					fmt.Print(string(jsonldOutput))
+				}
+
 			case "summary":
 				summary := store.CalculateRelationshipSummary(tripleStore)
 
@@ -1274,7 +1309,7 @@ Example:
 				}
 
 			default:
-				return fmt.Errorf("unknown format: %s (use json, dot, turtle, or summary)", formatStr)
+				return fmt.Errorf("unknown format: %s (use json, dot, turtle, jsonld, or summary)", formatStr)
 			}
 
 			return nil
@@ -1282,10 +1317,11 @@ Example:
 	}
 
 	cmd.Flags().StringP("source", "s", "", "Source document path")
-	cmd.Flags().StringP("format", "f", "summary", "Output format (json, dot, turtle, summary)")
+	cmd.Flags().StringP("format", "f", "summary", "Output format (json, dot, turtle, jsonld, summary)")
 	cmd.Flags().StringP("output", "o", "", "Output file path")
 	cmd.Flags().Bool("relations-only", true, "Export only relationship edges (default: true)")
 	cmd.Flags().Bool("eli", false, "Enrich with ELI (European Legislation Identifier) vocabulary for EU documents")
+	cmd.Flags().Bool("expanded", false, "Output expanded JSON-LD (full URIs, no @context) instead of compact form")
 
 	return cmd
 }
