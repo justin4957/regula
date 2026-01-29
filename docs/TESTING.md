@@ -42,6 +42,34 @@ go test ./pkg/store/... -run "TestIsEU|TestEnrich" -v
 go test ./pkg/store/... -run TestEnrichWithELI_GDPRIntegration -v
 ```
 
+### JSON-LD Serialization Tests
+
+Test JSON-LD (Linked Data) export format:
+
+```bash
+# Run all JSON-LD tests
+go test ./pkg/store/... -v -run TestJSONLD
+
+# Run specific JSON-LD test categories
+go test ./pkg/store/... -run TestJSONLD_Serialize -v       # Serialization tests
+go test ./pkg/store/... -run TestJSONLD_CompactURI -v      # URI compaction
+go test ./pkg/store/... -run TestJSONLD_ExpandURI -v       # URI expansion
+go test ./pkg/store/... -run TestJSONLD_PredicateToKey -v  # Predicate mapping
+go test ./pkg/store/... -run TestJSONLD_IsRelationship -v  # Relationship detection
+
+# Run GDPR JSON-LD integration test
+go test ./pkg/store/... -run TestJSONLD_Serialize_GDPRIntegration -v
+
+# CLI: Export as compact JSON-LD (with @context)
+go run cmd/regula/main.go export --source testdata/gdpr.txt --format jsonld --output graph.jsonld
+
+# CLI: Export as expanded JSON-LD (full URIs, no @context)
+go run cmd/regula/main.go export --source testdata/gdpr.txt --format jsonld --expanded --output graph-expanded.jsonld
+
+# CLI: Export with ELI enrichment
+go run cmd/regula/main.go export --source testdata/gdpr.txt --format jsonld --eli --output graph-eli.jsonld
+```
+
 ### Citation Parser Tests
 
 Test the extensible citation parser interface, EU citation parser, and Bluebook (US) parser:
