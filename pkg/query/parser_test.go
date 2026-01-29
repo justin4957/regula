@@ -725,3 +725,294 @@ func TestParseQuery_ComplexFilter(t *testing.T) {
 		t.Errorf("Filter should contain REGEX, got %s", query.Select.Filters[0].Expression)
 	}
 }
+
+// CONSTRUCT query tests
+
+func TestParseQuery_SimpleConstruct(t *testing.T) {
+	queryStr := `
+		PREFIX reg: <https://regula.dev/ontology#>
+		CONSTRUCT {
+			?article reg:hasTitle ?title .
+		}
+		WHERE {
+			?article rdf:type reg:Article .
+			?article reg:title ?title .
+		}
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	if query.Type != ConstructQueryType {
+		t.Errorf("Type = %v, want %v", query.Type, ConstructQueryType)
+	}
+
+	if query.Construct == nil {
+		t.Fatal("Construct should not be nil")
+	}
+
+	if len(query.Construct.Template) != 1 {
+		t.Fatalf("Template patterns = %d, want 1", len(query.Construct.Template))
+	}
+
+	if len(query.Construct.Where) != 2 {
+		t.Fatalf("Where patterns = %d, want 2", len(query.Construct.Where))
+	}
+
+	// Verify template pattern
+	templatePattern := query.Construct.Template[0]
+	if templatePattern.Subject != "?article" {
+		t.Errorf("Template Subject = %v, want ?article", templatePattern.Subject)
+	}
+	if templatePattern.Predicate != "reg:hasTitle" {
+		t.Errorf("Template Predicate = %v, want reg:hasTitle", templatePattern.Predicate)
+	}
+	if templatePattern.Object != "?title" {
+		t.Errorf("Template Object = %v, want ?title", templatePattern.Object)
+	}
+}
+
+func TestParseQuery_ConstructMultiplePatterns(t *testing.T) {
+	queryStr := `
+		CONSTRUCT {
+			?s <http://example.org/p1> ?o1 .
+			?s <http://example.org/p2> ?o2 .
+		}
+		WHERE {
+			?s ?p1 ?o1 .
+			?s ?p2 ?o2 .
+		}
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	if query.Type != ConstructQueryType {
+		t.Errorf("Type = %v, want %v", query.Type, ConstructQueryType)
+	}
+
+	if len(query.Construct.Template) != 2 {
+		t.Errorf("Template patterns = %d, want 2", len(query.Construct.Template))
+	}
+
+	if len(query.Construct.Where) != 2 {
+		t.Errorf("Where patterns = %d, want 2", len(query.Construct.Where))
+	}
+}
+
+func TestParseQuery_ConstructWithOptional(t *testing.T) {
+	queryStr := `
+		CONSTRUCT {
+			?s <http://example.org/name> ?name .
+			?s <http://example.org/desc> ?desc .
+		}
+		WHERE {
+			?s <http://example.org/name> ?name .
+			OPTIONAL { ?s <http://example.org/desc> ?desc . }
+		}
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	if query.Type != ConstructQueryType {
+		t.Errorf("Type = %v, want %v", query.Type, ConstructQueryType)
+	}
+
+	if len(query.Construct.Optional) != 1 {
+		t.Errorf("Optional clauses = %d, want 1", len(query.Construct.Optional))
+	}
+}
+
+func TestParseQuery_ConstructWithFilter(t *testing.T) {
+	queryStr := `
+		CONSTRUCT {
+			?article <http://example.org/summary> ?title .
+		}
+		WHERE {
+			?article rdf:type <http://example.org/Article> .
+			?article <http://example.org/title> ?title .
+			FILTER(CONTAINS(?title, "data"))
+		}
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	if query.Type != ConstructQueryType {
+		t.Errorf("Type = %v, want %v", query.Type, ConstructQueryType)
+	}
+
+	if len(query.Construct.Filters) != 1 {
+		t.Errorf("Filters = %d, want 1", len(query.Construct.Filters))
+	}
+}
+
+func TestParseQuery_ConstructWithPrefix(t *testing.T) {
+	queryStr := `
+		PREFIX ex: <http://example.org/>
+		CONSTRUCT {
+			?s ex:summary ?o .
+		}
+		WHERE {
+			?s ex:title ?o .
+		}
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	if query.Type != ConstructQueryType {
+		t.Errorf("Type = %v, want %v", query.Type, ConstructQueryType)
+	}
+
+	if len(query.Construct.Prefixes) != 1 {
+		t.Fatalf("Prefixes count = %d, want 1", len(query.Construct.Prefixes))
+	}
+
+	if query.Construct.Prefixes["ex"] != "http://example.org/" {
+		t.Errorf("Prefix ex = %s, want http://example.org/", query.Construct.Prefixes["ex"])
+	}
+}
+
+func TestParseQuery_ConstructErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		query   string
+		wantErr string
+	}{
+		{
+			name:    "missing WHERE clause",
+			query:   "CONSTRUCT { ?s ?p ?o . }",
+			wantErr: "missing CONSTRUCT template or WHERE clause",
+		},
+		{
+			name:    "missing CONSTRUCT template",
+			query:   "WHERE { ?s ?p ?o . }",
+			wantErr: "unsupported query type",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseQuery(tc.query)
+			if err == nil {
+				t.Error("ParseQuery() should return error")
+				return
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("ParseQuery() error = %v, want error containing %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestConstructQuery_Validate(t *testing.T) {
+	tests := []struct {
+		name       string
+		query      string
+		wantErrors int
+	}{
+		{
+			name: "valid construct",
+			query: `CONSTRUCT { ?s ?p ?o . }
+				WHERE { ?s ?p ?o . }`,
+			wantErrors: 0,
+		},
+		{
+			name: "unbound variable in template",
+			query: `CONSTRUCT { ?s ?p ?unbound . }
+				WHERE { ?s ?p ?o . }`,
+			wantErrors: 1,
+		},
+		{
+			name: "multiple unbound variables",
+			query: `CONSTRUCT { ?unbound1 ?p ?unbound2 . }
+				WHERE { ?s ?p ?o . }`,
+			wantErrors: 2,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			query, err := ParseQuery(tc.query)
+			if err != nil {
+				t.Fatalf("ParseQuery() error = %v", err)
+			}
+
+			errors := query.Validate()
+			if len(errors) != tc.wantErrors {
+				t.Errorf("Validate() returned %d errors, want %d: %v", len(errors), tc.wantErrors, errors)
+			}
+		})
+	}
+}
+
+func TestConstructQuery_String(t *testing.T) {
+	queryStr := `
+		PREFIX ex: <http://example.org/>
+		CONSTRUCT {
+			?s ex:summary ?title .
+		}
+		WHERE {
+			?s ex:title ?title .
+		}
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	str := query.String()
+
+	// Check that key elements are present
+	if !strings.Contains(str, "CONSTRUCT") {
+		t.Error("String() should contain CONSTRUCT")
+	}
+	if !strings.Contains(str, "WHERE") {
+		t.Error("String() should contain WHERE")
+	}
+	if !strings.Contains(str, "?s") {
+		t.Error("String() should contain ?s")
+	}
+}
+
+func TestConstructQuery_ExpandPrefixes(t *testing.T) {
+	queryStr := `
+		PREFIX ex: <http://example.org/>
+		CONSTRUCT {
+			?s ex:summary ?title .
+		}
+		WHERE {
+			?s ex:title ?title .
+		}
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	query.Construct.ExpandPrefixes()
+
+	// Template should be expanded
+	if query.Construct.Template[0].Predicate != "<http://example.org/summary>" {
+		t.Errorf("Template Predicate = %s, want <http://example.org/summary>", query.Construct.Template[0].Predicate)
+	}
+
+	// WHERE patterns should be expanded
+	if query.Construct.Where[0].Predicate != "<http://example.org/title>" {
+		t.Errorf("Where Predicate = %s, want <http://example.org/title>", query.Construct.Where[0].Predicate)
+	}
+}

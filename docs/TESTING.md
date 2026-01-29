@@ -189,6 +189,43 @@ go test ./pkg/uscode/... -run TestIntegration_ConnectionSummary -v
 
 **Note:** Integration tests hit real government servers (uscode.house.gov, ecfr.gov). They are skipped with `-short` flag and may be affected by network conditions.
 
+### SPARQL CONSTRUCT Query Tests
+
+Test the SPARQL CONSTRUCT query support for graph extraction and transformation:
+
+```bash
+# Run all CONSTRUCT query tests
+go test ./pkg/query/... -v -run Construct
+
+# Run CONSTRUCT parsing tests
+go test ./pkg/query/... -run "TestParseQuery_SimpleConstruct|TestParseQuery_ConstructMultiple|TestParseQuery_ConstructWithOptional|TestParseQuery_ConstructWithFilter" -v
+
+# Run CONSTRUCT validation tests
+go test ./pkg/query/... -run TestConstructQuery_Validate -v
+
+# Run CONSTRUCT execution tests
+go test ./pkg/query/... -run "TestExecutor_SimpleConstruct|TestExecutor_ConstructWithFilter|TestExecutor_ConstructWithOptional|TestExecutor_ConstructDeduplication" -v
+
+# Run CONSTRUCT result formatting tests
+go test ./pkg/query/... -run "TestConstructResult_FormatTurtle|TestConstructResult_FormatNTriples|TestConstructResult_FormatJSON" -v
+
+# CLI: Run CONSTRUCT query with Turtle output (default)
+go run cmd/regula/main.go query --source testdata/gdpr.txt \
+  "CONSTRUCT { ?a <http://example.org/title> ?t } WHERE { ?a rdf:type reg:Article . ?a reg:title ?t }"
+
+# CLI: Run CONSTRUCT query with N-Triples output
+go run cmd/regula/main.go query --source testdata/gdpr.txt --format ntriples \
+  "CONSTRUCT { ?a <http://example.org/type> <http://example.org/Article> } WHERE { ?a rdf:type reg:Article }"
+
+# CLI: Run CONSTRUCT query with JSON output
+go run cmd/regula/main.go query --source testdata/gdpr.txt --format json \
+  "CONSTRUCT { ?a <http://example.org/type> <http://example.org/Article> } WHERE { ?a rdf:type reg:Article }"
+
+# CLI: Run CONSTRUCT query with timing
+go run cmd/regula/main.go query --source testdata/gdpr.txt --timing \
+  "CONSTRUCT { ?a <http://example.org/title> ?t } WHERE { ?a rdf:type reg:Article . ?a reg:title ?t }"
+```
+
 ### Validation Gate Tests
 
 Test the validation checkpoint/gate system with per-stage quality metrics:

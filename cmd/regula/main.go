@@ -316,9 +316,20 @@ func queryCmd() *cobra.Command {
 
 You must first ingest a regulation document using 'regula ingest'.
 
+Supports both SELECT and CONSTRUCT queries.
+
 Examples:
-  # Basic query
+  # Basic SELECT query
   regula query "SELECT ?article ?title WHERE { ?article rdf:type reg:Article . ?article reg:title ?title } LIMIT 5"
+
+  # CONSTRUCT query to extract subgraph
+  regula query "CONSTRUCT { ?a reg:hasTitle ?t } WHERE { ?a rdf:type reg:Article . ?a reg:title ?t }"
+
+  # CONSTRUCT with Turtle output
+  regula query --format turtle "CONSTRUCT { ?a rdf:type reg:Article } WHERE { ?a rdf:type reg:Article }"
+
+  # CONSTRUCT with N-Triples output
+  regula query --format ntriples "CONSTRUCT { ?a rdf:type reg:Article } WHERE { ?a rdf:type reg:Article }"
 
   # Use a template
   regula query --template definitions
@@ -379,9 +390,21 @@ Available templates:
 				return fmt.Errorf("no graph loaded. Run 'regula ingest --source <file>' first, or use --source flag")
 			}
 
-			// Execute query
+			// Parse query to determine type
+			parsedQuery, err := query.ParseQuery(queryStr)
+			if err != nil {
+				return fmt.Errorf("query parse error: %w", err)
+			}
+
 			startTime := time.Now()
-			result, err := executor.ExecuteString(queryStr)
+
+			// Handle CONSTRUCT queries
+			if parsedQuery.Type == query.ConstructQueryType {
+				return executeConstructQuery(cmd, parsedQuery, formatStr, showTiming, startTime)
+			}
+
+			// Execute SELECT query
+			result, err := executor.Execute(parsedQuery)
 			queryTime := time.Since(startTime)
 
 			if err != nil {
@@ -410,12 +433,45 @@ Available templates:
 	}
 
 	cmd.Flags().StringP("template", "t", "", "Use a pre-built query template")
-	cmd.Flags().StringP("format", "f", "table", "Output format (table, json, csv)")
+	cmd.Flags().StringP("format", "f", "table", "Output format (table, json, csv for SELECT; turtle, ntriples, json for CONSTRUCT)")
 	cmd.Flags().Bool("timing", false, "Show query execution timing")
 	cmd.Flags().StringP("source", "s", "", "Source document to ingest before querying")
 	cmd.Flags().Bool("list-templates", false, "List available query templates")
 
 	return cmd
+}
+
+// executeConstructQuery handles execution and output of CONSTRUCT queries.
+func executeConstructQuery(cmd *cobra.Command, parsedQuery *query.Query, formatStr string, showTiming bool, startTime time.Time) error {
+	result, err := executor.ExecuteConstruct(parsedQuery)
+	queryTime := time.Since(startTime)
+
+	if err != nil {
+		return fmt.Errorf("CONSTRUCT query error: %w", err)
+	}
+
+	// Default format for CONSTRUCT is turtle
+	if formatStr == "table" || formatStr == "csv" {
+		formatStr = "turtle"
+	}
+
+	format := query.OutputFormat(formatStr)
+	output, err := result.Format(format)
+	if err != nil {
+		return fmt.Errorf("format error: %w", err)
+	}
+
+	fmt.Print(output)
+
+	// Show timing if requested
+	if showTiming {
+		fmt.Printf("\nCONSTRUCT query executed in %v\n", queryTime)
+		fmt.Printf("  Parse:   %v\n", result.Metrics.ParseTime)
+		fmt.Printf("  Execute: %v\n", result.Metrics.ExecuteTime)
+		fmt.Printf("  Triples: %d\n", result.Count)
+	}
+
+	return nil
 }
 
 // QueryTemplate represents a pre-built query template.
