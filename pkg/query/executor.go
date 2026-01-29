@@ -69,6 +69,20 @@ type QueryResult struct {
 	Metrics   QueryMetrics        // Execution metrics
 }
 
+// ConstructResult represents the result of a CONSTRUCT query execution.
+type ConstructResult struct {
+	Triples []ConstructedTriple // Constructed triples
+	Count   int                 // Number of triples
+	Metrics QueryMetrics        // Execution metrics
+}
+
+// ConstructedTriple represents a triple produced by a CONSTRUCT query.
+type ConstructedTriple struct {
+	Subject   string
+	Predicate string
+	Object    string
+}
+
 // QueryMetrics contains performance metrics for query execution.
 type QueryMetrics struct {
 	ParseTime     time.Duration `json:"parse_time"`
@@ -79,12 +93,12 @@ type QueryMetrics struct {
 	ResultCount   int           `json:"result_count"`
 }
 
-// Execute executes a parsed query.
+// Execute executes a parsed SELECT query.
 func (e *Executor) Execute(query *Query) (*QueryResult, error) {
 	return e.ExecuteWithContext(context.Background(), query)
 }
 
-// ExecuteWithContext executes a parsed query with context for cancellation.
+// ExecuteWithContext executes a parsed SELECT query with context for cancellation.
 func (e *Executor) ExecuteWithContext(ctx context.Context, query *Query) (*QueryResult, error) {
 	startTime := time.Now()
 	metrics := QueryMetrics{}
@@ -106,15 +120,45 @@ func (e *Executor) ExecuteWithContext(ctx context.Context, query *Query) (*Query
 		return result, nil
 	}
 
-	return nil, fmt.Errorf("unsupported query type: %s", query.Type)
+	return nil, fmt.Errorf("unsupported query type for Execute: %s (use ExecuteConstruct for CONSTRUCT queries)", query.Type)
 }
 
-// ExecuteString parses and executes a SPARQL query string.
+// ExecuteConstruct executes a parsed CONSTRUCT query.
+func (e *Executor) ExecuteConstruct(query *Query) (*ConstructResult, error) {
+	return e.ExecuteConstructWithContext(context.Background(), query)
+}
+
+// ExecuteConstructWithContext executes a parsed CONSTRUCT query with context for cancellation.
+func (e *Executor) ExecuteConstructWithContext(ctx context.Context, query *Query) (*ConstructResult, error) {
+	startTime := time.Now()
+	metrics := QueryMetrics{}
+
+	// Apply timeout if set
+	if e.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, e.timeout)
+		defer cancel()
+	}
+
+	if query.Type != ConstructQueryType {
+		return nil, fmt.Errorf("expected CONSTRUCT query, got: %s", query.Type)
+	}
+
+	result, err := e.executeConstruct(ctx, query.Construct, &metrics)
+	if err != nil {
+		return nil, err
+	}
+	metrics.TotalTime = time.Since(startTime)
+	result.Metrics = metrics
+	return result, nil
+}
+
+// ExecuteString parses and executes a SPARQL SELECT query string.
 func (e *Executor) ExecuteString(queryStr string) (*QueryResult, error) {
 	return e.ExecuteStringWithContext(context.Background(), queryStr)
 }
 
-// ExecuteStringWithContext parses and executes a SPARQL query string with context.
+// ExecuteStringWithContext parses and executes a SPARQL SELECT query string with context.
 func (e *Executor) ExecuteStringWithContext(ctx context.Context, queryStr string) (*QueryResult, error) {
 	startTime := time.Now()
 
@@ -124,6 +168,29 @@ func (e *Executor) ExecuteStringWithContext(ctx context.Context, queryStr string
 	}
 
 	result, err := e.ExecuteWithContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	result.Metrics.ParseTime = time.Since(startTime) - result.Metrics.PlanTime - result.Metrics.ExecuteTime
+	return result, nil
+}
+
+// ExecuteConstructString parses and executes a SPARQL CONSTRUCT query string.
+func (e *Executor) ExecuteConstructString(queryStr string) (*ConstructResult, error) {
+	return e.ExecuteConstructStringWithContext(context.Background(), queryStr)
+}
+
+// ExecuteConstructStringWithContext parses and executes a SPARQL CONSTRUCT query string with context.
+func (e *Executor) ExecuteConstructStringWithContext(ctx context.Context, queryStr string) (*ConstructResult, error) {
+	startTime := time.Now()
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse error: %w", err)
+	}
+
+	result, err := e.ExecuteConstructWithContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -228,6 +295,103 @@ func (e *Executor) executeSelect(ctx context.Context, query *SelectQuery, metric
 	}
 
 	return result, nil
+}
+
+// executeConstruct executes a CONSTRUCT query.
+func (e *Executor) executeConstruct(ctx context.Context, query *ConstructQuery, metrics *QueryMetrics) (*ConstructResult, error) {
+	planStart := time.Now()
+	metrics.PlanTime = time.Since(planStart)
+	metrics.PatternsCount = len(query.Where)
+
+	executeStart := time.Now()
+
+	// Start with a single empty binding
+	bindings := []map[string]string{{}}
+
+	// Process each triple pattern in WHERE clause
+	for _, pattern := range query.Where {
+		// Check for cancellation
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		bindings = e.matchPattern(pattern, bindings)
+		if len(bindings) == 0 {
+			break // No matches, short-circuit
+		}
+	}
+
+	// Process OPTIONAL patterns
+	for _, optPatterns := range query.Optional {
+		bindings = e.processOptional(ctx, optPatterns, bindings)
+	}
+
+	// Apply filters
+	for _, filter := range query.Filters {
+		bindings = e.applyFilter(filter, bindings)
+	}
+
+	// Construct triples from template using bindings
+	seen := make(map[string]bool)
+	var triples []ConstructedTriple
+
+	for _, binding := range bindings {
+		for _, templatePattern := range query.Template {
+			// Substitute variables in template with bound values
+			subject := e.substituteVariable(templatePattern.Subject, binding)
+			predicate := e.substituteVariable(templatePattern.Predicate, binding)
+			object := e.substituteVariable(templatePattern.Object, binding)
+
+			// Skip triples with unbound variables (they would have empty values)
+			if subject == "" || predicate == "" || object == "" {
+				continue
+			}
+
+			// De-duplicate triples
+			key := subject + "|" + predicate + "|" + object
+			if !seen[key] {
+				seen[key] = true
+				triples = append(triples, ConstructedTriple{
+					Subject:   subject,
+					Predicate: predicate,
+					Object:    object,
+				})
+			}
+		}
+	}
+
+	metrics.ExecuteTime = time.Since(executeStart)
+	metrics.ResultCount = len(triples)
+
+	return &ConstructResult{
+		Triples: triples,
+		Count:   len(triples),
+	}, nil
+}
+
+// substituteVariable replaces a variable with its bound value from the binding.
+func (e *Executor) substituteVariable(term string, binding map[string]string) string {
+	if IsVariable(term) {
+		varName := StripVariable(term)
+		if value, ok := binding[varName]; ok {
+			return value
+		}
+		return "" // Unbound variable
+	}
+
+	// Strip literal quotes if present
+	if IsLiteral(term) {
+		return StripLiteral(term)
+	}
+
+	// Strip URI brackets if present
+	if IsURI(term) {
+		return StripURI(term)
+	}
+
+	return term
 }
 
 // matchPattern matches a triple pattern against the store.
@@ -521,9 +685,11 @@ func (e *Executor) applyDistinct(bindings []map[string]string, variables []strin
 type OutputFormat string
 
 const (
-	FormatTable OutputFormat = "table"
-	FormatJSON  OutputFormat = "json"
-	FormatCSV   OutputFormat = "csv"
+	FormatTable    OutputFormat = "table"
+	FormatJSON     OutputFormat = "json"
+	FormatCSV      OutputFormat = "csv"
+	FormatTurtle   OutputFormat = "turtle"
+	FormatNTriples OutputFormat = "ntriples"
 )
 
 // Format formats the query result in the specified format.
@@ -642,6 +808,162 @@ func (r *QueryResult) FormatCSV() (string, error) {
 	}
 
 	return sb.String(), nil
+}
+
+// Format formats the CONSTRUCT result in the specified format.
+func (r *ConstructResult) Format(format OutputFormat) (string, error) {
+	switch format {
+	case FormatTurtle:
+		return r.FormatTurtle(), nil
+	case FormatNTriples:
+		return r.FormatNTriples(), nil
+	case FormatJSON:
+		return r.FormatJSON()
+	default:
+		return "", fmt.Errorf("unsupported format for CONSTRUCT results: %s (use turtle, ntriples, or json)", format)
+	}
+}
+
+// FormatTurtle formats the constructed triples in Turtle format.
+func (r *ConstructResult) FormatTurtle() string {
+	if len(r.Triples) == 0 {
+		return "# No triples constructed\n"
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# CONSTRUCT query result\n")
+	sb.WriteString(fmt.Sprintf("# %d triple(s)\n\n", r.Count))
+
+	// Group triples by subject for compact Turtle output
+	subjectTriples := make(map[string][]ConstructedTriple)
+	var subjects []string
+	for _, triple := range r.Triples {
+		if _, exists := subjectTriples[triple.Subject]; !exists {
+			subjects = append(subjects, triple.Subject)
+		}
+		subjectTriples[triple.Subject] = append(subjectTriples[triple.Subject], triple)
+	}
+
+	for i, subject := range subjects {
+		triples := subjectTriples[subject]
+
+		// Write subject with first predicate-object
+		sb.WriteString(formatTurtleTerm(subject))
+		sb.WriteString(" ")
+		sb.WriteString(formatTurtleTerm(triples[0].Predicate))
+		sb.WriteString(" ")
+		sb.WriteString(formatTurtleTerm(triples[0].Object))
+
+		// Write remaining predicate-objects for same subject
+		for j := 1; j < len(triples); j++ {
+			sb.WriteString(" ;\n    ")
+			sb.WriteString(formatTurtleTerm(triples[j].Predicate))
+			sb.WriteString(" ")
+			sb.WriteString(formatTurtleTerm(triples[j].Object))
+		}
+
+		sb.WriteString(" .\n")
+		if i < len(subjects)-1 {
+			sb.WriteString("\n")
+		}
+	}
+
+	return sb.String()
+}
+
+// FormatNTriples formats the constructed triples in N-Triples format.
+func (r *ConstructResult) FormatNTriples() string {
+	if len(r.Triples) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	for _, triple := range r.Triples {
+		sb.WriteString(formatNTriplesTerm(triple.Subject))
+		sb.WriteString(" ")
+		sb.WriteString(formatNTriplesTerm(triple.Predicate))
+		sb.WriteString(" ")
+		sb.WriteString(formatNTriplesTerm(triple.Object))
+		sb.WriteString(" .\n")
+	}
+
+	return sb.String()
+}
+
+// FormatJSON formats the constructed triples as JSON.
+func (r *ConstructResult) FormatJSON() (string, error) {
+	type jsonTriple struct {
+		Subject   string `json:"subject"`
+		Predicate string `json:"predicate"`
+		Object    string `json:"object"`
+	}
+	type jsonResult struct {
+		Triples []jsonTriple `json:"triples"`
+		Count   int          `json:"count"`
+	}
+
+	result := jsonResult{
+		Triples: make([]jsonTriple, len(r.Triples)),
+		Count:   r.Count,
+	}
+
+	for i, t := range r.Triples {
+		result.Triples[i] = jsonTriple{
+			Subject:   t.Subject,
+			Predicate: t.Predicate,
+			Object:    t.Object,
+		}
+	}
+
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// formatTurtleTerm formats a term for Turtle output.
+func formatTurtleTerm(term string) string {
+	// If it looks like a URI (contains :// or starts with known scheme)
+	if strings.Contains(term, "://") || strings.HasPrefix(term, "urn:") {
+		return "<" + term + ">"
+	}
+	// If it looks like a prefixed name, use as-is
+	if strings.Contains(term, ":") && !strings.Contains(term, " ") {
+		return term
+	}
+	// Otherwise, treat as a literal
+	return `"` + escapeLiteral(term) + `"`
+}
+
+// formatNTriplesTerm formats a term for N-Triples output.
+func formatNTriplesTerm(term string) string {
+	// If it looks like a URI
+	if strings.Contains(term, "://") || strings.HasPrefix(term, "urn:") {
+		return "<" + term + ">"
+	}
+	// If it looks like a prefixed name that needs expansion, wrap as URI
+	if strings.Contains(term, ":") && !strings.Contains(term, " ") && !strings.HasPrefix(term, "_:") {
+		// For N-Triples, prefixed names should ideally be expanded
+		// For now, treat as URI-like reference
+		return "<" + term + ">"
+	}
+	// Blank nodes
+	if strings.HasPrefix(term, "_:") {
+		return term
+	}
+	// Otherwise, treat as a literal
+	return `"` + escapeLiteral(term) + `"`
+}
+
+// escapeLiteral escapes special characters in a literal string.
+func escapeLiteral(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	s = strings.ReplaceAll(s, "\r", `\r`)
+	s = strings.ReplaceAll(s, "\t", `\t`)
+	return s
 }
 
 // QueryPlanner optimizes SPARQL query execution using index statistics.

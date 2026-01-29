@@ -603,3 +603,328 @@ func BenchmarkExecutor_WithFilter(b *testing.B) {
 		_, _ = executor.ExecuteString(queryStr)
 	}
 }
+
+// CONSTRUCT query execution tests
+
+func TestExecutor_SimpleConstruct(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	queryStr := `
+		CONSTRUCT {
+			?article <http://example.org/hasTitle> ?title .
+		}
+		WHERE {
+			?article rdf:type reg:Article .
+			?article reg:title ?title .
+		}
+	`
+
+	result, err := executor.ExecuteConstructString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteConstructString() error = %v", err)
+	}
+
+	// Should have 3 triples (one for each article)
+	if result.Count != 3 {
+		t.Errorf("Count = %d, want 3", result.Count)
+	}
+
+	// Check that triples have the correct predicate
+	for _, triple := range result.Triples {
+		if triple.Predicate != "http://example.org/hasTitle" {
+			t.Errorf("Predicate = %s, want http://example.org/hasTitle", triple.Predicate)
+		}
+	}
+}
+
+func TestExecutor_ConstructWithMultipleTemplates(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	queryStr := `
+		CONSTRUCT {
+			?article <http://example.org/id> ?article .
+			?article <http://example.org/name> ?title .
+		}
+		WHERE {
+			?article rdf:type reg:Article .
+			?article reg:title ?title .
+		}
+	`
+
+	result, err := executor.ExecuteConstructString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteConstructString() error = %v", err)
+	}
+
+	// Should have 6 triples (2 patterns * 3 articles)
+	if result.Count != 6 {
+		t.Errorf("Count = %d, want 6", result.Count)
+	}
+}
+
+func TestExecutor_ConstructWithFilter(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	queryStr := `
+		CONSTRUCT {
+			?article <http://example.org/erasure> ?title .
+		}
+		WHERE {
+			?article rdf:type reg:Article .
+			?article reg:title ?title .
+			FILTER(CONTAINS(?title, "erasure"))
+		}
+	`
+
+	result, err := executor.ExecuteConstructString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteConstructString() error = %v", err)
+	}
+
+	// Should have 1 triple (only Art17 has "erasure" in title)
+	if result.Count != 1 {
+		t.Errorf("Count = %d, want 1", result.Count)
+	}
+
+	if result.Triples[0].Subject != "GDPR:Art17" {
+		t.Errorf("Subject = %s, want GDPR:Art17", result.Triples[0].Subject)
+	}
+}
+
+func TestExecutor_ConstructWithOptional(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	queryStr := `
+		CONSTRUCT {
+			?article <http://example.org/references> ?ref .
+		}
+		WHERE {
+			?article rdf:type reg:Article .
+			OPTIONAL { ?article reg:references ?ref . }
+		}
+	`
+
+	result, err := executor.ExecuteConstructString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteConstructString() error = %v", err)
+	}
+
+	// Only Art17 has references, so only 1 triple should be constructed
+	// (triples with unbound variables are skipped)
+	if result.Count != 1 {
+		t.Errorf("Count = %d, want 1", result.Count)
+	}
+}
+
+func TestExecutor_ConstructDeduplication(t *testing.T) {
+	ts := store.NewTripleStore()
+	// Add duplicate data that would produce duplicate triples
+	ts.Add("A", "p1", "X")
+	ts.Add("A", "p2", "Y")
+	ts.Add("A", "p3", "Z")
+
+	executor := NewExecutor(ts)
+
+	queryStr := `
+		CONSTRUCT {
+			<http://example.org/A> <http://example.org/type> <http://example.org/Entity> .
+		}
+		WHERE {
+			?s ?p ?o .
+		}
+	`
+
+	result, err := executor.ExecuteConstructString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteConstructString() error = %v", err)
+	}
+
+	// Should be deduplicated to 1 triple
+	if result.Count != 1 {
+		t.Errorf("Count = %d, want 1 (deduplicated)", result.Count)
+	}
+}
+
+func TestExecutor_ConstructNoResults(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	queryStr := `
+		CONSTRUCT {
+			?article <http://example.org/nonexistent> ?value .
+		}
+		WHERE {
+			?article rdf:type reg:NonExistentType .
+		}
+	`
+
+	result, err := executor.ExecuteConstructString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteConstructString() error = %v", err)
+	}
+
+	if result.Count != 0 {
+		t.Errorf("Count = %d, want 0", result.Count)
+	}
+}
+
+func TestConstructResult_FormatTurtle(t *testing.T) {
+	result := &ConstructResult{
+		Triples: []ConstructedTriple{
+			{Subject: "http://example.org/Art17", Predicate: "http://example.org/title", Object: "Right to erasure"},
+			{Subject: "http://example.org/Art17", Predicate: "http://example.org/number", Object: "17"},
+			{Subject: "http://example.org/Art6", Predicate: "http://example.org/title", Object: "Lawfulness"},
+		},
+		Count: 3,
+	}
+
+	turtle := result.FormatTurtle()
+
+	if !strings.Contains(turtle, "# CONSTRUCT query result") {
+		t.Error("Turtle should contain header comment")
+	}
+	if !strings.Contains(turtle, "3 triple(s)") {
+		t.Error("Turtle should show triple count")
+	}
+	if !strings.Contains(turtle, "<http://example.org/Art17>") {
+		t.Error("Turtle should contain Art17 subject")
+	}
+}
+
+func TestConstructResult_FormatNTriples(t *testing.T) {
+	result := &ConstructResult{
+		Triples: []ConstructedTriple{
+			{Subject: "http://example.org/Art17", Predicate: "http://example.org/title", Object: "Right to erasure"},
+		},
+		Count: 1,
+	}
+
+	ntriples := result.FormatNTriples()
+
+	if !strings.Contains(ntriples, "<http://example.org/Art17>") {
+		t.Error("N-Triples should contain Art17 subject as URI")
+	}
+	if !strings.Contains(ntriples, "<http://example.org/title>") {
+		t.Error("N-Triples should contain predicate as URI")
+	}
+	if !strings.Contains(ntriples, `"Right to erasure"`) {
+		t.Error("N-Triples should contain literal in quotes")
+	}
+	if !strings.Contains(ntriples, " .") {
+		t.Error("N-Triples should end with period")
+	}
+}
+
+func TestConstructResult_FormatJSON(t *testing.T) {
+	result := &ConstructResult{
+		Triples: []ConstructedTriple{
+			{Subject: "Art17", Predicate: "title", Object: "Right to erasure"},
+		},
+		Count: 1,
+	}
+
+	jsonOut, err := result.FormatJSON()
+	if err != nil {
+		t.Fatalf("FormatJSON() error = %v", err)
+	}
+
+	if !strings.Contains(jsonOut, `"triples"`) {
+		t.Error("JSON should contain 'triples'")
+	}
+	if !strings.Contains(jsonOut, `"subject"`) {
+		t.Error("JSON should contain 'subject'")
+	}
+	if !strings.Contains(jsonOut, `"Art17"`) {
+		t.Error("JSON should contain 'Art17'")
+	}
+	if !strings.Contains(jsonOut, `"count": 1`) {
+		t.Error("JSON should contain count")
+	}
+}
+
+func TestConstructResult_FormatEmpty(t *testing.T) {
+	result := &ConstructResult{
+		Triples: []ConstructedTriple{},
+		Count:   0,
+	}
+
+	turtle := result.FormatTurtle()
+	if !strings.Contains(turtle, "No triples constructed") {
+		t.Error("Empty result should indicate no triples")
+	}
+
+	ntriples := result.FormatNTriples()
+	if ntriples != "" {
+		t.Error("Empty N-Triples should be empty string")
+	}
+}
+
+func TestExecutor_ConstructWithContext(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	queryStr := `
+		CONSTRUCT { ?s <http://example.org/p> ?o . }
+		WHERE { ?s ?p ?o . }
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	result, err := executor.ExecuteConstructWithContext(ctx, query)
+	if err != nil {
+		t.Fatalf("ExecuteConstructWithContext() error = %v", err)
+	}
+
+	if result.Count == 0 {
+		t.Error("Expected some results")
+	}
+}
+
+func TestExecutor_ConstructMetrics(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	queryStr := `
+		CONSTRUCT { ?article <http://example.org/type> reg:Article . }
+		WHERE { ?article rdf:type reg:Article . }
+	`
+
+	result, err := executor.ExecuteConstructString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteConstructString() error = %v", err)
+	}
+
+	if result.Metrics.ExecuteTime == 0 {
+		t.Error("ExecuteTime should be > 0")
+	}
+	if result.Metrics.PatternsCount != 1 {
+		t.Errorf("PatternsCount = %d, want 1", result.Metrics.PatternsCount)
+	}
+	if result.Metrics.ResultCount != 3 {
+		t.Errorf("ResultCount = %d, want 3", result.Metrics.ResultCount)
+	}
+}
+
+func BenchmarkExecutor_SimpleConstruct(b *testing.B) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+	queryStr := `
+		CONSTRUCT { ?article <http://example.org/type> reg:Article . }
+		WHERE { ?article rdf:type reg:Article . }
+	`
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = executor.ExecuteConstructString(queryStr)
+	}
+}

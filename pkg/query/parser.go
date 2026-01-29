@@ -15,9 +15,26 @@ func ParseQuery(queryStr string) (*Query, error) {
 		return nil, fmt.Errorf("empty query")
 	}
 
-	// Detect query type
+	// Detect query type - check CONSTRUCT first since it may also contain WHERE
 	upperQuery := strings.ToUpper(queryStr)
-	if strings.Contains(upperQuery, "SELECT") {
+
+	// Find positions of keywords to determine query type
+	constructIdx := strings.Index(upperQuery, "CONSTRUCT")
+	selectIdx := strings.Index(upperQuery, "SELECT")
+
+	// CONSTRUCT query if CONSTRUCT appears and (SELECT doesn't appear or CONSTRUCT appears first)
+	if constructIdx >= 0 && (selectIdx < 0 || constructIdx < selectIdx) {
+		constructQuery, err := parseConstructQuery(queryStr)
+		if err != nil {
+			return nil, err
+		}
+		return &Query{
+			Type:      ConstructQueryType,
+			Construct: constructQuery,
+		}, nil
+	}
+
+	if selectIdx >= 0 {
 		selectQuery, err := parseSelectQuery(queryStr)
 		if err != nil {
 			return nil, err
@@ -28,7 +45,7 @@ func ParseQuery(queryStr string) (*Query, error) {
 		}, nil
 	}
 
-	return nil, fmt.Errorf("unsupported query type: only SELECT queries are supported")
+	return nil, fmt.Errorf("unsupported query type: only SELECT and CONSTRUCT queries are supported")
 }
 
 // parseSelectQuery parses a SELECT query.
@@ -140,6 +157,80 @@ func parseSelectQuery(queryStr string) (*SelectQuery, error) {
 		offset, _ := strconv.Atoi(offsetMatch[1])
 		query.Offset = offset
 	}
+
+	return query, nil
+}
+
+// parseConstructQuery parses a CONSTRUCT query.
+func parseConstructQuery(queryStr string) (*ConstructQuery, error) {
+	query := &ConstructQuery{
+		Prefixes: make(map[string]string),
+	}
+
+	// Extract PREFIX declarations
+	prefixRegex := regexp.MustCompile(`(?i)PREFIX\s+(\w+):\s*<([^>]+)>`)
+	prefixMatches := prefixRegex.FindAllStringSubmatch(queryStr, -1)
+	for _, match := range prefixMatches {
+		if len(match) == 3 {
+			query.Prefixes[match[1]] = match[2]
+		}
+	}
+
+	// Remove PREFIX declarations for easier parsing
+	queryStr = prefixRegex.ReplaceAllString(queryStr, "")
+
+	// Extract CONSTRUCT template (between CONSTRUCT { and })
+	constructRegex := regexp.MustCompile(`(?i)CONSTRUCT\s*\{([\s\S]*?)\}\s*WHERE`)
+	constructMatch := constructRegex.FindStringSubmatch(queryStr)
+	if constructMatch == nil {
+		return nil, fmt.Errorf("invalid CONSTRUCT query: missing CONSTRUCT template or WHERE clause")
+	}
+
+	// Parse template patterns
+	templatePatterns, err := parseTriplePatterns(constructMatch[1], query.Prefixes)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing CONSTRUCT template: %w", err)
+	}
+	query.Template = templatePatterns
+
+	// Extract the main WHERE clause content
+	whereRegex := regexp.MustCompile(`(?i)WHERE\s*\{([\s\S]*)\}`)
+	whereMatch := whereRegex.FindStringSubmatch(queryStr)
+	if whereMatch == nil {
+		return nil, fmt.Errorf("invalid WHERE clause: missing braces")
+	}
+
+	whereClause := whereMatch[1]
+
+	// Extract OPTIONAL clauses before parsing main patterns
+	optionalRegex := regexp.MustCompile(`(?i)OPTIONAL\s*\{([^}]+)\}`)
+	optionalMatches := optionalRegex.FindAllStringSubmatch(whereClause, -1)
+	for _, match := range optionalMatches {
+		if len(match) == 2 {
+			optionalPatterns, err := parseTriplePatterns(match[1], query.Prefixes)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing OPTIONAL clause: %w", err)
+			}
+			query.Optional = append(query.Optional, optionalPatterns)
+		}
+	}
+
+	// Remove OPTIONAL clauses from main WHERE clause
+	mainWhereClause := optionalRegex.ReplaceAllString(whereClause, "")
+
+	// Extract FILTER clauses
+	query.Filters = extractFilters(mainWhereClause)
+
+	// Remove FILTER clauses before parsing triple patterns
+	filterRemoveRegex := regexp.MustCompile(`(?i)FILTER\s*\([^)]*\)`)
+	mainWhereClause = filterRemoveRegex.ReplaceAllString(mainWhereClause, "")
+
+	// Parse main triple patterns
+	patterns, err := parseTriplePatterns(mainWhereClause, query.Prefixes)
+	if err != nil {
+		return nil, err
+	}
+	query.Where = patterns
 
 	return query, nil
 }
@@ -373,6 +464,32 @@ func (q *SelectQuery) ExpandPrefixes() {
 	}
 }
 
+// ExpandPrefixes expands all prefixed URIs in a CONSTRUCT query using the declared prefixes.
+func (q *ConstructQuery) ExpandPrefixes() {
+	// Expand in CONSTRUCT template patterns
+	for i := range q.Template {
+		q.Template[i].Subject = expandPrefix(q.Template[i].Subject, q.Prefixes)
+		q.Template[i].Predicate = expandPrefix(q.Template[i].Predicate, q.Prefixes)
+		q.Template[i].Object = expandPrefix(q.Template[i].Object, q.Prefixes)
+	}
+
+	// Expand in WHERE patterns
+	for i := range q.Where {
+		q.Where[i].Subject = expandPrefix(q.Where[i].Subject, q.Prefixes)
+		q.Where[i].Predicate = expandPrefix(q.Where[i].Predicate, q.Prefixes)
+		q.Where[i].Object = expandPrefix(q.Where[i].Object, q.Prefixes)
+	}
+
+	// Expand in OPTIONAL patterns
+	for i := range q.Optional {
+		for j := range q.Optional[i] {
+			q.Optional[i][j].Subject = expandPrefix(q.Optional[i][j].Subject, q.Prefixes)
+			q.Optional[i][j].Predicate = expandPrefix(q.Optional[i][j].Predicate, q.Prefixes)
+			q.Optional[i][j].Object = expandPrefix(q.Optional[i][j].Object, q.Prefixes)
+		}
+	}
+}
+
 // expandPrefix expands a prefixed URI using the provided prefix map.
 func expandPrefix(term string, prefixes map[string]string) string {
 	term = strings.TrimSpace(term)
@@ -409,8 +526,17 @@ func (q *Query) Validate() []error {
 		return errors
 	}
 
+	if q.Construct == nil && q.Type == ConstructQueryType {
+		errors = append(errors, fmt.Errorf("CONSTRUCT query missing construct clause"))
+		return errors
+	}
+
 	if q.Select != nil {
 		errors = append(errors, q.Select.Validate()...)
+	}
+
+	if q.Construct != nil {
+		errors = append(errors, q.Construct.Validate()...)
 	}
 
 	return errors
@@ -494,6 +620,9 @@ func (q *Query) String() string {
 	if q.Select != nil {
 		return q.Select.String()
 	}
+	if q.Construct != nil {
+		return q.Construct.String()
+	}
 	return "<unknown query type>"
 }
 
@@ -555,6 +684,97 @@ func (q *SelectQuery) String() string {
 	if q.Offset > 0 {
 		sb.WriteString(fmt.Sprintf(" OFFSET %d", q.Offset))
 	}
+
+	return sb.String()
+}
+
+// Validate checks if the CONSTRUCT query is well-formed.
+func (q *ConstructQuery) Validate() []error {
+	var errors []error
+
+	if len(q.Template) == 0 {
+		errors = append(errors, fmt.Errorf("CONSTRUCT template has no triple patterns"))
+	}
+
+	if len(q.Where) == 0 {
+		errors = append(errors, fmt.Errorf("WHERE clause has no triple patterns"))
+	}
+
+	// Collect all variables bound in WHERE clause and OPTIONAL
+	boundVars := make(map[string]bool)
+	for _, p := range q.Where {
+		if IsVariable(p.Subject) {
+			boundVars[p.Subject] = true
+		}
+		if IsVariable(p.Predicate) {
+			boundVars[p.Predicate] = true
+		}
+		if IsVariable(p.Object) {
+			boundVars[p.Object] = true
+		}
+	}
+	for _, opt := range q.Optional {
+		for _, p := range opt {
+			if IsVariable(p.Subject) {
+				boundVars[p.Subject] = true
+			}
+			if IsVariable(p.Predicate) {
+				boundVars[p.Predicate] = true
+			}
+			if IsVariable(p.Object) {
+				boundVars[p.Object] = true
+			}
+		}
+	}
+
+	// Check that all variables in template are bound in WHERE clause
+	for _, p := range q.Template {
+		if IsVariable(p.Subject) && !boundVars[p.Subject] {
+			errors = append(errors, fmt.Errorf("variable %s in CONSTRUCT template is not bound in WHERE clause", p.Subject))
+		}
+		if IsVariable(p.Predicate) && !boundVars[p.Predicate] {
+			errors = append(errors, fmt.Errorf("variable %s in CONSTRUCT template is not bound in WHERE clause", p.Predicate))
+		}
+		if IsVariable(p.Object) && !boundVars[p.Object] {
+			errors = append(errors, fmt.Errorf("variable %s in CONSTRUCT template is not bound in WHERE clause", p.Object))
+		}
+	}
+
+	return errors
+}
+
+// String returns a string representation of the CONSTRUCT query.
+func (q *ConstructQuery) String() string {
+	var sb strings.Builder
+
+	// Prefixes
+	for prefix, uri := range q.Prefixes {
+		sb.WriteString(fmt.Sprintf("PREFIX %s: <%s>\n", prefix, uri))
+	}
+
+	// CONSTRUCT template
+	sb.WriteString("CONSTRUCT {\n")
+	for _, p := range q.Template {
+		sb.WriteString(fmt.Sprintf("  %s %s %s .\n", p.Subject, p.Predicate, p.Object))
+	}
+	sb.WriteString("}")
+
+	// WHERE clause
+	sb.WriteString(" WHERE {\n")
+	for _, p := range q.Where {
+		sb.WriteString(fmt.Sprintf("  %s %s %s .\n", p.Subject, p.Predicate, p.Object))
+	}
+	for _, f := range q.Filters {
+		sb.WriteString(fmt.Sprintf("  FILTER(%s)\n", f.Expression))
+	}
+	for _, opt := range q.Optional {
+		sb.WriteString("  OPTIONAL {\n")
+		for _, p := range opt {
+			sb.WriteString(fmt.Sprintf("    %s %s %s .\n", p.Subject, p.Predicate, p.Object))
+		}
+		sb.WriteString("  }\n")
+	}
+	sb.WriteString("}")
 
 	return sb.String()
 }

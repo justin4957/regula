@@ -3,8 +3,9 @@ package query
 
 // Query represents a parsed SPARQL query.
 type Query struct {
-	Type   QueryType
-	Select *SelectQuery
+	Type      QueryType
+	Select    *SelectQuery
+	Construct *ConstructQuery
 }
 
 // QueryType represents the type of SPARQL query.
@@ -13,6 +14,8 @@ type QueryType string
 const (
 	// SelectQueryType represents a SELECT query.
 	SelectQueryType QueryType = "SELECT"
+	// ConstructQueryType represents a CONSTRUCT query.
+	ConstructQueryType QueryType = "CONSTRUCT"
 )
 
 // SelectQuery represents a parsed SELECT query.
@@ -26,6 +29,15 @@ type SelectQuery struct {
 	Limit     int               // LIMIT (0 = no limit)
 	Offset    int               // OFFSET (0 = no offset)
 	Prefixes  map[string]string // Prefix declarations
+}
+
+// ConstructQuery represents a parsed CONSTRUCT query.
+type ConstructQuery struct {
+	Template []TriplePattern   // CONSTRUCT template patterns
+	Where    []TriplePattern   // WHERE clause triple patterns
+	Optional [][]TriplePattern // OPTIONAL clause patterns
+	Filters  []Filter          // FILTER clauses
+	Prefixes map[string]string // Prefix declarations
 }
 
 // TriplePattern represents a triple pattern in a WHERE clause.
