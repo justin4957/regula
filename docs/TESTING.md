@@ -99,6 +99,35 @@ go test ./pkg/eurlex/... -run "TestValidate|TestFetch|TestUserAgent|TestHTTPMeth
 go test ./pkg/eurlex/... -run TestELIDoesNotPadNumbers -v
 ```
 
+### US Code Connector Tests
+
+Test the US Code connector for USC/CFR URI generation, validation caching, and HTTP client integration:
+
+```bash
+# Run all US Code connector tests
+go test ./pkg/uscode/... -v
+
+# Run URI generation tests
+go test ./pkg/uscode/... -run "TestGenerateUSCURI|TestGenerateCFRURI" -v
+
+# Run citation parsing tests
+go test ./pkg/uscode/... -run "TestParseUSCNumber|TestParseCFRNumber" -v
+
+# Run validation tests (uses mock HTTP client)
+go test ./pkg/uscode/... -run "TestValidateURI|TestValidateUSC|TestValidateCFR" -v
+
+# Run caching tests
+go test ./pkg/uscode/... -run TestCaching -v
+
+# Run real connection integration tests (hits uscode.house.gov and ecfr.gov)
+go test ./pkg/uscode/... -run "TestIntegration" -v
+
+# Connection summary test (validates all major citations)
+go test ./pkg/uscode/... -run TestIntegration_ConnectionSummary -v
+```
+
+**Note:** Integration tests hit real government servers (uscode.house.gov, ecfr.gov). They are skipped with `-short` flag and may be affected by network conditions.
+
 ### Validation Gate Tests
 
 Test the validation checkpoint/gate system with per-stage quality metrics:
