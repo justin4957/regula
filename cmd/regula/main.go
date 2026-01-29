@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/coolbeans/regula/pkg/analysis"
 	"github.com/coolbeans/regula/pkg/extract"
+	"github.com/coolbeans/regula/pkg/linkcheck"
 	"github.com/coolbeans/regula/pkg/query"
 	"github.com/coolbeans/regula/pkg/simulate"
 	"github.com/coolbeans/regula/pkg/store"
@@ -694,13 +696,19 @@ Validation Profiles:
   CCPA     - California Consumer Privacy Act
   Generic  - Minimal criteria for unknown regulations
 
+Link Validation (--check links):
+  Validates external reference URIs with per-domain rate limiting.
+  Use --report to save results to a file (JSON or Markdown).
+
 Example:
   regula validate --source gdpr.txt
   regula validate --source gdpr.txt --threshold 0.85
   regula validate --source gdpr.txt --format json
   regula validate --source gdpr.txt --check references
   regula validate --source ccpa.txt --profile CCPA
-  regula validate --source gdpr.txt --check gates`,
+  regula validate --source gdpr.txt --check gates
+  regula validate --source gdpr.txt --check links
+  regula validate --source gdpr.txt --check links --report links.json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			source, _ := cmd.Flags().GetString("source")
 			checkType, _ := cmd.Flags().GetString("check")
@@ -711,6 +719,7 @@ Example:
 			skipGates, _ := cmd.Flags().GetStringSlice("skip-gates")
 			strictMode, _ := cmd.Flags().GetBool("strict")
 			failOnWarn, _ := cmd.Flags().GetBool("fail-on-warn")
+			reportPath, _ := cmd.Flags().GetString("report")
 
 			if source == "" {
 				return fmt.Errorf("--source flag is required")
@@ -829,6 +838,98 @@ Example:
 				return nil
 			}
 
+			// Link validation - validates external reference URIs
+			if checkType == "links" {
+				// Collect external URIs from resolved references
+				externalURIs := collectExternalURIs(resolved)
+
+				if len(externalURIs) == 0 {
+					fmt.Println("No external URIs found to validate.")
+					return nil
+				}
+
+				fmt.Printf("Validating %d external link(s)...\n\n", len(externalURIs))
+
+				// Configure batch validator
+				config := linkcheck.DefaultBatchConfig()
+				config.DefaultRateLimit = 1 * time.Second
+				config.DefaultTimeout = 30 * time.Second
+				config.Concurrency = 3
+
+				// Add domain-specific rate limits for known legal sources
+				config.WithDomainConfig(&linkcheck.DomainConfig{
+					Domain:    "eur-lex.europa.eu",
+					RateLimit: 2 * time.Second,
+					Timeout:   60 * time.Second,
+				})
+				config.WithDomainConfig(&linkcheck.DomainConfig{
+					Domain:    "data.europa.eu",
+					RateLimit: 2 * time.Second,
+					Timeout:   60 * time.Second,
+				})
+				config.WithDomainConfig(&linkcheck.DomainConfig{
+					Domain:    "uscode.house.gov",
+					RateLimit: 2 * time.Second,
+					Timeout:   60 * time.Second,
+				})
+				config.WithDomainConfig(&linkcheck.DomainConfig{
+					Domain:    "ecfr.gov",
+					RateLimit: 2 * time.Second,
+					Timeout:   60 * time.Second,
+				})
+
+				validator := linkcheck.NewBatchValidator(config)
+
+				// Set progress callback for CLI feedback
+				validator.SetProgressCallback(func(progress *linkcheck.ValidationProgress) {
+					fmt.Printf("\r  Progress: %d/%d (%.1f%%) - %s",
+						progress.CompletedLinks, progress.TotalLinks,
+						progress.PercentComplete(), progress.CurrentDomain)
+				})
+
+				linkReport := validator.ValidateLinks(externalURIs)
+				fmt.Printf("\r%s\n", strings.Repeat(" ", 80)) // Clear progress line
+
+				// Output report
+				if reportPath != "" {
+					var reportData []byte
+					var err error
+
+					if strings.HasSuffix(reportPath, ".md") {
+						reportData = []byte(linkReport.ToMarkdown())
+					} else {
+						reportData, err = linkReport.ToJSON()
+						if err != nil {
+							return fmt.Errorf("failed to serialize link report: %w", err)
+						}
+					}
+
+					if err := os.WriteFile(reportPath, reportData, 0644); err != nil {
+						return fmt.Errorf("failed to write report: %w", err)
+					}
+					fmt.Printf("Report saved to: %s\n\n", reportPath)
+				}
+
+				// Print summary
+				if formatStr == "json" {
+					jsonData, err := linkReport.ToJSON()
+					if err != nil {
+						return fmt.Errorf("failed to serialize link report: %w", err)
+					}
+					fmt.Println(string(jsonData))
+				} else {
+					fmt.Print(linkReport.String())
+				}
+
+				// Return error if too many broken links
+				if linkReport.SuccessRate() < threshold*100 {
+					return fmt.Errorf("link validation failed: success rate %.1f%% below threshold %.1f%%",
+						linkReport.SuccessRate(), threshold*100)
+				}
+
+				return nil
+			}
+
 			// Full validation
 			validator := validate.NewValidator(threshold)
 
@@ -867,7 +968,7 @@ Example:
 	}
 
 	cmd.Flags().StringP("source", "s", "", "Source document path")
-	cmd.Flags().String("check", "all", "What to check (all, references, gates)")
+	cmd.Flags().String("check", "all", "What to check (all, references, gates, links)")
 	cmd.Flags().StringP("format", "f", "text", "Output format (text, json)")
 	cmd.Flags().String("base-uri", "https://regula.dev/regulations/", "Base URI for the graph")
 	cmd.Flags().Float64("threshold", 0.80, "Pass/fail threshold (0.0-1.0)")
@@ -875,6 +976,7 @@ Example:
 	cmd.Flags().StringSlice("skip-gates", []string{}, "Gates to skip (V0,V1,V2,V3)")
 	cmd.Flags().Bool("strict", false, "Halt pipeline on gate failure")
 	cmd.Flags().Bool("fail-on-warn", false, "Halt pipeline on gate warnings")
+	cmd.Flags().String("report", "", "Save link validation report to file (JSON or Markdown based on extension)")
 
 	return cmd
 }
@@ -1324,4 +1426,67 @@ Example:
 	cmd.Flags().Bool("expanded", false, "Output expanded JSON-LD (full URIs, no @context) instead of compact form")
 
 	return cmd
+}
+
+// collectExternalURIs extracts external reference URIs from resolved references.
+func collectExternalURIs(resolved []*extract.ResolvedReference) []linkcheck.LinkInput {
+	seen := make(map[string]bool)
+	var links []linkcheck.LinkInput
+
+	for _, ref := range resolved {
+		// Check target URI
+		if ref.TargetURI != "" && isExternalURI(ref.TargetURI) && !seen[ref.TargetURI] {
+			seen[ref.TargetURI] = true
+			links = append(links, linkcheck.LinkInput{
+				URI:           ref.TargetURI,
+				SourceContext: formatSourceContext(ref),
+			})
+		}
+
+		// Check multiple target URIs
+		for _, uri := range ref.TargetURIs {
+			if isExternalURI(uri) && !seen[uri] {
+				seen[uri] = true
+				links = append(links, linkcheck.LinkInput{
+					URI:           uri,
+					SourceContext: formatSourceContext(ref),
+				})
+			}
+		}
+
+		// Check alternative URIs
+		for _, uri := range ref.AlternativeURIs {
+			if isExternalURI(uri) && !seen[uri] {
+				seen[uri] = true
+				links = append(links, linkcheck.LinkInput{
+					URI:           uri,
+					SourceContext: formatSourceContext(ref),
+				})
+			}
+		}
+	}
+
+	return links
+}
+
+// isExternalURI checks if a URI is an external HTTP(S) URL.
+func isExternalURI(uri string) bool {
+	return strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://")
+}
+
+// formatSourceContext creates a human-readable source context for a reference.
+func formatSourceContext(ref *extract.ResolvedReference) string {
+	if ref.Original == nil {
+		return ""
+	}
+
+	if ref.ContextArticle > 0 {
+		return fmt.Sprintf("Article %d", ref.ContextArticle)
+	}
+
+	if ref.Original.SourceArticle > 0 {
+		return fmt.Sprintf("Article %d", ref.Original.SourceArticle)
+	}
+
+	return ref.Original.RawText
 }

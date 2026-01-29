@@ -127,6 +127,39 @@ go test ./pkg/eurlex/... -run "TestValidate|TestFetch|TestUserAgent|TestHTTPMeth
 go test ./pkg/eurlex/... -run TestELIDoesNotPadNumbers -v
 ```
 
+### Batch Link Validation Tests
+
+Test the batch link validator for external reference URI validation with rate limiting:
+
+```bash
+# Run all linkcheck tests
+go test ./pkg/linkcheck/... -v
+
+# Run type and config tests
+go test ./pkg/linkcheck/... -run "TestLinkResult|TestExtractDomain|TestBatchConfig|TestValidationProgress" -v
+
+# Run report tests
+go test ./pkg/linkcheck/... -run "TestValidationReport" -v
+
+# Run cache tests
+go test ./pkg/linkcheck/... -run "TestLinkCache" -v
+
+# Run validator tests (uses mock HTTP server)
+go test ./pkg/linkcheck/... -run "TestBatchValidator" -v
+
+# Run rate limiting tests
+go test ./pkg/linkcheck/... -run "TestRateLimited|TestDomainRateLimiter" -v
+
+# CLI: Run link validation
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --check links
+
+# CLI: Save link report to JSON
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --check links --report links.json
+
+# CLI: Save link report to Markdown
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --check links --report links.md
+```
+
 ### US Code Connector Tests
 
 Test the US Code connector for USC/CFR URI generation, validation caching, and HTTP client integration:
