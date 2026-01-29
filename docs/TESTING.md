@@ -44,7 +44,7 @@ go test ./pkg/store/... -run TestEnrichWithELI_GDPRIntegration -v
 
 ### Citation Parser Tests
 
-Test the extensible citation parser interface and EU citation parser:
+Test the extensible citation parser interface, EU citation parser, and Bluebook (US) parser:
 
 ```bash
 # Run all citation parser tests
@@ -52,6 +52,15 @@ go test ./pkg/citation/... -v
 
 # Run EU citation parser tests
 go test ./pkg/citation/... -run TestEUCitationParser -v
+
+# Run Bluebook (US) citation parser tests
+go test ./pkg/citation/... -run TestBluebook -v
+
+# Run Bluebook USC/CFR/Public Law tests
+go test ./pkg/citation/... -run "TestBluebookParserParseUSC|TestBluebookParserParseCFR|TestBluebookParserParsePublicLaw" -v
+
+# Run CCPA/VCDPA integration tests (US citations)
+go test ./pkg/citation/... -run "TestBluebookParserCCPAIntegration|TestBluebookParserVCDPAIntegration" -v
 
 # Run registry operation tests
 go test ./pkg/citation/... -run TestCitationRegistry -v
