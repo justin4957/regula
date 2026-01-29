@@ -555,6 +555,86 @@ func TestLongRunning(t *testing.T) {
 }
 ```
 
+## Fuzz Testing
+
+Fuzz testing uses Go 1.18+ native fuzzing to test parsers and extractors with randomly generated inputs.
+
+### Running Fuzz Tests
+
+```bash
+# Run all fuzz tests briefly (5 seconds each)
+go test ./pkg/extract/... -fuzz=FuzzParser -fuzztime=5s
+go test ./pkg/extract/... -fuzz=FuzzReferenceExtractor -fuzztime=5s
+go test ./pkg/extract/... -fuzz=FuzzDefinitionExtractor -fuzztime=5s
+go test ./pkg/extract/... -fuzz=FuzzSemanticExtractor -fuzztime=5s
+go test ./pkg/citation/... -fuzz=FuzzEUCitationParser -fuzztime=5s
+go test ./pkg/citation/... -fuzz=FuzzBluebookParser -fuzztime=5s
+go test ./pkg/citation/... -fuzz=FuzzCitationRegistry -fuzztime=5s
+go test ./pkg/query/... -fuzz=FuzzParseQuery -fuzztime=5s
+go test ./pkg/query/... -fuzz=FuzzExecuteQuery -fuzztime=5s
+go test ./pkg/query/... -fuzz=FuzzFilterEvaluation -fuzztime=5s
+```
+
+### Extended Fuzz Testing
+
+For longer fuzz runs to find deeper edge cases:
+
+```bash
+# 30 seconds per target (recommended for PR validation)
+go test ./pkg/extract/... -fuzz=FuzzParser -fuzztime=30s
+
+# 5 minutes per target (recommended for release testing)
+go test ./pkg/extract/... -fuzz=FuzzParser -fuzztime=5m
+
+# Unlimited fuzzing (run until stopped with Ctrl+C)
+go test ./pkg/extract/... -fuzz=FuzzParser
+```
+
+### Fuzz Test Corpus
+
+Fuzz tests automatically save interesting inputs to `testdata/fuzz/<FuzzTestName>/`:
+
+```bash
+# View discovered corpus entries
+ls pkg/extract/testdata/fuzz/FuzzParser/
+
+# Clean corpus (reset fuzzing state)
+rm -rf pkg/extract/testdata/fuzz/
+```
+
+### Available Fuzz Targets
+
+| Package | Target | Tests |
+|---------|--------|-------|
+| `pkg/extract` | `FuzzParser` | Document parser with arbitrary text |
+| `pkg/extract` | `FuzzReferenceExtractor` | Reference extractor with arbitrary text |
+| `pkg/extract` | `FuzzDefinitionExtractor` | Definition extractor with arbitrary text |
+| `pkg/extract` | `FuzzSemanticExtractor` | Semantic annotation extractor |
+| `pkg/citation` | `FuzzEUCitationParser` | EU citation parser (Regulation, Directive, etc.) |
+| `pkg/citation` | `FuzzBluebookParser` | US citation parser (U.S.C., C.F.R., etc.) |
+| `pkg/citation` | `FuzzCitationRegistry` | Combined citation registry |
+| `pkg/query` | `FuzzParseQuery` | SPARQL query parser |
+| `pkg/query` | `FuzzExecuteQuery` | SPARQL query executor |
+| `pkg/query` | `FuzzFilterEvaluation` | SPARQL FILTER expression evaluator |
+
+### Handling Crashes
+
+If a fuzz test finds a crash:
+
+1. The crash input is saved to `testdata/fuzz/<FuzzTestName>/`
+2. Fix the issue in the code
+3. Run the fuzz test again to verify the fix
+4. Add a regression test if appropriate
+
+```bash
+# Reproduce a specific crash
+go test ./pkg/extract/... -run=FuzzParser/crash_input_filename
+```
+
+### CI Integration
+
+Brief fuzz tests (10s each) run automatically on all PRs as part of the E2E test workflow.
+
 ## Performance Testing
 
 ### Benchmark Tests
