@@ -70,6 +70,48 @@ go run cmd/regula/main.go export --source testdata/gdpr.txt --format jsonld --ex
 go run cmd/regula/main.go export --source testdata/gdpr.txt --format jsonld --eli --output graph-eli.jsonld
 ```
 
+### RDF/XML Serialization Tests
+
+Test RDF/XML export format for legacy system compatibility:
+
+```bash
+# Run all RDF/XML tests
+go test ./pkg/store/... -v -run "TestRDFXML|TestEscapeXML|TestSplitPrefixedName|TestExpandToFullURI|TestIsURIObject" -count=1
+
+# Run serialization tests
+go test ./pkg/store/... -run TestRDFXMLSerialize -v
+
+# Run individual serialization tests
+go test ./pkg/store/... -run TestRDFXMLSerialize_EmptyStore -v          # Minimal valid XML
+go test ./pkg/store/... -run TestRDFXMLSerialize_SingleTriple -v        # Single Description block
+go test ./pkg/store/... -run TestRDFXMLSerialize_SubjectGrouping -v     # Multiple predicates grouped
+go test ./pkg/store/... -run TestRDFXMLSerialize_URIObject -v           # rdf:resource attribute
+go test ./pkg/store/... -run TestRDFXMLSerialize_RDFType -v             # rdf:type with resource
+go test ./pkg/store/... -run TestRDFXMLSerialize_XMLEscaping -v         # & < > escaping
+go test ./pkg/store/... -run TestRDFXMLSerialize_NamespaceDeclarations -v  # xmlns attributes
+go test ./pkg/store/... -run TestRDFXMLSerialize_MultipleObjects -v     # Separate elements per object
+go test ./pkg/store/... -run TestRDFXMLSerialize_TypeFirst -v           # rdf:type ordered first
+
+# Run XML escaping tests
+go test ./pkg/store/... -run TestEscapeXMLText -v
+go test ./pkg/store/... -run TestEscapeXMLAttribute -v
+
+# Run URI splitting tests
+go test ./pkg/store/... -run TestSplitPrefixedName -v
+
+# Run GDPR integration test
+go test ./pkg/store/... -run TestRDFXMLSerialize_GDPRIntegration -v
+
+# Run concurrent access test
+go test ./pkg/store/... -run TestRDFXMLSerialize_ConcurrentAccess -v
+
+# CLI: Export as RDF/XML
+go run cmd/regula/main.go export --source testdata/gdpr.txt --format rdfxml
+go run cmd/regula/main.go export --source testdata/gdpr.txt --format rdfxml --output graph.rdf
+go run cmd/regula/main.go export --source testdata/gdpr.txt --format xml --output graph.xml
+go run cmd/regula/main.go export --source testdata/gdpr.txt --format rdfxml --eli --output graph-eli.rdf
+```
+
 ### Citation Parser Tests
 
 Test the extensible citation parser interface, EU citation parser, Bluebook (US) parser, and OSCOLA (UK) parser:
