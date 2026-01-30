@@ -311,6 +311,38 @@ go run cmd/regula/main.go query --source testdata/gdpr.txt --timing "DESCRIBE GD
 go run cmd/regula/main.go query --source testdata/gdpr.txt --template describe-article
 ```
 
+### UK Legislation Connector Tests
+
+Test the UK legislation.gov.uk connector for URI generation, validation caching, and HTTP client integration:
+
+```bash
+# Run all UK legislation connector tests
+go test ./pkg/ukleg/... -v
+
+# Run URI generation tests
+go test ./pkg/ukleg/... -run "TestGenerateLegislationURI|TestGenerateSectionURI|TestLegislationURI" -v
+
+# Run cache tests
+go test ./pkg/ukleg/... -run TestCache -v
+
+# Run validation tests (uses mock HTTP client)
+go test ./pkg/ukleg/... -run "TestValidateURI|TestValidateCitation" -v
+
+# Run metadata fetch tests
+go test ./pkg/ukleg/... -run TestFetchMetadata -v
+
+# Run HTTP method and header tests
+go test ./pkg/ukleg/... -run "TestHTTPMethodUsed|TestUserAgentHeader|TestFetchMetadata_AcceptHeader" -v
+
+# Run real connection integration tests (hits legislation.gov.uk)
+go test ./pkg/ukleg/... -run TestIntegration -v
+
+# Run end-to-end parse and validate test
+go test ./pkg/ukleg/... -run TestIntegration_ParseAndValidate -v
+```
+
+**Note:** Integration tests hit real government servers (legislation.gov.uk). They are skipped with `-short` flag and may be affected by network conditions.
+
 ### Validation Gate Tests
 
 Test the validation checkpoint/gate system with per-stage quality metrics:
