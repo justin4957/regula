@@ -778,6 +778,74 @@ Use `--timing` flag to measure query performance:
 ./regula query --source testdata/gdpr.txt --template articles --timing
 ```
 
+## Recursive Document Fetching (`pkg/fetch/`)
+
+The recursive fetch package provides federated graph building by fetching metadata for external references.
+
+### Unit Tests
+
+```bash
+# URN-to-URL mapping tests
+go test ./pkg/fetch/... -v -run TestMapURN -count=1
+go test ./pkg/fetch/... -v -run TestParseEUDocURN -count=1
+
+# Disk cache tests
+go test ./pkg/fetch/... -v -run TestDiskCache -count=1
+
+# Recursive fetcher tests (uses mock HTTP client)
+go test ./pkg/fetch/... -v -run TestRecursiveFetcher -count=1
+
+# Report formatting tests
+go test ./pkg/fetch/... -v -run TestFetchReport -count=1
+
+# All fetch tests
+go test ./pkg/fetch/... -v -short -count=1
+```
+
+### Integration Tests
+
+Integration tests make real HTTP requests to EUR-Lex and are skipped in short mode:
+
+```bash
+# Run with real network calls (not in short mode)
+go test ./pkg/fetch/... -v -run TestIntegration -count=1
+```
+
+### CLI Usage
+
+```bash
+# Dry-run: see what would be fetched without network calls
+regula ingest --source gdpr.txt --fetch-refs --dry-run
+
+# Fetch with defaults (max-depth=2, max-documents=10)
+regula ingest --source gdpr.txt --fetch-refs
+
+# Limit fetch scope
+regula ingest --source gdpr.txt --fetch-refs --max-depth 1 --max-documents 5
+
+# Restrict to specific domains
+regula ingest --source gdpr.txt --fetch-refs --allowed-domains data.europa.eu
+
+# Enable disk caching for cross-session persistence
+regula ingest --source gdpr.txt --fetch-refs --cache-dir ~/.regula/cache
+```
+
+### Test Coverage
+
+| Test | What it verifies |
+|---|---|
+| `TestMapURN_EURegulation` | Regulation URN → ELI URL |
+| `TestMapURN_EUDirective` | Directive URN → ELI URL |
+| `TestMapURN_EUDecision` | Decision URN → ELI URL |
+| `TestMapURN_Treaty` | Treaty URNs return error |
+| `TestMapURN_USSource` | US URNs return error |
+| `TestDiskCache_*` | Set/Get, TTL expiration, overwrite, corruption |
+| `TestRecursiveFetcher_Fetch_*` | Success, depth/doc limits, domain filtering |
+| `TestRecursiveFetcher_Fetch_CacheHit` | Disk cache prevents redundant HTTP calls |
+| `TestRecursiveFetcher_Fetch_FailureGraceful` | Pipeline continues on individual failures |
+| `TestRecursiveFetcher_Plan_DryRun` | No HTTP calls in dry-run mode |
+| `TestRecursiveFetcher_FederatedTriples` | Cross-document RDF triples generated |
+
 ## Troubleshooting Tests
 
 ### Common Issues

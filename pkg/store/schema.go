@@ -422,6 +422,24 @@ const (
 	ObligationAppoint          = "reg:AppointmentObligation"
 )
 
+// Federation Properties - Cross-document graph linking for recursive fetching.
+const (
+	// ClassExternalDocument represents an external document fetched during federation.
+	ClassExternalDocument = "reg:ExternalDocument"
+
+	// PropFederatedFrom links a source document to a fetched external document.
+	PropFederatedFrom = "reg:federatedFrom"
+
+	// PropFetchedAt is the timestamp when the external document was fetched.
+	PropFetchedAt = "reg:fetchedAt"
+
+	// PropFetchDepth is the BFS depth at which the document was discovered.
+	PropFetchDepth = "reg:fetchDepth"
+
+	// PropExternalDocURI is the resolved HTTP URL of the external document.
+	PropExternalDocURI = "reg:externalDocURI"
+)
+
 // Legal basis types (for GDPR Article 6).
 const (
 	LegalBasisConsent            = "reg:Consent"
