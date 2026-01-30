@@ -1534,6 +1534,7 @@ Supported formats:
   - dot:     DOT format for Graphviz visualization
   - turtle:  W3C Turtle (TTL) RDF serialization
   - jsonld:  JSON-LD (Linked Data) format with @context
+  - rdfxml:  RDF/XML format for legacy system compatibility
   - summary: Relationship statistics and summary
 
 Use --eli to add ELI (European Legislation Identifier) vocabulary triples
@@ -1549,6 +1550,7 @@ Example:
   regula export --source gdpr.txt --format turtle --eli --output graph-eli.ttl
   regula export --source gdpr.txt --format jsonld --output graph.jsonld
   regula export --source gdpr.txt --format jsonld --expanded --output graph-expanded.jsonld
+  regula export --source gdpr.txt --format rdfxml --output graph.rdf
   regula export --source gdpr.txt --format summary`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			source, _ := cmd.Flags().GetString("source")
@@ -1663,6 +1665,20 @@ Example:
 					fmt.Print(string(jsonldOutput))
 				}
 
+			case "rdfxml", "xml":
+				rdfxmlSerializer := store.NewRDFXMLSerializer()
+				rdfxmlOutput := rdfxmlSerializer.Serialize(tripleStore)
+
+				if output != "" {
+					if err := os.WriteFile(output, []byte(rdfxmlOutput), 0644); err != nil {
+						return fmt.Errorf("failed to write file: %w", err)
+					}
+					fmt.Printf("RDF/XML graph exported to: %s\n", output)
+					fmt.Printf("  Triples: %d\n", tripleStore.Count())
+				} else {
+					fmt.Print(rdfxmlOutput)
+				}
+
 			case "summary":
 				summary := store.CalculateRelationshipSummary(tripleStore)
 
@@ -1690,7 +1706,7 @@ Example:
 				}
 
 			default:
-				return fmt.Errorf("unknown format: %s (use json, dot, turtle, jsonld, or summary)", formatStr)
+				return fmt.Errorf("unknown format: %s (use json, dot, turtle, jsonld, rdfxml, or summary)", formatStr)
 			}
 
 			return nil
@@ -1698,7 +1714,7 @@ Example:
 	}
 
 	cmd.Flags().StringP("source", "s", "", "Source document path")
-	cmd.Flags().StringP("format", "f", "summary", "Output format (json, dot, turtle, jsonld, summary)")
+	cmd.Flags().StringP("format", "f", "summary", "Output format (json, dot, turtle, jsonld, rdfxml, summary)")
 	cmd.Flags().StringP("output", "o", "", "Output file path")
 	cmd.Flags().Bool("relations-only", true, "Export only relationship edges (default: true)")
 	cmd.Flags().Bool("eli", false, "Enrich with ELI (European Legislation Identifier) vocabulary for EU documents")
