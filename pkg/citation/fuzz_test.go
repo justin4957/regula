@@ -234,6 +234,146 @@ func FuzzBluebookParser(f *testing.F) {
 	})
 }
 
+// FuzzOSCOLAParser tests the OSCOLA (UK) citation parser with arbitrary input.
+// Run with: go test -fuzz=FuzzOSCOLAParser -fuzztime=30s ./pkg/citation/...
+func FuzzOSCOLAParser(f *testing.F) {
+	// Add seed corpus with UK citation patterns
+	seeds := []string{
+		// UK Acts
+		"Data Protection Act 2018",
+		"Human Rights Act 1998",
+		"the European Union (Withdrawal) Act 2018",
+		"Equality Act 2010",
+		"Freedom of Information Act 2000",
+
+		// Act chapter references
+		"[2018 c. 12]",
+		"[1998 c. 42]",
+		"[2018 c. 16]",
+
+		// Statutory Instruments
+		"SI 2019/419",
+		"SI 2018/1400",
+		"Statutory Instruments 2019 No. 419",
+		"Statutory Instrument 2018 No. 1400",
+
+		// Section references
+		"s 6",
+		"s 6(1)",
+		"s 6(1)(a)",
+		"ss 12",
+		"section 114",
+		"section 21(1)",
+		"sections 12",
+
+		// Neutral citations
+		"[2019] UKSC 5",
+		"[2021] EWCA Civ 1234",
+		"[2020] EWCA Crim 456",
+		"[2022] EWHC 789",
+		"[2004] UKHL 56",
+		"[2023] UKPC 10",
+		"[2021] UKUT 100",
+		"[2022] UKFTT 50",
+
+		// Law report citations
+		"[1994] 1 AC 212",
+		"[2003] QB 195",
+		"[2020] 2 WLR 456",
+
+		// ECHR references
+		"ECHR art 8",
+		"ECHR article 6",
+		"ECHR art 6(1)",
+		"ECHR art 10",
+
+		// Structural references
+		"Schedule 7",
+		"Schedule 12",
+		"Part 3",
+		"Part 7",
+
+		// Complex mixed text
+		"Data Protection Act 2018 [2018 c. 12] implements Regulation (EU) 2016/679",
+		"under s 6(1) of the Act and ECHR art 8",
+		"see Schedule 7 to the Data Protection Act 2018",
+
+		// Edge cases
+		"",
+		"Act",
+		"section",
+		"Part",
+		"Schedule",
+		"SI",
+		"ECHR",
+
+		// Malformed patterns
+		"Act 2018",
+		"s",
+		"section (1)",
+		"[] UKSC 5",
+		"[abcd] UKSC 5",
+		"SI /",
+		"ECHR art",
+		"Schedule",
+		"Part",
+
+		// Large input
+		strings.Repeat("s 6(1) ", 1000),
+		strings.Repeat("Data Protection Act 2018 ", 100),
+
+		// Unicode and special characters
+		"Data Protection Act 2018 -- amended",
+		"s 6(1) of the Act",
+
+		// Partial matches
+		"acting in accordance",
+		"partial section of text",
+		"this is part of the whole",
+		"scheduled for later",
+	}
+
+	for _, seed := range seeds {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, data string) {
+		parser := NewOSCOLAParser()
+
+		// The parser should not panic on any input
+		citations, err := parser.Parse(data)
+
+		// We don't care about errors for malformed input
+		if err != nil {
+			return
+		}
+
+		// Basic sanity checks
+		for _, cit := range citations {
+			if cit == nil {
+				t.Error("Parser returned nil citation")
+				continue
+			}
+			if cit.Type == "" {
+				t.Error("Citation has empty type")
+			}
+			if cit.RawText == "" {
+				t.Error("Citation has empty raw text")
+			}
+		}
+
+		// Test normalization doesn't panic
+		for _, cit := range citations {
+			_ = parser.Normalize(cit)
+		}
+
+		// Test ToURI doesn't panic
+		for _, cit := range citations {
+			_, _ = parser.ToURI(cit)
+		}
+	})
+}
+
 // FuzzCitationRegistry tests the citation registry with arbitrary input.
 // Run with: go test -fuzz=FuzzCitationRegistry -fuzztime=30s ./pkg/citation/...
 func FuzzCitationRegistry(f *testing.F) {
@@ -249,6 +389,12 @@ func FuzzCitationRegistry(f *testing.F) {
 		"as defined in 45 C.F.R. Parts 160 and 164, implementing Public Law 104-191",
 		"See Brown v. Board of Education, 347 U.S. 483 (1954)",
 
+		// Mixed EU/US/UK
+		"Data Protection Act 2018 implements Regulation (EU) 2016/679",
+		"s 6(1) and Article 17 compared to 42 U.S.C. § 1983",
+		"[2019] UKSC 5 under ECHR art 8 and Directive 95/46/EC",
+		"SI 2019/419 amends the Data Protection Act 2018",
+
 		// Edge cases
 		"",
 		"no citations here",
@@ -263,12 +409,15 @@ func FuzzCitationRegistry(f *testing.F) {
 		registry := NewCitationRegistry()
 		registry.Register(NewEUCitationParser())
 		registry.Register(NewBluebookParser())
+		registry.Register(NewOSCOLAParser())
 
 		// The registry should not panic on any input
-		// Try both EU and US jurisdictions
+		// Try EU, US, and UK jurisdictions
 		citations := registry.ParseAll(data, "EU")
 		citationsUS := registry.ParseAll(data, "US")
+		citationsUK := registry.ParseAll(data, "UK")
 		citations = append(citations, citationsUS...)
+		citations = append(citations, citationsUK...)
 
 		// Basic sanity checks
 		for _, cit := range citations {

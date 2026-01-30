@@ -37,6 +37,7 @@ jobs:
           go test ./pkg/extract/... -fuzz=FuzzReferenceExtractor -fuzztime=10s
           go test ./pkg/citation/... -fuzz=FuzzEUCitationParser -fuzztime=10s
           go test ./pkg/citation/... -fuzz=FuzzBluebookParser -fuzztime=10s
+          go test ./pkg/citation/... -fuzz=FuzzOSCOLAParser -fuzztime=10s
           go test ./pkg/query/... -fuzz=FuzzParseQuery -fuzztime=10s
           echo "All fuzz tests passed!"
 

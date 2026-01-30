@@ -72,7 +72,7 @@ go run cmd/regula/main.go export --source testdata/gdpr.txt --format jsonld --el
 
 ### Citation Parser Tests
 
-Test the extensible citation parser interface, EU citation parser, and Bluebook (US) parser:
+Test the extensible citation parser interface, EU citation parser, Bluebook (US) parser, and OSCOLA (UK) parser:
 
 ```bash
 # Run all citation parser tests
@@ -86,6 +86,21 @@ go test ./pkg/citation/... -run TestBluebook -v
 
 # Run Bluebook USC/CFR/Public Law tests
 go test ./pkg/citation/... -run "TestBluebookParserParseUSC|TestBluebookParserParseCFR|TestBluebookParserParsePublicLaw" -v
+
+# Run OSCOLA (UK/Commonwealth) citation parser tests
+go test ./pkg/citation/... -run TestOSCOLA -v
+
+# Run OSCOLA-specific citation type tests
+go test ./pkg/citation/... -run "TestOSCOLAParserParseActs|TestOSCOLAParserParseSI|TestOSCOLAParserParseCases" -v
+
+# Run OSCOLA section/schedule/part tests
+go test ./pkg/citation/... -run "TestOSCOLAParserParseSections|TestOSCOLAParserParseSchedules|TestOSCOLAParserParseParts" -v
+
+# Run OSCOLA ECHR article tests
+go test ./pkg/citation/... -run TestOSCOLAParserParseECHR -v
+
+# Run UK integration tests (DPA 2018, SI example)
+go test ./pkg/citation/... -run "TestOSCOLAParserDPA2018Integration|TestOSCOLAParserSIIntegration" -v
 
 # Run CCPA/VCDPA integration tests (US citations)
 go test ./pkg/citation/... -run "TestBluebookParserCCPAIntegration|TestBluebookParserVCDPAIntegration" -v
@@ -612,7 +627,8 @@ rm -rf pkg/extract/testdata/fuzz/
 | `pkg/extract` | `FuzzSemanticExtractor` | Semantic annotation extractor |
 | `pkg/citation` | `FuzzEUCitationParser` | EU citation parser (Regulation, Directive, etc.) |
 | `pkg/citation` | `FuzzBluebookParser` | US citation parser (U.S.C., C.F.R., etc.) |
-| `pkg/citation` | `FuzzCitationRegistry` | Combined citation registry |
+| `pkg/citation` | `FuzzOSCOLAParser` | UK/Commonwealth citation parser (Acts, SIs, cases, ECHR) |
+| `pkg/citation` | `FuzzCitationRegistry` | Combined citation registry (EU + US + UK) |
 | `pkg/query` | `FuzzParseQuery` | SPARQL query parser |
 | `pkg/query` | `FuzzExecuteQuery` | SPARQL query executor |
 | `pkg/query` | `FuzzFilterEvaluation` | SPARQL FILTER expression evaluator |
