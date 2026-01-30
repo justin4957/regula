@@ -865,6 +865,11 @@ Link Validation (--check links):
   Validates external reference URIs with per-domain rate limiting.
   Use --report to save results to a file (JSON or Markdown).
 
+Profile Auto-Generation:
+  --suggest-profile    Analyze document and print suggested profile
+  --generate-profile   Generate profile and save to YAML file
+  --load-profile       Load custom validation profile from YAML file
+
 Example:
   regula validate --source gdpr.txt
   regula validate --source gdpr.txt --threshold 0.85
@@ -873,7 +878,11 @@ Example:
   regula validate --source ccpa.txt --profile CCPA
   regula validate --source gdpr.txt --check gates
   regula validate --source gdpr.txt --check links
-  regula validate --source gdpr.txt --check links --report links.json`,
+  regula validate --source gdpr.txt --check links --report links.json
+  regula validate --source gdpr.txt --suggest-profile
+  regula validate --source gdpr.txt --suggest-profile --format json
+  regula validate --source gdpr.txt --generate-profile gdpr-custom.yaml
+  regula validate --source gdpr.txt --load-profile gdpr-custom.yaml`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			source, _ := cmd.Flags().GetString("source")
 			checkType, _ := cmd.Flags().GetString("check")
@@ -885,6 +894,9 @@ Example:
 			strictMode, _ := cmd.Flags().GetBool("strict")
 			failOnWarn, _ := cmd.Flags().GetBool("fail-on-warn")
 			reportPath, _ := cmd.Flags().GetString("report")
+			suggestProfile, _ := cmd.Flags().GetBool("suggest-profile")
+			generateProfilePath, _ := cmd.Flags().GetString("generate-profile")
+			loadProfilePath, _ := cmd.Flags().GetString("load-profile")
 
 			if source == "" {
 				return fmt.Errorf("--source flag is required")
@@ -941,6 +953,43 @@ Example:
 			_, err = builder.BuildComplete(doc, defExtractor, refExtractor, resolver, semExtractor)
 			if err != nil {
 				return fmt.Errorf("failed to build graph: %w", err)
+			}
+
+			// Handle --suggest-profile: analyze and output suggested profile
+			if suggestProfile {
+				profileGenerator := validate.NewProfileGenerator()
+				profileSuggestion := profileGenerator.SuggestProfile(doc, definitions, resolved, annotations, usages)
+
+				switch formatStr {
+				case "json":
+					jsonData, jsonErr := profileSuggestion.ToJSON()
+					if jsonErr != nil {
+						return fmt.Errorf("failed to serialize profile suggestion: %w", jsonErr)
+					}
+					fmt.Println(string(jsonData))
+				case "yaml":
+					yamlData, yamlErr := profileSuggestion.ToYAML()
+					if yamlErr != nil {
+						return fmt.Errorf("failed to serialize profile suggestion: %w", yamlErr)
+					}
+					fmt.Print(string(yamlData))
+				default:
+					fmt.Print(profileSuggestion.String())
+				}
+				return nil
+			}
+
+			// Handle --generate-profile: generate and save profile to YAML file
+			if generateProfilePath != "" {
+				profileGenerator := validate.NewProfileGenerator()
+				profileSuggestion := profileGenerator.SuggestProfile(doc, definitions, resolved, annotations, usages)
+
+				if err := validate.SaveProfileToFile(profileSuggestion, generateProfilePath); err != nil {
+					return fmt.Errorf("failed to save profile: %w", err)
+				}
+				fmt.Printf("Profile saved to: %s\n", generateProfilePath)
+				fmt.Printf("Confidence: %.0f%%\n", profileSuggestion.Confidence*100)
+				return nil
 			}
 
 			// Handle legacy check type for backwards compatibility
@@ -1128,8 +1177,15 @@ Example:
 			// Full validation
 			validator := validate.NewValidator(threshold)
 
-			// Set profile if specified, otherwise auto-detect
-			if profileName != "" {
+			// Set profile: --load-profile takes priority, then --profile, then auto-detect
+			if loadProfilePath != "" {
+				customProfile, loadErr := validate.LoadProfileFromFile(loadProfilePath)
+				if loadErr != nil {
+					return fmt.Errorf("failed to load profile: %w", loadErr)
+				}
+				validator.SetProfile(customProfile)
+				fmt.Printf("Loaded custom profile: %s\n\n", customProfile.Name)
+			} else if profileName != "" {
 				regType := validate.RegulationType(profileName)
 				if profile, ok := validate.ValidationProfiles[regType]; ok {
 					validator.SetRegulationType(regType)
@@ -1197,6 +1253,9 @@ Example:
 	cmd.Flags().Bool("strict", false, "Halt pipeline on gate failure")
 	cmd.Flags().Bool("fail-on-warn", false, "Halt pipeline on gate warnings")
 	cmd.Flags().String("report", "", "Save validation report to file (format based on extension: .html, .md, .json)")
+	cmd.Flags().Bool("suggest-profile", false, "Analyze document and print suggested validation profile")
+	cmd.Flags().String("generate-profile", "", "Generate validation profile and save to YAML file")
+	cmd.Flags().String("load-profile", "", "Load custom validation profile from YAML file")
 
 	return cmd
 }

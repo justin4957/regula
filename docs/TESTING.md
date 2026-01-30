@@ -435,6 +435,81 @@ go run cmd/regula/main.go validate --source testdata/gdpr.txt --check gates --re
 | `TestGateReport_ToHTML_HaltedPipeline` | Halted pipeline warning alert |
 | `TestGateReport_ToHTML_SkippedGateCard` | Grey styling for skipped gates |
 
+### Validation Profile Auto-Generation Tests
+
+Test profile generation, document analysis, weight suggestion, YAML serialization, and file I/O:
+
+```bash
+# Run all profile generation tests
+go test ./pkg/validate/... -v -run "TestSuggestProfile|TestProfileFromYAML|TestProfileSuggestion|TestAnalyzeDocument|TestSuggestWeights|TestComputeConfidence|TestLoadProfile|TestSaveProfile|TestRoundToDecimals" -count=1
+
+# Run profile suggestion tests
+go test ./pkg/validate/... -v -run TestSuggestProfile -count=1
+
+# Run individual profile suggestion tests
+go test ./pkg/validate/... -run TestSuggestProfile_LargeDocument -v      # 99 articles, 11 chapters
+go test ./pkg/validate/... -run TestSuggestProfile_SmallDocument -v      # 5 articles, 2 chapters
+go test ./pkg/validate/... -run TestSuggestProfile_NoDefinitions -v      # Definition weight reduced
+go test ./pkg/validate/... -run TestSuggestProfile_HeavyReferences -v    # Reference weight boosted
+go test ./pkg/validate/... -run TestSuggestProfile_NoSemantics -v        # Semantic weight reduced
+go test ./pkg/validate/... -run TestSuggestProfile_Reasoning -v          # Reasoning entries present
+go test ./pkg/validate/... -run TestSuggestProfile_KnownRightsAndObligations -v  # Rights/obligations classified
+
+# Run YAML serialization tests
+go test ./pkg/validate/... -v -run "TestProfileSuggestion_ToYAML|TestProfileFromYAML" -count=1
+
+# Run file I/O tests
+go test ./pkg/validate/... -v -run "TestLoadProfileFromFile|TestSaveProfileToFile" -count=1
+
+# Run document analysis and weight normalization tests
+go test ./pkg/validate/... -v -run "TestAnalyzeDocument|TestSuggestWeights_Normalization" -count=1
+
+# Run confidence scoring tests
+go test ./pkg/validate/... -v -run TestComputeConfidence -count=1
+
+# CLI: Suggest a profile from document analysis
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --suggest-profile
+
+# CLI: Suggest profile with JSON output
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --suggest-profile --format json
+
+# CLI: Suggest profile with YAML output
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --suggest-profile --format yaml
+
+# CLI: Generate and save profile to YAML file
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --generate-profile gdpr-custom.yaml
+
+# CLI: Load a custom profile for validation
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --load-profile gdpr-custom.yaml
+```
+
+### Test Coverage
+
+| Test | What it verifies |
+|------|------------------|
+| `TestSuggestProfile_LargeDocument` | Correct expected counts, weight normalization, high confidence |
+| `TestSuggestProfile_SmallDocument` | Adjusted counts for small documents, lower confidence |
+| `TestSuggestProfile_NoDefinitions` | Definition weight reduced below default (0.20) |
+| `TestSuggestProfile_HeavyReferences` | Reference weight boosted above default (0.25) |
+| `TestSuggestProfile_NoSemantics` | Semantic weight reduced below default (0.20) |
+| `TestSuggestProfile_Reasoning` | Reasoning entries for expected.articles, .definitions, .chapters |
+| `TestSuggestProfile_KnownRightsAndObligations` | Rights/obligation types classified from semantics |
+| `TestProfileSuggestion_ToYAML` | YAML output contains all expected fields |
+| `TestProfileSuggestion_ToYAML_Roundtrip` | Serialize → deserialize preserves values |
+| `TestProfileFromYAML` | Parse YAML into ValidationProfile with correct values |
+| `TestProfileFromYAML_NoRights` | Empty slices (not nil) when no rights/obligations |
+| `TestProfileFromYAML_Invalid` | Malformed YAML returns error |
+| `TestLoadProfileFromFile` | Read profile from temp YAML file |
+| `TestLoadProfileFromFile_NotFound` | Nonexistent file returns error |
+| `TestSaveProfileToFile` | Write to file and verify round-trip |
+| `TestAnalyzeDocument` | Article/chapter/definition/reference/rights counts, densities |
+| `TestAnalyzeDocument_Empty` | Zero-value document produces zero densities |
+| `TestSuggestWeights_Normalization` | Weights sum to 1.0 across 4 document scenarios |
+| `TestComputeConfidence` | Confidence varies: empty (0.0-0.1), articles-only (0.2-0.4), complete (0.8-1.0) |
+| `TestProfileSuggestion_String` | Human-readable output contains key sections |
+| `TestProfileSuggestion_ToJSON` | JSON output contains profile, reasoning, confidence |
+| `TestRoundToDecimals` | Rounding utility correctness |
+
 ### E2E Tests
 
 The E2E test script validates the complete MVP functionality:
