@@ -987,13 +987,38 @@ Example:
 
 				gateReport := gatePipeline.Run(gateContext)
 
-				if formatStr == "json" {
+				// Save report to file if --report flag is set
+				if reportPath != "" {
+					var reportData []byte
+					if strings.HasSuffix(reportPath, ".html") {
+						reportData = []byte(gateReport.ToHTML())
+					} else if strings.HasSuffix(reportPath, ".md") {
+						reportData = []byte(gateReport.ToMarkdown())
+					} else {
+						var jsonErr error
+						reportData, jsonErr = gateReport.ToJSON()
+						if jsonErr != nil {
+							return fmt.Errorf("failed to serialize gate report: %w", jsonErr)
+						}
+					}
+					if err := os.WriteFile(reportPath, reportData, 0644); err != nil {
+						return fmt.Errorf("failed to write report: %w", err)
+					}
+					fmt.Printf("Report saved to: %s\n\n", reportPath)
+				}
+
+				switch formatStr {
+				case "json":
 					jsonData, err := gateReport.ToJSON()
 					if err != nil {
 						return fmt.Errorf("failed to serialize gate report: %w", err)
 					}
 					fmt.Println(string(jsonData))
-				} else {
+				case "html":
+					fmt.Print(gateReport.ToHTML())
+				case "markdown":
+					fmt.Print(gateReport.ToMarkdown())
+				default:
 					fmt.Print(gateReport.String())
 				}
 
@@ -1116,14 +1141,39 @@ Example:
 
 			result := validator.Validate(doc, resolved, definitions, usages, annotations, ts)
 
+			// Save report to file if --report flag is set
+			if reportPath != "" {
+				var reportData []byte
+				if strings.HasSuffix(reportPath, ".html") {
+					reportData = []byte(result.ToHTML())
+				} else if strings.HasSuffix(reportPath, ".md") {
+					reportData = []byte(result.ToMarkdown())
+				} else {
+					var jsonErr error
+					reportData, jsonErr = result.ToJSON()
+					if jsonErr != nil {
+						return fmt.Errorf("failed to serialize result: %w", jsonErr)
+					}
+				}
+				if err := os.WriteFile(reportPath, reportData, 0644); err != nil {
+					return fmt.Errorf("failed to write report: %w", err)
+				}
+				fmt.Printf("Report saved to: %s\n\n", reportPath)
+			}
+
 			// Output result
-			if formatStr == "json" {
+			switch formatStr {
+			case "json":
 				data, err := result.ToJSON()
 				if err != nil {
 					return fmt.Errorf("failed to serialize result: %w", err)
 				}
 				fmt.Println(string(data))
-			} else {
+			case "html":
+				fmt.Print(result.ToHTML())
+			case "markdown":
+				fmt.Print(result.ToMarkdown())
+			default:
 				fmt.Println(result.String())
 			}
 
@@ -1139,14 +1189,14 @@ Example:
 
 	cmd.Flags().StringP("source", "s", "", "Source document path")
 	cmd.Flags().String("check", "all", "What to check (all, references, gates, links)")
-	cmd.Flags().StringP("format", "f", "text", "Output format (text, json)")
+	cmd.Flags().StringP("format", "f", "text", "Output format (text, json, html, markdown)")
 	cmd.Flags().String("base-uri", "https://regula.dev/regulations/", "Base URI for the graph")
 	cmd.Flags().Float64("threshold", 0.80, "Pass/fail threshold (0.0-1.0)")
 	cmd.Flags().String("profile", "", "Validation profile (GDPR, CCPA, Generic) - auto-detected if not specified")
 	cmd.Flags().StringSlice("skip-gates", []string{}, "Gates to skip (V0,V1,V2,V3)")
 	cmd.Flags().Bool("strict", false, "Halt pipeline on gate failure")
 	cmd.Flags().Bool("fail-on-warn", false, "Halt pipeline on gate warnings")
-	cmd.Flags().String("report", "", "Save link validation report to file (JSON or Markdown based on extension)")
+	cmd.Flags().String("report", "", "Save validation report to file (format based on extension: .html, .md, .json)")
 
 	return cmd
 }
