@@ -982,6 +982,11 @@ Example:
 					RateLimit: 2 * time.Second,
 					Timeout:   60 * time.Second,
 				})
+				config.WithDomainConfig(&linkcheck.DomainConfig{
+					Domain:    "www.legislation.gov.uk",
+					RateLimit: 2 * time.Second,
+					Timeout:   60 * time.Second,
+				})
 
 				validator := linkcheck.NewBatchValidator(config)
 
