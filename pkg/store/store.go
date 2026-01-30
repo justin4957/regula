@@ -168,6 +168,15 @@ func (ts *TripleStore) BulkAdd(triples []Triple) error {
 	return nil
 }
 
+// MergeFrom copies all triples from the source store into this store.
+// Returns the number of new triples added (duplicates are skipped via idempotent Add).
+func (ts *TripleStore) MergeFrom(source *TripleStore) int {
+	sourceTriples := source.All()
+	previousCount := ts.Count()
+	_ = ts.BulkAdd(sourceTriples)
+	return ts.Count() - previousCount
+}
+
 // Find queries triples matching the pattern. Use empty string "" for wildcards.
 // Returns all matching triples.
 func (ts *TripleStore) Find(subject, predicate, object string) []Triple {

@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/coolbeans/regula/pkg/analysis"
+	"github.com/coolbeans/regula/pkg/eurlex"
 	"github.com/coolbeans/regula/pkg/extract"
+	"github.com/coolbeans/regula/pkg/fetch"
 	"github.com/coolbeans/regula/pkg/linkcheck"
 	"github.com/coolbeans/regula/pkg/query"
 	"github.com/coolbeans/regula/pkg/simulate"
@@ -121,6 +123,12 @@ Example:
 			skipGates, _ := cmd.Flags().GetStringSlice("skip-gates")
 			strictMode, _ := cmd.Flags().GetBool("strict")
 			failOnWarn, _ := cmd.Flags().GetBool("fail-on-warn")
+			fetchRefs, _ := cmd.Flags().GetBool("fetch-refs")
+			maxDepth, _ := cmd.Flags().GetInt("max-depth")
+			maxDocuments, _ := cmd.Flags().GetInt("max-documents")
+			allowedDomains, _ := cmd.Flags().GetStringSlice("allowed-domains")
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			cacheDir, _ := cmd.Flags().GetString("cache-dir")
 
 			if source == "" {
 				return fmt.Errorf("--source flag is required")
@@ -259,6 +267,50 @@ Example:
 				}
 			}
 
+			// Step 7: Fetch external references (optional)
+			if fetchRefs {
+				fmt.Print("  7. Fetching external references... ")
+
+				fetchConfig := fetch.FetchConfig{
+					MaxDepth:       maxDepth,
+					MaxDocuments:   maxDocuments,
+					AllowedDomains: allowedDomains,
+					RateLimit:      fetch.DefaultFetchRateLimit,
+					Timeout:        fetch.DefaultFetchTimeout,
+					CacheDir:       cacheDir,
+					DryRun:         dryRun,
+				}
+
+				eurlexValidator := eurlex.NewEURLexClient(eurlex.DefaultConfig())
+				recursiveFetcher, fetcherErr := fetch.NewRecursiveFetcher(fetchConfig, eurlexValidator)
+				if fetcherErr != nil {
+					return fmt.Errorf("failed to initialize recursive fetcher: %w", fetcherErr)
+				}
+
+				sourceDocURI := baseURI + "GDPR"
+				var fetchReport *fetch.FetchReport
+
+				if dryRun {
+					fetchReport, fetcherErr = recursiveFetcher.Plan(tripleStore, sourceDocURI)
+				} else {
+					fetchReport, fetcherErr = recursiveFetcher.Fetch(tripleStore, sourceDocURI)
+				}
+
+				if fetcherErr != nil {
+					fmt.Printf("warning: %v\n", fetcherErr)
+				} else {
+					if dryRun {
+						fmt.Println("done (dry-run)")
+					} else {
+						fmt.Printf("done (%d fetched, %d cached, %d failed, %d triples added)\n",
+							fetchReport.FetchedCount, fetchReport.CachedCount,
+							fetchReport.FailedCount, fetchReport.TriplesAdded)
+					}
+					fmt.Println()
+					fmt.Print(fetchReport.String())
+				}
+			}
+
 			// Initialize executor
 			executor = query.NewExecutor(tripleStore)
 			graphLoaded = true
@@ -304,6 +356,14 @@ Example:
 	cmd.Flags().StringSlice("skip-gates", []string{}, "Gates to skip (V0,V1,V2,V3)")
 	cmd.Flags().Bool("strict", false, "Halt pipeline on gate failure")
 	cmd.Flags().Bool("fail-on-warn", false, "Halt pipeline on gate warnings")
+
+	// Recursive fetch flags
+	cmd.Flags().Bool("fetch-refs", false, "Fetch external referenced documents to build a federated graph")
+	cmd.Flags().Int("max-depth", fetch.DefaultMaxDepth, "Maximum recursion depth for fetching external references")
+	cmd.Flags().Int("max-documents", fetch.DefaultMaxDocuments, "Maximum number of external documents to fetch")
+	cmd.Flags().StringSlice("allowed-domains", []string{}, "Restrict fetching to these domains (empty allows all)")
+	cmd.Flags().Bool("dry-run", false, "Plan what would be fetched without making network calls")
+	cmd.Flags().String("cache-dir", "", "Directory for caching fetched document metadata")
 
 	return cmd
 }
