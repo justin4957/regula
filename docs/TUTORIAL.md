@@ -1,288 +1,272 @@
-# Regula Tutorial
+# Regula Tutorial: Automated Regulation Mapping
 
-A hands-on guide to transforming legal regulations into queryable, analyzable knowledge graphs.
+This tutorial walks through Regula's core capabilities using the **EU General Data Protection Regulation (GDPR)** as a real-world example. Each section includes commands you can run and real output from the tool.
 
-## Table of Contents
+## Prerequisites
 
-1. [Introduction](#introduction)
-2. [Installation](#installation)
-3. [Quick Start](#quick-start)
-4. [Core Concepts](#core-concepts)
-5. [Working with Regulations](#working-with-regulations)
-6. [Querying the Knowledge Graph](#querying-the-knowledge-graph)
-7. [Impact Analysis](#impact-analysis)
-8. [Compliance Scenario Matching](#compliance-scenario-matching)
-9. [Validation and Quality Assurance](#validation-and-quality-assurance)
-10. [Working with US State Privacy Laws](#working-with-us-state-privacy-laws)
-11. [Exporting and Visualization](#exporting-and-visualization)
-12. [Advanced Usage](#advanced-usage)
+Build Regula from source:
+
+```bash
+go build -o regula cmd/regula/main.go
+```
+
+Or run directly with `go run`:
+
+```bash
+go run cmd/regula/main.go --help
+```
+
+The GDPR test document is included at `testdata/gdpr.txt`.
 
 ---
 
-## Introduction
+## 1. Ingesting a Regulation
 
-Regula transforms dense legal regulations into auditable, queryable, and simulatable programs. It ingests regulatory documents and produces:
-
-- **Queryable knowledge graphs** via SPARQL-like queries
-- **Type-safe domain models** with compile-time verification
-- **Impact analysis** for regulatory changes
-- **Simulation engine** for compliance scenarios
-- **Audit trails** with provenance tracking
-
-### What Problems Does Regula Solve?
-
-1. **Regulatory Complexity**: Regulations like GDPR contain hundreds of articles with complex cross-references. Regula maps these relationships automatically.
-
-2. **Impact Assessment**: When a regulation changes, Regula identifies all affected provisions through transitive dependency analysis.
-
-3. **Compliance Verification**: Match real-world scenarios (data breach, consent withdrawal) to applicable legal provisions.
-
-4. **Knowledge Extraction**: Extract definitions, rights, obligations, and cross-references from legal text.
-
----
-
-## Installation
-
-### Prerequisites
-
-- Go 1.21 or later
-- Git
-
-### Building from Source
+The `ingest` command parses a regulation document, extracts its structure, and builds an RDF knowledge graph.
 
 ```bash
-git clone https://github.com/justin4957/regula.git
-cd regula
-go build -o regula ./cmd/regula
+regula ingest --source testdata/gdpr.txt
 ```
 
-### Verify Installation
+**Output:**
 
-```bash
-./regula --version
-# regula version 0.1.0
-
-./regula --help
-```
-
----
-
-## Quick Start
-
-Let's analyze the GDPR (General Data Protection Regulation) in under 5 minutes.
-
-### Step 1: Initialize a Project
-
-```bash
-./regula init gdpr-analysis
-```
-
-Output:
-```
-Initialized regulation project: gdpr-analysis
-Created directories:
-  - gdpr-analysis/regulations/
-  - gdpr-analysis/graphs/
-  - gdpr-analysis/scenarios/
-  - gdpr-analysis/reports/
-
-Next steps:
-  1. Add regulation documents to gdpr-analysis/regulations/
-  2. Run: regula ingest --source gdpr-analysis/regulations/your-doc.txt
-  3. Run: regula query "SELECT ?article WHERE { ?article rdf:type reg:Article }"
-```
-
-### Step 2: Ingest a Regulation
-
-```bash
-./regula ingest --source testdata/gdpr.txt --stats
-```
-
-Output:
 ```
 Ingesting regulation from: testdata/gdpr.txt
   1. Parsing document structure... done (11 chapters, 99 articles)
   2. Extracting defined terms... done (26 definitions)
-  3. Identifying cross-references... done (255 references)
+  3. Identifying cross-references... done (258 references)
   4. Extracting rights/obligations... done (60 rights, 69 obligations)
-  5. Resolving cross-references... done (100% resolved)
-  6. Building knowledge graph... done (8457 triples)
+  5. Resolving cross-references... done (99% resolved)
+  6. Building knowledge graph... done (8495 triples)
 
-Ingestion complete in 284.008875ms
-
-Graph Statistics:
-  Total triples:    8457
-  Articles:         99
-  Chapters:         11
-  Sections:         15
-  Recitals:         173
-  Definitions:      26
-  References:       255
-  Rights:           60
-  Obligations:      70
-  Term usages:      349
+Ingestion complete in 1.22s
 ```
 
-### Step 3: Query the Graph
+From a single text file, Regula automatically extracts:
 
-```bash
-./regula query --source testdata/gdpr.txt --template articles
-```
+| Extracted Element       | Count |
+|------------------------|-------|
+| Chapters               | 11    |
+| Articles               | 99    |
+| Defined terms          | 26    |
+| Cross-references       | 258   |
+| Rights granted         | 60    |
+| Obligations imposed    | 69    |
+| RDF triples produced   | 8,495 |
 
-Output (truncated):
-```
-+-------------------------------------------+-----------------------------------------------------------------------+
-| article                                   | title                                                                 |
-+-------------------------------------------+-----------------------------------------------------------------------+
-| https://regula.dev/regulations/GDPR:Art1  | Subject-matter and objectives                                         |
-| https://regula.dev/regulations/GDPR:Art15 | Right of access by the data subject                                   |
-| https://regula.dev/regulations/GDPR:Art17 | Right to erasure ('right to be forgotten')                            |
-| https://regula.dev/regulations/GDPR:Art33 | Notification of a personal data breach to the supervisory authority   |
-...
-```
+The entire GDPR is parsed, structured, and converted into a queryable knowledge graph in ~1.2 seconds.
+
+### Automatic Mapping Statistics
+
+The ingestion pipeline performs six stages of extraction. Each stage operates on the raw text and produces structured RDF triples:
+
+1. **Document Parsing**: Identifies 11 chapters, 15 sections, 99 articles, and 173 recitals from structural markers
+2. **Definition Extraction**: Finds 26 formally defined terms using pattern matching (`'term' means...`)
+3. **Reference Identification**: Detects 258 internal cross-references using citation patterns (`Article 6`, `pursuant to Article 17(1)`)
+4. **Semantic Extraction**: Identifies 60 rights and 69 obligations from regulatory language patterns
+5. **Reference Resolution**: Resolves 99% of cross-references to specific article URIs (3 unresolved are ambiguous external references)
+6. **Graph Building**: Constructs an RDF triple store with 8,495 triples across 17 relationship types
+
+The 3,141 relationships break down as:
+
+| Relationship Type         | Count | Description                          |
+|--------------------------|------:|--------------------------------------|
+| `reg:partOf`             | 1,019 | Hierarchical containment             |
+| `reg:belongsTo`          |   515 | Reverse containment                  |
+| `reg:usesTerm`           |   349 | Article uses a defined term          |
+| `reg:resolvedTarget`     |   297 | Resolved reference targets           |
+| `reg:referencedBy`       |   179 | Incoming cross-references            |
+| `reg:references`         |   179 | Outgoing cross-references            |
+| `reg:hasRecital`         |   173 | Preamble recitals                    |
+| `reg:contains`           |   133 | Chapter contains articles            |
+| `reg:hasArticle`         |    99 | Document has articles                |
+| `reg:imposesObligation`  |    62 | Obligation imposed                   |
+| `reg:grantsRight`        |    44 | Right granted                        |
+| `reg:defines`            |    26 | Term defined in article              |
+| `reg:definedIn`          |    26 | Reverse of defines                   |
+| `reg:hasSection`         |    15 | Chapter has sections                 |
+| `reg:externalRef`        |    13 | External legislation references      |
+| `reg:hasChapter`         |    11 | Document has chapters                |
+| `reg:repealedBy`         |     1 | Repealed provision                   |
 
 ---
 
-## Core Concepts
+## 2. Querying the Knowledge Graph
 
-### Knowledge Graph Structure
+Regula supports SPARQL-style queries against the knowledge graph. Built-in query templates cover common regulatory analysis patterns.
 
-Regula builds an RDF triple store with the following node types:
-
-| Node Type | Description | Color (DOT) |
-|-----------|-------------|-------------|
-| Article | Legal articles | Light blue |
-| Chapter | Document chapters | Light green |
-| Section | Chapter sections | Light yellow |
-| Recital | Preamble recitals | Lavender |
-| Definition | Defined terms | Light pink |
-| Right | Granted rights | Light coral |
-| Obligation | Imposed obligations | Light gray |
-| Reference | Cross-references | White |
-
-### Relationship Types
-
-The graph captures these relationship types:
-
-| Predicate | Description | Example |
-|-----------|-------------|---------|
-| `reg:references` | Article references another | Art 17 → Art 6 |
-| `reg:referencedBy` | Inverse of references | Art 6 ← Art 17 |
-| `reg:defines` | Term defined in article | Art 4 defines "consent" |
-| `reg:usesTerm` | Article uses defined term | Art 7 uses "consent" |
-| `reg:grantsRight` | Article grants a right | Art 15 grants RightOfAccess |
-| `reg:imposesObligation` | Article imposes obligation | Art 33 imposes BreachNotificationObligation |
-| `reg:partOf` | Hierarchical containment | Art 15 partOf ChapterIII |
-
----
-
-## Working with Regulations
-
-### Supported Document Formats
-
-Regula supports plain text (`.txt`) and Markdown (`.md`) formatted regulations with structure markers:
-
-```
-CHAPTER I
-General provisions
-
-Article 1
-Subject-matter and objectives
-
-1. This Regulation lays down rules relating to the protection...
-
-Article 2
-Material scope
-
-1. This Regulation applies to the processing of personal data...
-```
-
-### Ingestion Process
-
-The ingestion pipeline performs six steps:
-
-1. **Document Parsing**: Identifies chapters, sections, articles, recitals
-2. **Definition Extraction**: Finds formally defined terms (e.g., "'personal data' means...")
-3. **Reference Identification**: Detects cross-references (e.g., "pursuant to Article 6")
-4. **Semantic Extraction**: Identifies rights and obligations from text patterns
-5. **Reference Resolution**: Resolves references to specific article URIs
-6. **Graph Building**: Constructs the RDF triple store
-
-### Viewing Statistics
-
-Use `--stats` to see extraction results:
+### List Available Templates
 
 ```bash
-./regula ingest --source testdata/gdpr.txt --stats
+regula query --source testdata/gdpr.txt --list-templates
 ```
 
----
+**19 available templates:**
 
-## Querying the Knowledge Graph
+| Template             | Description                                        |
+|----------------------|----------------------------------------------------|
+| `articles`           | List all articles with titles                      |
+| `chapters`           | List all chapters with titles                      |
+| `definitions`        | List all defined terms with definitions            |
+| `rights`             | Find articles that grant rights                    |
+| `obligations`        | Find articles that impose obligations              |
+| `references`         | List all cross-references between articles         |
+| `most-referenced`    | Find the most referenced articles                  |
+| `article-refs`       | Find what articles reference a specific article    |
+| `article-terms`      | Find all terms used in a specific article          |
+| `term-usage`         | Find which articles use defined terms              |
+| `term-articles`      | Find articles using a specific term                |
+| `hierarchy`          | Show document hierarchy                            |
+| `bidirectional`      | Show bidirectional reference relationships          |
+| `right-types`        | List distinct right types found                    |
+| `obligation-types`   | List distinct obligation types found               |
+| `describe-article`   | Describe all triples for a specific article        |
+| `definition-links`   | Show terms and their defining articles             |
+| `recitals`           | List all recitals                                  |
+| `search`             | Search for articles containing a keyword           |
 
-### Query Templates
-
-Regula provides built-in query templates for common operations:
+### Example: Find All Defined Terms
 
 ```bash
-./regula query --list-templates
+regula query --source testdata/gdpr.txt --template definitions --timing
 ```
 
-| Template | Description |
-|----------|-------------|
-| `articles` | List all articles with titles |
-| `definitions` | List all defined terms with definitions |
-| `chapters` | List all chapters |
-| `references` | List cross-references between articles |
-| `rights` | Find provisions granting rights |
+**Output (abbreviated):**
 
-### Using Templates
-
-**List all articles:**
-```bash
-./regula query --source testdata/gdpr.txt --template articles
 ```
-
-**List all definitions:**
-```bash
-./regula query --source testdata/gdpr.txt --template definitions
-```
-
-Output (truncated):
-```
-+--------------------------------------+---------------------------------+----------------------------------------+
-| term                                 | termText                        | definition                             |
-+--------------------------------------+---------------------------------+----------------------------------------+
-| GDPR:Term:personal_data              | personal data                   | any information relating to an         |
-|                                      |                                 | identified or identifiable natural     |
-|                                      |                                 | person ('data subject')...             |
-| GDPR:Term:consent                    | consent                         | any freely given, specific, informed   |
-|                                      |                                 | and unambiguous indication of the      |
-|                                      |                                 | data subject's wishes...               |
-| GDPR:Term:controller                 | controller                      | the natural or legal person, public    |
-|                                      |                                 | authority, agency or other body which  |
-|                                      |                                 | determines the purposes and means...   |
-+--------------------------------------+---------------------------------+----------------------------------------+
++------------------------------------+---------------------------------+---------------------------+
+| term                               | termText                        | definition                |
++------------------------------------+---------------------------------+---------------------------+
+| GDPR:Term:personal_data            | personal data                   | any information relating  |
+|                                    |                                 | to an identified or       |
+|                                    |                                 | identifiable natural      |
+|                                    |                                 | person...                 |
+| GDPR:Term:processing               | processing                      | any operation or set of   |
+|                                    |                                 | operations which is       |
+|                                    |                                 | performed on personal     |
+|                                    |                                 | data...                   |
+| GDPR:Term:consent                  | consent                         | any freely given, specific|
+|                                    |                                 | informed and unambiguous  |
+|                                    |                                 | indication...             |
+| GDPR:Term:controller               | controller                      | the natural or legal      |
+|                                    |                                 | person, public authority  |
+|                                    |                                 | which determines the      |
+|                                    |                                 | purposes and means...     |
+| ...                                | ...                             | ...                       |
++------------------------------------+---------------------------------+---------------------------+
 26 rows
+
+Query executed in 85.79µs
+  Parse:   0s
+  Plan:    5.33µs
+  Execute: 65.04µs
 ```
 
-**Find provisions granting rights:**
+All 26 GDPR-defined terms are extracted and queryable in **86 microseconds**.
+
+### Example: Find Rights-Granting Articles
+
 ```bash
-./regula query --source testdata/gdpr.txt --template rights
+regula query --source testdata/gdpr.txt --template rights
 ```
 
-Output (truncated):
+Returns 60 rights across 24 articles, with typed classifications:
+
+| Right Type                      | Example Article | Description                        |
+|---------------------------------|----------------|------------------------------------|
+| `RightToErasure`               | Article 17     | Right to be forgotten              |
+| `RightOfAccess`                | Article 15     | Access to personal data            |
+| `RightToRectification`         | Article 16     | Correct inaccurate data            |
+| `RightToDataPortability`       | Article 20     | Receive data in portable format    |
+| `RightToObject`                | Article 21     | Object to processing               |
+| `RightAgainstAutomatedDecision`| Article 22     | Not be subject to automated decisions |
+| `RightToWithdrawConsent`       | Articles 13, 14| Withdraw previously given consent  |
+| `RightToRestriction`           | Article 18     | Restrict processing                |
+| `RightToLodgeComplaint`        | Articles 13-15, 47 | Lodge complaint with authority |
+| `RightToNotification`          | Article 15     | Be notified about data processing  |
+
+All 6 core GDPR rights are detected: 6/6 known rights found.
+
+### Example: Find Obligation-Imposing Articles
+
+```bash
+regula query --source testdata/gdpr.txt --template obligations
 ```
-+------------+------------------------------------------+-----------------------------------------+-------------------------------+
-| article    | title                                    | right                                   | rightType                     |
-+------------+------------------------------------------+-----------------------------------------+-------------------------------+
-| GDPR:Art15 | Right of access by the data subject      | GDPR:Right:15:RightOfAccess             | RightOfAccess                 |
-| GDPR:Art16 | Right to rectification                   | GDPR:Right:16:RightToRectification      | RightToRectification          |
-| GDPR:Art17 | Right to erasure ('right to be forgotten')| GDPR:Right:17:RightToErasure            | RightToErasure                |
-| GDPR:Art18 | Right to restriction of processing       | GDPR:Right:18:RightToRestriction        | RightToRestriction            |
-| GDPR:Art20 | Right to data portability                | GDPR:Right:20:RightToDataPortability    | RightToDataPortability        |
-| GDPR:Art21 | Right to object                          | GDPR:Right:21:RightToObject             | RightToObject                 |
-+------------+------------------------------------------+-----------------------------------------+-------------------------------+
+
+Returns 69 obligations across 41 articles:
+
+| Obligation Type                    | Example Article | Description                    |
+|------------------------------------|----------------|--------------------------------|
+| `BreachNotificationObligation`    | Articles 19, 33| Notify authority of breaches   |
+| `SecurityObligation`             | Articles 24, 25, 32| Implement security measures |
+| `RecordKeepingObligation`        | Article 30     | Maintain processing records    |
+| `ConsentObligation`              | Articles 7, 8  | Obtain valid consent           |
+| `InformationProvisionObligation` | Articles 12, 14| Provide information to subjects|
+| `ImplementationObligation`       | Articles 12, 32| Implement required measures    |
+| `SubjectNotificationObligation`  | Article 34     | Notify subjects of breaches    |
+| `EnsureObligation`               | Article 25     | Ensure data protection by design|
+| `ResponseObligation`             | Article 62     | Respond to requests            |
+
+### Example: Find the Most Referenced Articles
+
+```bash
+regula query --source testdata/gdpr.txt --template most-referenced
+```
+
+**Output:**
+
+```
+Article 6:  9 incoming references   (Lawfulness of processing)
+Article 9:  7 incoming references   (Special categories of personal data)
+Article 43: 6 incoming references   (Certification)
+Article 65: 6 incoming references   (Dispute resolution by the Board)
+Article 40: 6 incoming references   (Codes of conduct)
+```
+
+These are the load-bearing provisions of the GDPR. When drafting amendments, these articles have the widest downstream impact.
+
+Articles with the most outgoing references (regulatory "hubs"):
+
+| Article | Outgoing Refs | Title                    |
+|---------|:-------------:|--------------------------|
+| Art 70  | 18            | Tasks of the Board       |
+| Art 12  | 11            | Transparent information  |
+| Art 58  | 9             | Powers                   |
+| Art 40  | 8             | Codes of conduct         |
+| Art 11  | 7             | Processing without ID    |
+| Art 83  | 6             | Administrative fines     |
+| Art 28  | 6             | Processor                |
+
+### Example: Term Usage Across Articles
+
+```bash
+regula query --source testdata/gdpr.txt --template term-usage
+```
+
+Tracks where each defined term appears across the regulation. Selected examples:
+
+| Term                    | Articles Using It | Count |
+|-------------------------|:-----------------:|:-----:|
+| consent                 | 13                | 13    |
+| controller              | 16+               | 16+   |
+| personal data           | widespread        | many  |
+| binding corporate rules | 7                 | 7     |
+| biometric data          | 1                 | 1     |
+
+The term "consent" appears in Articles 6, 7, 8, 9, 13, 14, 17, 18, 20, 22, 40, 49, and 83. Changing the definition of "consent" in Article 4 would affect the interpretation of all 13 articles.
+
+### Custom SPARQL Queries
+
+Beyond templates, you can write custom SPARQL:
+
+```bash
+regula query --source testdata/gdpr.txt \
+  "SELECT ?article ?title WHERE {
+     ?article rdf:type reg:Article .
+     ?article reg:title ?title .
+     ?article reg:grantsRight ?right .
+     ?right rdf:type reg:RightToErasure
+   }"
 ```
 
 ### Output Formats
@@ -291,205 +275,248 @@ Query results can be formatted as tables, JSON, or CSV:
 
 ```bash
 # Table format (default)
-./regula query --source testdata/gdpr.txt --template articles --format table
+regula query --source testdata/gdpr.txt --template articles --format table
 
-# JSON format
-./regula query --source testdata/gdpr.txt --template articles --format json
+# JSON format for programmatic consumption
+regula query --source testdata/gdpr.txt --template articles --format json
 
-# CSV format
-./regula query --source testdata/gdpr.txt --template articles --format csv
+# CSV format for spreadsheets
+regula query --source testdata/gdpr.txt --template articles --format csv
 ```
 
-### Query Timing
-
-Use `--timing` to measure query performance:
+For CONSTRUCT and DESCRIBE queries:
 
 ```bash
-./regula query --source testdata/gdpr.txt --template articles --timing
+# Turtle output
+regula query --source testdata/gdpr.txt --template describe-article --format turtle
+
+# N-Triples output
+regula query --source testdata/gdpr.txt --template describe-article --format ntriples
+
+# JSON output
+regula query --source testdata/gdpr.txt --template describe-article --format json
 ```
+
+### Query Performance
+
+All queries execute in microseconds against the in-memory triple store:
+
+| Query                | Execution Time | Results |
+|----------------------|---------------|---------|
+| 26 definitions       | 86 µs         | 26 rows |
+| Bidirectional refs   | 224 µs        | 20 rows |
+| DESCRIBE article     | 22 µs         | 59 triples |
+
+Total wall time including document ingestion is under 1 second per query command.
 
 ---
 
-## Impact Analysis
+## 3. Impact Analysis
 
-Impact analysis identifies provisions affected by changes to a specific article.
+The `impact` command traces how a change to one provision ripples through the regulation. This is the core of inter-legislation modelling: understanding which articles depend on, reference, or are triggered by a given provision.
 
-### Basic Impact Analysis
+### Example: Impact of Changing Article 17 (Right to Erasure)
 
 ```bash
-./regula impact --source testdata/gdpr.txt --provision "GDPR:Art17" --depth 2
+regula impact --source testdata/gdpr.txt --provision Art17
 ```
 
-Output:
+**Output:**
+
 ```
-Analyzing impact of amend to GDPR:Art17
+Impact Analysis for: Right to erasure ('right to be forgotten')
+URI: https://regula.dev/regulations/GDPR:Art17
+Analysis Depth: 2
+===================================================
 
-Articles referencing GDPR:Art17: 4
-+-------------------------------------------+----------------------------------------------------------------------------------------------------------+
-| article                                   | title                                                                                                    |
-+-------------------------------------------+----------------------------------------------------------------------------------------------------------+
-| https://regula.dev/regulations/GDPR:Art19 | Notification obligation regarding rectification or erasure of personal data or restriction of processing |
-| https://regula.dev/regulations/GDPR:Art70 | Tasks of the Board                                                                                       |
-| https://regula.dev/regulations/GDPR:Art11 | Processing which does not require identification                                                         |
-| https://regula.dev/regulations/GDPR:Art12 | Transparent information, communication and modalities for the exercise of the rights of the data subject |
-+-------------------------------------------+----------------------------------------------------------------------------------------------------------+
+Summary:
+  Total affected provisions: 42
+  Direct incoming (references this): 4
+  Direct outgoing (this references): 4
+  Transitive: 34
+  Max depth reached: 2
+
+Direct Incoming (provisions referencing this):
+  - Transparent information, communication and modalities (Article 12)
+  - Notification obligation regarding erasure (Article 19)
+  - Tasks of the Board (Article 70)
+  - Processing which does not require identification (Article 11)
+
+Direct Outgoing (provisions this references):
+  - Lawfulness of processing (Article 6)
+  - Processing of special categories of personal data (Article 9)
+  - Right to object (Article 21)
+  - Safeguards for archiving/research purposes (Article 89)
+
+Transitive Impact (depth 2): 34 additional provisions
+  Including: Right of access (Art 15), Right to restriction (Art 18),
+  Binding corporate rules (Art 47), Certification (Art 42),
+  Administrative fines (Art 83), Urgency procedure (Art 66),
+  Data protection by design (Art 25), and 27 more...
+
+Affected by Type:
+  Article: 41
+  Chapter: 1
 ```
 
-### Impact Analysis Options
+From a single provision, Regula identifies **42 affected provisions** across two levels of transitive dependency in **0.84 seconds**.
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--provision` | Provision ID to analyze | Required |
-| `--change` | Type of change (amend, repeal, add) | amend |
-| `--depth` | Transitive dependency depth | 3 |
-| `--source` | Source document | Required |
+### Configuring Analysis Depth
 
-### Understanding Impact Results
+```bash
+# Direct dependencies only
+regula impact --source testdata/gdpr.txt --provision Art17 --depth 1
 
-- **Direct Impact**: Articles that directly reference the changed provision
-- **Transitive Impact**: Articles that reference those direct references (with depth > 1)
+# Three levels of transitive impact
+regula impact --source testdata/gdpr.txt --provision Art17 --depth 3
+
+# Only incoming references (what depends on this article)
+regula impact --source testdata/gdpr.txt --provision Art17 --direction incoming
+
+# Only outgoing references (what this article depends on)
+regula impact --source testdata/gdpr.txt --provision Art17 --direction outgoing
+
+# JSON output for programmatic use
+regula impact --source testdata/gdpr.txt --provision Art17 --format json
+
+# Table format
+regula impact --source testdata/gdpr.txt --provision Art17 --format table
+```
+
+### Impact Analysis as a Regulatory Tool
+
+Without Regula, a legal team assessing the impact of amending Article 17 would need to:
+1. Manually search the entire 88-page GDPR for references to Article 17
+2. For each reference found, search again for references to *those* articles
+3. Repeat for each level of transitive dependency
+4. Classify each affected provision by type and direction
+
+This typically requires hours of work by experienced regulatory analysts. With Regula, the complete transitive impact analysis identifies all 42 affected provisions in under 1 second.
 
 ---
 
-## Compliance Scenario Matching
+## 4. Scenario Matching
 
-Match real-world compliance scenarios to applicable legal provisions.
+The `match` command evaluates a compliance scenario against the regulation, finding directly applicable provisions, triggered provisions, and related articles.
 
 ### Available Scenarios
 
 ```bash
-./regula match --list-scenarios
+regula match --list-scenarios
 ```
 
-Output:
-```
-Available scenarios:
-  consent_withdrawal   Data subject withdraws previously given consent for data processing
-  access_request       Data subject requests access to their personal data
-  erasure_request      Data subject requests erasure of their personal data
-  data_breach          Personal data breach occurs and must be handled
-```
+| Scenario               | Description                                            |
+|-----------------------|--------------------------------------------------------|
+| `consent_withdrawal`  | Data subject withdraws previously given consent        |
+| `access_request`      | Data subject requests access to their personal data    |
+| `erasure_request`     | Data subject requests erasure of their personal data   |
+| `data_breach`         | Personal data breach occurs and must be handled        |
 
-### Running a Scenario Match
+### Example: Data Erasure Request
 
-**Consent Withdrawal:**
 ```bash
-./regula match --source testdata/gdpr.txt --scenario consent_withdrawal
+regula match --source testdata/gdpr.txt --scenario erasure_request
 ```
 
-Output:
+**Output:**
+
 ```
-Provision Matching Results for: Consent Withdrawal
+Provision Matching Results for: Data Erasure Request
 ===================================================
 
 Summary:
   Total matches: 88
-  Direct: 5
-  Triggered: 10
-  Related: 73
+  Direct: 3
+  Triggered: 11
+  Related: 74
 
 Direct Matches:
-  Art 7: Conditions for consent (score: 1.00)
-    - Grants RightToWithdrawConsent (action: withdraw_consent)
-    - Imposes ConsentObligation (action: withdraw_consent)
-  Art 8: Conditions applicable to child's consent in relation to information society services (score: 1.00)
-    - Imposes ConsentObligation (action: withdraw_consent)
-  Art 13: Information to be provided where personal data are collected from the data subject (score: 1.00)
-    - Grants RightToWithdrawConsent (action: withdraw_consent)
-  Art 14: Information to be provided where personal data have not been obtained from the data subject (score: 1.00)
-    - Grants RightToWithdrawConsent (action: withdraw_consent)
+  Art 34: Communication of a personal data breach to the data subject (score: 1.00)
+    - Imposes SubjectNotificationObligation (action: request_erasure)
+  Art 17: Right to erasure ('right to be forgotten') (score: 1.00)
+    - Grants RightToErasure (action: request_erasure)
+  Art 62: Joint operations of supervisory authorities (score: 0.82)
+    - Imposes ResponseObligation (action: request_erasure)
 
 Triggered Matches:
-  Art 12: Transparent information, communication and modalities... (score: 0.80)
-    - References Article 14
-  Art 9: Processing of special categories of personal data (score: 0.75)
-    - Referenced by Article 14
-  ...
+  Art 19: Notification obligation (score: 0.95) - References Article 17
+  Art 12: Transparent information (score: 0.85) - References Article 17
+  Art 11: Processing without identification (score: 0.85) - References Article 17
+  Art 70: Tasks of the Board (score: 0.85) - References Article 17
+  Art 60: Cooperation between supervisory authorities (score: 0.80)
+  Art 6:  Lawfulness of processing (score: 0.75) - Referenced by Article 17
+  Art 9:  Special categories of personal data (score: 0.75)
+  Art 89: Safeguards for archiving/research (score: 0.75)
+  Art 21: Right to object (score: 0.75) - Referenced by Article 17
+  Art 66: Urgency procedure (score: 0.65)
+  Art 55: Competence (score: 0.60)
 
-Related Matches: (73 articles)
-  Art 43: Certification bodies (score: 0.45)
-  Art 17: Right to erasure ('right to be forgotten') (score: 0.45)
-  ...
+Related Matches: (74 articles)
+  Art 18: Right to restriction of processing (score: 0.50)
+  Art 58: Powers (score: 0.50)
+  ... and 72 more
 ```
 
-**Data Breach:**
+### Example: Data Breach Response
+
 ```bash
-./regula match --source testdata/gdpr.txt --scenario data_breach
+regula match --source testdata/gdpr.txt --scenario data_breach
 ```
 
-Output:
-```
-Provision Matching Results for: Data Breach
-===================================================
+Identifies 6 directly applicable provisions:
 
-Summary:
-  Total matches: 80
-  Direct: 6
-  Triggered: 10
-  Related: 64
+| Article | Provision                              | Obligation Type               | Score |
+|---------|----------------------------------------|-------------------------------|-------|
+| Art 33  | Notification to supervisory authority  | BreachNotificationObligation  | 1.00  |
+| Art 32  | Security of processing                 | SecurityObligation            | 1.00  |
+| Art 34  | Communication to data subject          | SubjectNotificationObligation | 1.00  |
+| Art 25  | Data protection by design              | SecurityObligation            | 1.00  |
+| Art 19  | Notification re: erasure/rectification | BreachNotificationObligation  | 1.00  |
+| Art 24  | Responsibility of the controller       | SecurityObligation            | 0.95  |
 
-Direct Matches:
-  Art 33: Notification of a personal data breach to the supervisory authority (score: 1.00)
-    - Imposes BreachNotificationObligation (action: data_breach)
-  Art 32: Security of processing (score: 1.00)
-    - Imposes SecurityObligation (action: data_breach)
-  Art 34: Communication of a personal data breach to the data subject (score: 1.00)
-    - Imposes SubjectNotificationObligation (action: data_breach)
-  Art 24: Responsibility of the controller (score: 0.95)
-    - Imposes SecurityObligation (action: data_breach)
-  ...
+Plus 10 triggered provisions and 64 related provisions — a comprehensive compliance checklist generated in **1.6 seconds**.
+
+### Example: Consent Withdrawal
+
+```bash
+regula match --source testdata/gdpr.txt --scenario consent_withdrawal
 ```
+
+Returns 5 direct matches covering the consent lifecycle:
+
+| Article | Provision                                         | Score |
+|---------|---------------------------------------------------|-------|
+| Art 7   | Conditions for consent                            | 1.00  |
+| Art 8   | Child's consent for information society services  | 1.00  |
+| Art 13  | Information provided at collection                | 1.00  |
+| Art 14  | Information provided without direct collection    | 1.00  |
+| Art 62  | Joint operations of supervisory authorities       | 0.82  |
+
+Plus 10 triggered and 73 related provisions.
 
 ### Match Relevance Categories
 
-| Category | Description | Score Range |
-|----------|-------------|-------------|
-| **DIRECT** | Directly grants rights or imposes obligations matching the scenario action | 0.80 - 1.00 |
-| **TRIGGERED** | Referenced by or references direct matches | 0.60 - 0.90 |
-| **RELATED** | Contains keywords related to the scenario | 0.30 - 0.50 |
-
-### JSON Output
-
-```bash
-./regula match --source testdata/gdpr.txt --scenario access_request --format json
-```
+| Category      | Score Range | Description                                          |
+|---------------|-------------|------------------------------------------------------|
+| **Direct**    | 0.80 - 1.00 | Directly grants rights or imposes obligations matching the scenario |
+| **Triggered** | 0.60 - 0.95 | Referenced by or references direct matches           |
+| **Related**   | < 0.60       | Connected by keyword similarity                      |
 
 ---
 
-## Validation and Quality Assurance
+## 5. Validation and Quality Assessment
 
-Validate extraction quality and graph consistency.
+Regula validates the extracted knowledge graph for completeness and correctness using weighted component scoring and a multi-stage gate pipeline.
 
-### Running Validation
+### Full Validation
 
 ```bash
-./regula validate --source testdata/gdpr.txt
+regula validate --source testdata/gdpr.txt
 ```
 
-Output:
+**Output (abbreviated):**
+
 ```
-Validation Report
-=================
-
-Reference Resolution:
-  Total references: 255
-  Resolved: 242 (100.0%)
-  Unresolved: 0
-    - External: 13
-    - Ambiguous: 0
-    - Not found: 0
-
-Graph Connectivity:
-  Total provisions: 99
-  Connected: 78 (78.8%)
-  Orphans: 21
-  Most referenced:
-    - Article 6: 9 references
-    - Article 9: 7 references
-    - Article 65: 6 references
-    - Article 43: 6 references
-    - Article 40: 6 references
-
 Definition Coverage:
   Defined terms: 26
   Terms with usage links: 26 (100.0%)
@@ -501,501 +528,357 @@ Semantic Extraction:
   Obligations found: 70 (in 41 articles)
   Known GDPR rights: 6/6
 
-Warnings:
-  [connectivity] 21 provisions have no cross-references
-
-Overall Score: 94.7%
-Threshold: 80.0%
-Status: PASS
-```
-
-### Validation Options
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--threshold` | Pass/fail threshold (0.0-1.0) | 0.8 |
-| `--check` | What to check (all, references) | all |
-| `--format` | Output format (text, json) | text |
-
-### Validation Metrics
-
-| Metric | Description | Good Threshold |
-|--------|-------------|----------------|
-| Reference Resolution | % of references resolved to URIs | ≥ 80% |
-| Graph Connectivity | % of provisions with cross-references | ≥ 70% |
-| Definition Coverage | % of defined terms with usage links | ≥ 90% |
-| Rights Extraction | Number of rights identified | ≥ 50 |
-| Obligations Extraction | Number of obligations identified | ≥ 50 |
-
----
-
-## Working with US State Privacy Laws
-
-Regula supports US state privacy laws including CCPA (California Consumer Privacy Act) and VCDPA (Virginia Consumer Data Protection Act) with regulation-aware validation profiles.
-
-### CCPA (California Consumer Privacy Act)
-
-The CCPA uses California Civil Code section numbering (Section 1798.xxx).
-
-#### Ingesting CCPA
-
-```bash
-./regula ingest --source testdata/ccpa.txt --stats
-```
-
-Output:
-```
-Ingesting regulation from: testdata/ccpa.txt
-  1. Parsing document structure... done (6 chapters, 21 articles)
-  2. Extracting defined terms... done (15 definitions)
-  3. Identifying cross-references... done (35 references)
-  4. Extracting rights/obligations... done (12 rights, 15 obligations)
-  5. Resolving cross-references... done (95% resolved)
-  6. Building knowledge graph... done (1250 triples)
-
-Ingestion complete in 89.234ms
-```
-
-#### Validating CCPA
-
-```bash
-./regula validate --source testdata/ccpa.txt
-```
-
-Output:
-```
-Validation Report
-=================
-Profile: CCPA
-
-Reference Resolution:
-  Total references: 35
-  Resolved: 32 (91.4%)
-  Unresolved: 3
-    - External: 2
-    - Not found: 1
-
-Definition Coverage:
-  Defined terms: 15
-  Terms with usage links: 15 (100.0%)
-  Total term usages: 89
-  Articles using terms: 18
-
-Semantic Extraction:
-  Rights found: 12 (in 6 articles)
-  Obligations found: 15 (in 8 articles)
-  Known CCPA rights: 5/5
-    - RightToKnow
-    - RightToDelete
-    - RightToOptOut
-    - RightToNonDiscrimination
-    - RightToKnowAboutSales
-
 Structure Quality:
-  Articles: 21 (expected: 21, 100.0%)
-  Chapters: 6 (expected: 6, 100.0%)
+  Articles: 99 (expected: 99, 100.0%)
+  Chapters: 11 (expected: 11, 100.0%)
+  Content quality: 100.0% articles with content
+  Structure score: 100.0%
 
 Component Scores:
-  References:    91.4% (weight: 25%)
-  Connectivity:  76.2% (weight: 20%)
+  References:    98.8% (weight: 25%)
+  Connectivity:  78.8% (weight: 20%)
   Definitions:   100.0% (weight: 20%)
   Semantics:     100.0% (weight: 20%)
   Structure:     100.0% (weight: 15%)
 
-Overall Score: 92.6%
+Overall Score: 95.5%
 Threshold: 80.0%
 Status: PASS
 ```
 
-#### CCPA Queries
-
-**List CCPA Consumer Rights:**
-```bash
-./regula query --source testdata/ccpa.txt --template rights
-```
-
-Output:
-```
-+-------------+---------------------------------------------+------------------------------------------+------------------------+
-| article     | title                                       | right                                    | rightType              |
-+-------------+---------------------------------------------+------------------------------------------+------------------------+
-| CCPA:Art100 | General Duties of Businesses                | CCPA:Right:100:RightToKnow               | RightToKnow            |
-| CCPA:Art105 | Consumers Right to Delete                   | CCPA:Right:105:RightToDelete             | RightToDelete          |
-| CCPA:Art115 | Right to Know What Personal Information...  | CCPA:Right:115:RightToKnow               | RightToKnow            |
-| CCPA:Art120 | Right to Know What Personal Information...  | CCPA:Right:120:RightToKnowAboutSales     | RightToKnowAboutSales  |
-| CCPA:Art135 | Right to Opt-Out of Sale                    | CCPA:Right:135:RightToOptOut             | RightToOptOut          |
-| CCPA:Art125 | Non-Discrimination                          | CCPA:Right:125:RightToNonDiscrimination  | RightToNonDiscrimination|
-+-------------+---------------------------------------------+------------------------------------------+------------------------+
-```
-
-### VCDPA (Virginia Consumer Data Protection Act)
-
-The VCDPA uses Virginia Code section numbering (Section 59.1-xxx).
-
-#### Ingesting VCDPA
+### Gate-Based Validation Pipeline
 
 ```bash
-./regula ingest --source testdata/vcdpa.txt --stats
+regula validate --source testdata/gdpr.txt --check gates
 ```
 
-Output:
-```
-Ingesting regulation from: testdata/vcdpa.txt
-  1. Parsing document structure... done (7 chapters, 11 articles)
-  2. Extracting defined terms... done (20 definitions)
-  3. Identifying cross-references... done (51 references)
-  4. Extracting rights/obligations... done (12 rights, 8 obligations)
-  5. Resolving cross-references... done (35% resolved)
-  6. Building knowledge graph... done (1890 triples)
+Four sequential gates run in under 84 microseconds total:
 
-Ingestion complete in 112.567ms
-```
+| Gate | Name      | Score   | Duration | What It Checks                              |
+|------|-----------|---------|----------|---------------------------------------------|
+| V0   | Schema    | 100.0%  | 15 µs   | File readable, not empty, valid size         |
+| V1   | Structure | 100.0%  | 10 µs   | Has articles, structure complete, density    |
+| V2   | Coverage  | 84.2%   | 14 µs   | Definitions, references, semantic coverage   |
+| V3   | Quality   | 83.8%   | 43 µs   | Resolution rate, confidence, graph connectivity |
 
-#### Validating VCDPA
-
-```bash
-./regula validate --source testdata/vcdpa.txt
-```
-
-Output:
-```
-Validation Report
-=================
-Profile: VCDPA
-
-Reference Resolution:
-  Total references: 51
-  Resolved: 0 (0.0%)
-  Unresolved: 33
-    - External: 18
-    - Not found: 33
-
-Graph Connectivity:
-  Total provisions: 11
-  Connected: 0 (0.0%)
-  Orphans: 11
-
-Definition Coverage:
-  Defined terms: 20
-  Terms with usage links: 20 (100.0%)
-  Total term usages: 74
-  Articles using terms: 9
-
-Semantic Extraction:
-  Rights found: 12 (in 3 articles)
-  Obligations found: 8 (in 5 articles)
-  Known VCDPA rights: 6/6
-    - RightOfAccess
-    - RightToKnow
-    - RightToDelete
-    - RightToCorrect
-    - RightToDataPortability
-    - RightToOptOut
-
-Structure Quality:
-  Articles: 11 (expected: 12, 91.7%)
-  Chapters: 7 (expected: 7, 100.0%)
-  Content quality: 100.0% articles with content
-  Structure score: 93.9%
-
-Component Scores:
-  References:    0.0% (weight: 25%)
-  Connectivity:  0.0% (weight: 20%)
-  Definitions:   100.0% (weight: 20%)
-  Semantics:     100.0% (weight: 20%)
-  Structure:     93.9% (weight: 15%)
-
-Overall Score: 54.1%
-Threshold: 80.0%
-Status: FAIL
-
-Warnings:
-  [references] 33 references could not be resolved
-  [connectivity] 11 provisions have no cross-references
-```
-
-**Note on VCDPA Validation Score:**
-
-The VCDPA document contains many references to external federal laws (HIPAA, GLBA, COPPA, FERPA, FCRA, etc.) that are written in short form without full U.S.C. citations (e.g., "Section 1320d" instead of "42 U.S.C. § 1320d"). These are detected as internal references that cannot be resolved, which lowers the reference resolution score.
-
-For VCDPA, the most reliable metrics are:
-- **Semantic Extraction** (100%): All 6 VCDPA rights detected
-- **Definition Coverage** (100%): All defined terms linked
-- **Structure Quality** (93.9%): Document structure properly parsed
-
-You can use a lower threshold for VCDPA validation:
-```bash
-./regula validate --source testdata/vcdpa.txt --threshold 0.5
-```
-
-#### VCDPA Queries
-
-**List VCDPA Consumer Rights:**
-```bash
-./regula query --source testdata/vcdpa.txt --template rights
-```
-
-Output:
-```
-+-------------+----------------------------+-------------------------------------------+------------------------+
-| article     | title                      | right                                     | rightType              |
-+-------------+----------------------------+-------------------------------------------+------------------------+
-| VCDPA:Art577| Consumer Rights            | VCDPA:Right:577:RightOfAccess             | RightOfAccess          |
-| VCDPA:Art577| Consumer Rights            | VCDPA:Right:577:RightToKnow               | RightToKnow            |
-| VCDPA:Art577| Consumer Rights            | VCDPA:Right:577:RightToCorrect            | RightToCorrect         |
-| VCDPA:Art577| Consumer Rights            | VCDPA:Right:577:RightToDelete             | RightToDelete          |
-| VCDPA:Art577| Consumer Rights            | VCDPA:Right:577:RightToDataPortability    | RightToDataPortability |
-| VCDPA:Art577| Consumer Rights            | VCDPA:Right:577:RightToOptOut             | RightToOptOut          |
-+-------------+----------------------------+-------------------------------------------+------------------------+
-```
-
-**List VCDPA Definitions:**
-```bash
-./regula query --source testdata/vcdpa.txt --template definitions
-```
-
-Output (truncated):
-```
-+--------------------------------------+---------------------------------+----------------------------------------+
-| term                                 | termText                        | definition                             |
-+--------------------------------------+---------------------------------+----------------------------------------+
-| VCDPA:Term:consumer                  | consumer                        | a natural person who is a resident of  |
-|                                      |                                 | the Commonwealth acting only in an     |
-|                                      |                                 | individual or household context...     |
-| VCDPA:Term:controller                | controller                      | a natural or legal person that, alone  |
-|                                      |                                 | or jointly with others, determines the |
-|                                      |                                 | purpose and means of processing...     |
-| VCDPA:Term:personal_data             | personal data                   | any information that is linked or      |
-|                                      |                                 | reasonably linkable to an identified   |
-|                                      |                                 | or identifiable natural person...      |
-| VCDPA:Term:sensitive_data            | sensitive data                  | personal data revealing racial or      |
-|                                      |                                 | ethnic origin, religious beliefs,      |
-|                                      |                                 | mental or physical health diagnosis... |
-+--------------------------------------+---------------------------------+----------------------------------------+
-20 rows
-```
-
-### Comparing US Privacy Laws
-
-Use JSON output to compare validation results across regulations:
-
-```bash
-# Validate all three regulations with JSON output
-./regula validate --source testdata/gdpr.txt --format json > gdpr-validation.json
-./regula validate --source testdata/ccpa.txt --format json > ccpa-validation.json
-./regula validate --source testdata/vcdpa.txt --format json > vcdpa-validation.json
-```
-
-| Metric | GDPR | CCPA | VCDPA |
-|--------|------|------|-------|
-| Articles | 99 | 21 | 11 |
-| Definitions | 26 | 15 | 20 |
-| Rights Detected | 60 | 12 | 12 |
-| Obligations Detected | 70 | 15 | 8 |
-| Definition Coverage | 100% | 100% | 100% |
-| Known Rights Found | 6/6 | 5/5 | 6/6 |
+**Overall: 92.0%** — All four gates pass.
 
 ### Validation Profiles
 
-Regula automatically detects the regulation type and applies the appropriate validation profile:
+Regula supports regulation-specific validation profiles:
 
-| Profile | Expected Articles | Expected Definitions | Known Rights |
-|---------|------------------|---------------------|--------------|
-| GDPR | 99 | 26 | RightOfAccess, RightToRectification, RightToErasure, RightToRestriction, RightToDataPortability, RightToObject |
-| CCPA | 21 | 15 | RightToKnow, RightToDelete, RightToOptOut, RightToNonDiscrimination, RightToKnowAboutSales |
-| VCDPA | 12 | 22 | RightOfAccess, RightToKnow, RightToDelete, RightToCorrect, RightToDataPortability, RightToOptOut |
-| Generic | - | - | (no specific expectations) |
-
-You can override the auto-detected profile:
 ```bash
-./regula validate --source testdata/vcdpa.txt --profile CCPA
+# Use a built-in profile
+regula validate --source testdata/gdpr.txt --profile GDPR
+
+# Auto-suggest a profile based on document analysis
+regula validate --source testdata/gdpr.txt --suggest-profile
+
+# Generate a profile YAML file from document analysis
+regula validate --source testdata/gdpr.txt --generate-profile my-profile.yaml
+
+# Load a custom profile
+regula validate --source testdata/gdpr.txt --load-profile my-profile.yaml
+```
+
+Built-in profiles:
+
+| Profile  | Expected Articles | Expected Chapters | Threshold |
+|----------|------------------:|-------------------:|----------:|
+| GDPR     | 99                | 11                 | 80%       |
+| CCPA     | 31                | 5                  | 75%       |
+| Generic  | flexible          | flexible           | 70%       |
+
+### Report Formats
+
+```bash
+# HTML report
+regula validate --source testdata/gdpr.txt --format html --report report.html
+
+# Markdown report
+regula validate --source testdata/gdpr.txt --format markdown --report report.md
+
+# JSON report (for programmatic use)
+regula validate --source testdata/gdpr.txt --format json --report report.json
 ```
 
 ---
 
-## Exporting and Visualization
+## 6. Inter-Legislation Modelling
 
-Export the knowledge graph for visualization or further processing.
+Regula's knowledge graph represents legislation as a connected web of provisions, enabling structural and semantic analysis of regulatory frameworks.
 
-### Export Formats
+### Cross-Reference Network
 
-```bash
-# Summary statistics
-./regula export --source testdata/gdpr.txt --format summary
-
-# DOT format for Graphviz
-./regula export --source testdata/gdpr.txt --format dot --output graph.dot
-
-# JSON format
-./regula export --source testdata/gdpr.txt --format json --output graph.json
-```
-
-### Summary Export
+The GDPR contains **258 internal cross-references** connecting its 99 articles. These references form a directed graph that reveals the regulatory structure.
 
 ```bash
-./regula export --source testdata/gdpr.txt --format summary
+regula query --source testdata/gdpr.txt --template bidirectional
 ```
 
-Output:
+Shows pairs of articles that reference each other, revealing mutual dependencies in the regulatory framework.
+
+### Term Propagation as a Modelling Tool
+
+Defined terms create semantic links across articles. When a term is defined in Article 4 and used across multiple provisions, changing that definition has cascading effects.
+
+```bash
+regula query --source testdata/gdpr.txt --template term-usage
+```
+
+Example: The term "consent" appears in 13 articles. The term "controller" appears in 16+ articles. These terms are semantic integration points — changing their definitions affects the interpretation of every article that uses them.
+
+### Combining Impact Analysis with Scenario Matching
+
+For comprehensive regulatory modelling, combine impact analysis with scenario matching:
+
+```bash
+# First: What articles are affected by changing Art 17?
+regula impact --source testdata/gdpr.txt --provision Art17
+
+# Then: How does an erasure request interact with those affected provisions?
+regula match --source testdata/gdpr.txt --scenario erasure_request
+```
+
+The impact analysis identifies **42 provisions** affected by changes to Article 17. The scenario matching identifies **88 provisions** relevant to an erasure request. The overlap between these sets reveals which provisions are both structurally connected and functionally relevant to erasure operations.
+
+### Relationship Graph Summary
+
+```bash
+regula export --source testdata/gdpr.txt --format summary
+```
+
+**Output:**
+
 ```
 Relationship Graph Summary
 ==========================
 
-Total relationships: 3134
+Total relationships: 3141
 
 Relationship Types:
-  reg:contains              133
-  reg:definedIn             26
-  reg:grantsRight           44
-  reg:externalRef           13
-  reg:partOf                1016
-  reg:resolvedTarget        297
-  reg:usesTerm              349
-  reg:hasRecital            173
-  reg:defines               26
-  reg:imposesObligation     62
-  reg:referencedBy          179
-  reg:references            179
-  reg:hasSection            15
-  reg:belongsTo             512
+  reg:partOf              1019
+  reg:belongsTo            515
+  reg:usesTerm             349
+  reg:resolvedTarget       297
+  reg:referencedBy         179
+  reg:references           179
+  reg:hasRecital           173
+  reg:contains             133
   reg:hasArticle            99
+  reg:imposesObligation     62
+  reg:grantsRight           44
+  reg:defines               26
+  reg:definedIn             26
+  reg:hasSection            15
+  reg:externalRef           13
   reg:hasChapter            11
+  reg:repealedBy             1
 
 Most Referenced Articles:
-  Article 6: 9 incoming references
-  Article 9: 7 incoming references
-  Article 40: 6 incoming references
+  Article 6:  9 incoming references
+  Article 9:  7 incoming references
   Article 43: 6 incoming references
   Article 65: 6 incoming references
+  Article 40: 6 incoming references
 
 Articles With Most Outgoing References:
   Article 70: 18 outgoing references
   Article 12: 11 outgoing references
   Article 58: 9 outgoing references
   Article 40: 8 outgoing references
+  Article 11: 7 outgoing references
 ```
 
-### Graphviz Visualization
+---
 
-Export to DOT format and render with Graphviz:
+## 7. Exporting the Knowledge Graph
+
+The `export` command serializes the knowledge graph into standard formats for use with external tools.
+
+### Available Formats
+
+| Format   | Flag       | Use Case                                    |
+|----------|------------|---------------------------------------------|
+| Summary  | `summary`  | Relationship statistics and top articles     |
+| Turtle   | `turtle`   | Standard RDF serialization for SPARQL tools  |
+| RDF/XML  | `rdfxml`   | W3C standard for XML-based RDF toolchains    |
+| JSON-LD  | `jsonld`   | JSON-based RDF for web applications          |
+| DOT      | `dot`      | GraphViz visualization                       |
+| JSON     | `json`     | General-purpose structured data              |
+
+### Turtle Export
 
 ```bash
-./regula export --source testdata/gdpr.txt --format dot --output gdpr.dot
+regula export --source testdata/gdpr.txt --format turtle --output gdpr.ttl
+```
+
+Produces ~9,548 lines of Turtle RDF covering all 8,495 triples. Compatible with Apache Jena, RDFLib, Blazegraph, and any SPARQL endpoint.
+
+### RDF/XML Export
+
+```bash
+regula export --source testdata/gdpr.txt --format rdfxml --output gdpr.rdf
+```
+
+Produces W3C-compliant RDF/XML:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:eli="http://data.europa.eu/eli/ontology#"
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:reg="https://regula.dev/ontology#">
+
+  <rdf:Description rdf:about="https://regula.dev/regulations/GDPR:Art17">
+    <rdf:type rdf:resource="https://regula.dev/ontology#Article"/>
+    <reg:title>Right to erasure ('right to be forgotten')</reg:title>
+    <reg:references rdf:resource="https://regula.dev/regulations/GDPR:Art6"/>
+    <reg:grantsRight rdf:resource="https://regula.dev/regulations/GDPR:Right:17:RightToErasure"/>
+  </rdf:Description>
+
+</rdf:RDF>
+```
+
+Both `rdfxml` and `xml` are accepted as format names.
+
+### GraphViz Visualization
+
+```bash
+regula export --source testdata/gdpr.txt --format dot --output gdpr.dot
 dot -Tpng gdpr.dot -o gdpr.png
 ```
 
-The DOT output uses color coding:
-- Light blue: Articles
-- Light green: Chapters
-- Light yellow: Sections
-- Light pink: Definitions
-- Light coral: Rights
+The DOT output uses color coding: light blue for articles, light green for chapters, light yellow for sections, light pink for definitions, light coral for rights.
+
+### JSON-LD Export
+
+```bash
+regula export --source testdata/gdpr.txt --format jsonld --output gdpr.jsonld
+```
+
+JSON-LD format for web application integration.
 
 ---
 
-## Advanced Usage
+## 8. Performance Summary
 
-### Custom Base URI
+All benchmarks measured on GDPR (88 pages, 99 articles, 8,495 triples).
 
-Specify a custom base URI for the knowledge graph:
+### End-to-End Timing
 
-```bash
-./regula ingest --source regulation.txt --base-uri "https://mycompany.com/legal/"
-```
+| Operation                        | Wall Time  |
+|----------------------------------|------------|
+| Full document ingest             | ~1.2s      |
+| Full validation                  | ~1.5s      |
+| Gate validation (4 gates)        | 84 µs      |
+| Impact analysis (depth 2)        | ~0.84s     |
+| Scenario matching                | ~1.3-1.6s  |
+| Profile suggestion               | ~1.3s      |
+| Export (turtle/rdfxml/summary)   | ~0.9-1.0s  |
 
-### Batch Processing
+### Query Execution Time (Excluding Ingestion)
 
-Process multiple regulations:
+| Query                      | Execution Time |
+|----------------------------|---------------|
+| Definitions (26 terms)     | 86 µs         |
+| Bidirectional references   | 224 µs        |
+| DESCRIBE article           | 22 µs         |
 
-```bash
-for file in regulations/*.txt; do
-    ./regula ingest --source "$file" --output "graphs/$(basename "$file" .txt).json"
-done
-```
+### Manual Analysis vs. Regula
 
-### Integration with CI/CD
+| Task                                             | Manual Estimate | Regula  |
+|--------------------------------------------------|-----------------|---------|
+| Read and catalog 99 GDPR articles                | 4-8 hours       | 1.2s    |
+| Extract all 26 defined terms and definitions     | 1-2 hours       | 1.2s    |
+| Map 258 cross-references between articles        | 8-16 hours      | 1.2s    |
+| Identify 60 rights across 24 articles            | 4-8 hours       | 1.2s    |
+| Identify 69 obligations across 41 articles       | 4-8 hours       | 1.2s    |
+| Trace impact of amending one article (depth 2)   | 2-4 hours       | 0.84s   |
+| Find all provisions for a compliance scenario    | 1-3 hours       | 1.3s    |
+| Validate extraction completeness                 | 2-4 hours       | 1.5s    |
+| Generate relationship summary                    | 4-8 hours       | 0.9s    |
 
-Use the E2E test script to validate extraction quality in CI:
-
-```bash
-# In GitHub Actions or similar
-./scripts/e2e-test.sh
-```
-
-The script validates:
-- Article count (≥ 50)
-- Definition count (≥ 20)
-- Reference count (≥ 100)
-- Reference resolution rate (≥ 80%)
-- Graph triple count (≥ 500)
-- Impact analysis coverage
-- Scenario matching coverage
-
-### Programmatic Access
-
-Import regula packages directly in Go:
-
-```go
-package main
-
-import (
-    "github.com/coolbeans/regula/pkg/extract"
-    "github.com/coolbeans/regula/pkg/store"
-    "github.com/coolbeans/regula/pkg/simulate"
-)
-
-func main() {
-    // Parse document
-    parser := extract.NewParser()
-    doc, _ := parser.Parse(file)
-
-    // Build graph
-    ts := store.NewTripleStore()
-    builder := store.NewGraphBuilder(ts, "https://example.com/")
-    builder.BuildComplete(doc, defExtractor, refExtractor, resolver, semExtractor)
-
-    // Match scenario
-    matcher := simulate.NewProvisionMatcher(ts, baseURI, annotations, doc)
-    result := matcher.Match(simulate.ConsentWithdrawalScenario())
-}
-```
+**Total for full GDPR analysis: 30-61 hours manual work reduced to under 10 seconds.**
 
 ---
 
-## Troubleshooting
+## 9. Complete Workflow Example
 
-### Common Issues
+A full regulatory analysis workflow:
 
-**"No graph loaded" error:**
 ```bash
-# Use --source flag with query command
-./regula query --source testdata/gdpr.txt --template articles
+# 1. Ingest the regulation and build the knowledge graph
+regula ingest --source testdata/gdpr.txt
+
+# 2. Validate extraction quality
+regula validate --source testdata/gdpr.txt
+
+# 3. Run gate-based validation pipeline
+regula validate --source testdata/gdpr.txt --check gates
+
+# 4. Explore structure
+regula query --source testdata/gdpr.txt --template articles
+regula query --source testdata/gdpr.txt --template chapters
+regula query --source testdata/gdpr.txt --template definitions
+regula query --source testdata/gdpr.txt --template hierarchy
+
+# 5. Analyze rights and obligations
+regula query --source testdata/gdpr.txt --template rights
+regula query --source testdata/gdpr.txt --template obligations
+regula query --source testdata/gdpr.txt --template right-types
+regula query --source testdata/gdpr.txt --template obligation-types
+
+# 6. Explore cross-references
+regula query --source testdata/gdpr.txt --template references
+regula query --source testdata/gdpr.txt --template most-referenced
+regula query --source testdata/gdpr.txt --template bidirectional
+
+# 7. Analyze impact of proposed amendments
+regula impact --source testdata/gdpr.txt --provision Art17
+regula impact --source testdata/gdpr.txt --provision Art6 --depth 3
+
+# 8. Match compliance scenarios
+regula match --source testdata/gdpr.txt --scenario data_breach
+regula match --source testdata/gdpr.txt --scenario consent_withdrawal
+regula match --source testdata/gdpr.txt --scenario erasure_request
+regula match --source testdata/gdpr.txt --scenario access_request
+
+# 9. Export for external tools
+regula export --source testdata/gdpr.txt --format summary
+regula export --source testdata/gdpr.txt --format rdfxml --output gdpr.rdf
+regula export --source testdata/gdpr.txt --format turtle --output gdpr.ttl
+regula export --source testdata/gdpr.txt --format jsonld --output gdpr.jsonld
+regula export --source testdata/gdpr.txt --format dot --output gdpr.dot
 ```
 
-**Low reference resolution rate:**
-- Check for non-standard reference formats in the source document
-- External references (Directive 95/46/EC) are counted separately
+Each command runs independently. The source document is re-ingested on each invocation, keeping the workflow stateless and reproducible.
 
-**Missing definitions:**
-- Ensure definitions follow the pattern: `'term' means ...` or `(1) 'term' ...`
+---
 
-### Getting Help
+## 10. All Output Formats
+
+| Command    | Available Formats                                                      |
+|------------|------------------------------------------------------------------------|
+| `query`    | table, json, csv (SELECT); turtle, ntriples, json (CONSTRUCT/DESCRIBE) |
+| `validate` | text, json, html, markdown                                             |
+| `impact`   | text, json, table                                                      |
+| `match`    | text, json, table                                                      |
+| `export`   | json, dot, turtle, jsonld, rdfxml, summary                             |
+
+Example with JSON output for programmatic consumption:
 
 ```bash
-./regula --help
-./regula [command] --help
+regula match --source testdata/gdpr.txt --scenario data_breach --format json | jq '.direct[]'
+regula validate --source testdata/gdpr.txt --format json | jq '.overallScore'
+regula impact --source testdata/gdpr.txt --provision Art17 --format json | jq '.summary'
 ```
 
 ---
 
 ## Next Steps
 
-1. **Explore the GDPR**: Use the included `testdata/gdpr.txt` to explore all features
-2. **Try Different Scenarios**: Match your compliance scenarios to applicable provisions
-3. **Visualize the Graph**: Export to DOT format and render with Graphviz
-4. **Integrate with Workflows**: Use validation in CI/CD pipelines
-
-For more information:
-- Architecture: `docs/ARCHITECTURE.md`
-- Roadmap: `docs/ROADMAP.md`
-- Ontology: `docs/ONTOLOGY.md`
+- Review [TESTING.md](TESTING.md) for development and testing strategies
+- See [ARCHITECTURE.md](ARCHITECTURE.md) for system design details
+- Check [ROADMAP.md](ROADMAP.md) for upcoming features
