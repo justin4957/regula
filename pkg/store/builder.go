@@ -513,6 +513,29 @@ func (b *GraphBuilder) buildReference(ref *extract.Reference, stats *BuildStats)
 		}
 	}
 
+	// Temporal properties
+	if ref.TemporalKind != "" {
+		b.store.Add(uri, PropTemporalKind, ref.TemporalKind)
+		stats.ReferenceTriples++
+		if ref.TemporalDescription != "" {
+			b.store.Add(uri, PropTemporalDescription, ref.TemporalDescription)
+			stats.ReferenceTriples++
+		}
+		if ref.TemporalDate != "" {
+			b.store.Add(uri, PropEffectiveDate, ref.TemporalDate)
+			stats.ReferenceTriples++
+		}
+		// Emit amendment/repeal relationships on the source article
+		switch ref.TemporalKind {
+		case "as_amended":
+			b.store.Add(sourceURI, PropAmendedBy, uri)
+			stats.ReferenceTriples++
+		case "repealed":
+			b.store.Add(sourceURI, PropRepealedBy, uri)
+			stats.ReferenceTriples++
+		}
+	}
+
 	stats.References++
 	stats.ReferenceTriples += 7 // type, text, identifier, offset, length, partOf, belongsTo
 }
@@ -632,6 +655,28 @@ func (b *GraphBuilder) buildResolvedReference(res *extract.ResolvedReference, st
 		b.store.Add(uri, PropExternalRef, ref.Identifier)
 		if ref.ExternalDoc != "" {
 			b.store.Add(uri, "reg:externalDocType", ref.ExternalDoc)
+		}
+	}
+
+	// Temporal properties
+	if ref.TemporalKind != "" {
+		b.store.Add(uri, PropTemporalKind, ref.TemporalKind)
+		stats.ReferenceTriples++
+		if ref.TemporalDescription != "" {
+			b.store.Add(uri, PropTemporalDescription, ref.TemporalDescription)
+			stats.ReferenceTriples++
+		}
+		if ref.TemporalDate != "" {
+			b.store.Add(uri, PropEffectiveDate, ref.TemporalDate)
+			stats.ReferenceTriples++
+		}
+		switch ref.TemporalKind {
+		case "as_amended":
+			b.store.Add(sourceURI, PropAmendedBy, uri)
+			stats.ReferenceTriples++
+		case "repealed":
+			b.store.Add(sourceURI, PropRepealedBy, uri)
+			stats.ReferenceTriples++
 		}
 	}
 

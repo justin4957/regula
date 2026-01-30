@@ -115,6 +115,39 @@ go test ./pkg/citation/... -run "TestCitationFromReference|TestReferenceFromCita
 go test ./pkg/citation/... -run TestEUCitationParserGDPRIntegration -v
 ```
 
+### Temporal Reference Extraction Tests
+
+Test temporal qualifier detection ("as amended by", "as in force on", "repealed by", etc.):
+
+```bash
+# Run all temporal extraction tests
+go test ./pkg/extract/... -v -run TestExtractTemporal
+
+# Run individual temporal pattern tests
+go test ./pkg/extract/... -run TestExtractTemporalAsAmendedBy -v      # "as amended by {doc}"
+go test ./pkg/extract/... -run TestExtractTemporalAsAmended -v         # "as amended" standalone
+go test ./pkg/extract/... -run TestExtractTemporalAsInForceOn -v       # "as in force on {date}"
+go test ./pkg/extract/... -run TestExtractTemporalEnterIntoForce -v    # "enter(s/ed) into force"
+go test ./pkg/extract/... -run TestExtractTemporalAsOriginallyEnacted -v  # "as originally enacted"
+go test ./pkg/extract/... -run TestExtractTemporalAsItStoodOn -v       # "as it stood on {date}"
+go test ./pkg/extract/... -run TestExtractTemporalConsolidated -v      # "consolidated version"
+go test ./pkg/extract/... -run TestExtractTemporalRepealedBy -v        # "repealed by {doc}"
+go test ./pkg/extract/... -run TestExtractTemporalRepealedWithEffect -v  # "repealed with effect from {date}"
+
+# Run date parsing tests
+go test ./pkg/extract/... -run TestExtractTemporalParseEuropeanDate -v
+
+# Run GDPR integration test (verifies temporal refs from Article 92, 94, 99)
+go test ./pkg/extract/... -run TestExtractTemporalGDPRIntegration -v
+
+# Run UK SI integration test
+go test ./pkg/extract/... -run TestExtractTemporalUKSIIntegration -v
+
+# Run temporal builder tests (verifies RDF triple emission)
+go test ./pkg/store/... -run TestBuildReferenceWithTemporal -v
+go test ./pkg/store/... -run TestBuildGDPRGraph_TemporalReferences -v
+```
+
 ### EUR-Lex Connector Tests
 
 Test the EUR-Lex connector for CELEX number generation, ELI URI generation, validation caching, and HTTP client integration:
