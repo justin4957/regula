@@ -274,6 +274,43 @@ go run cmd/regula/main.go query --source testdata/gdpr.txt --timing \
   "CONSTRUCT { ?a <http://example.org/title> ?t } WHERE { ?a rdf:type reg:Article . ?a reg:title ?t }"
 ```
 
+### SPARQL DESCRIBE Query Tests
+
+Test the SPARQL DESCRIBE query support for entity-centric summaries:
+
+```bash
+# Run all DESCRIBE parser tests
+go test ./pkg/query/... -v -run "TestParseQuery_Describe|TestDescribeQuery"
+
+# Run DESCRIBE execution tests
+go test ./pkg/query/... -v -run TestExecutor_Describe
+
+# Run DESCRIBE bidirectional test (verifies subject + object lookup)
+go test ./pkg/query/... -v -run TestExecutor_DescribeBidirectional
+
+# Run DESCRIBE formatting tests
+go test ./pkg/query/... -v -run "TestExecutor_DescribeFormatTurtle|TestExecutor_DescribeFormatJSON"
+
+# Run DESCRIBE benchmarks
+go test ./pkg/query/... -v -bench BenchmarkExecutor_Describe -benchmem
+
+# CLI: DESCRIBE with direct URI
+go run cmd/regula/main.go query --source testdata/gdpr.txt "DESCRIBE GDPR:Art17"
+
+# CLI: DESCRIBE with variable
+go run cmd/regula/main.go query --source testdata/gdpr.txt \
+  "DESCRIBE ?article WHERE { ?article reg:title \"Right to erasure\" }"
+
+# CLI: DESCRIBE with JSON output
+go run cmd/regula/main.go query --source testdata/gdpr.txt --format json "DESCRIBE GDPR:Art17"
+
+# CLI: DESCRIBE with timing
+go run cmd/regula/main.go query --source testdata/gdpr.txt --timing "DESCRIBE GDPR:Art17"
+
+# CLI: Use describe-article template
+go run cmd/regula/main.go query --source testdata/gdpr.txt --template describe-article
+```
+
 ### Validation Gate Tests
 
 Test the validation checkpoint/gate system with per-stage quality metrics:

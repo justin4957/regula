@@ -1016,3 +1016,338 @@ func TestConstructQuery_ExpandPrefixes(t *testing.T) {
 		t.Errorf("Where Predicate = %s, want <http://example.org/title>", query.Construct.Where[0].Predicate)
 	}
 }
+
+// DESCRIBE query tests
+
+func TestParseQuery_DescribeDirectURI(t *testing.T) {
+	queryStr := `DESCRIBE <https://regula.dev/regulations/GDPR:Art17>`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	if query.Type != DescribeQueryType {
+		t.Errorf("Type = %v, want %v", query.Type, DescribeQueryType)
+	}
+
+	if query.Describe == nil {
+		t.Fatal("Describe should not be nil")
+	}
+
+	if len(query.Describe.Resources) != 1 {
+		t.Fatalf("Resources count = %d, want 1", len(query.Describe.Resources))
+	}
+
+	if query.Describe.Resources[0] != "<https://regula.dev/regulations/GDPR:Art17>" {
+		t.Errorf("Resource = %v, want <https://regula.dev/regulations/GDPR:Art17>", query.Describe.Resources[0])
+	}
+
+	if len(query.Describe.Where) != 0 {
+		t.Errorf("WHERE should be empty for direct URI form, got %d patterns", len(query.Describe.Where))
+	}
+}
+
+func TestParseQuery_DescribeMultipleURIs(t *testing.T) {
+	queryStr := `DESCRIBE <urn:art:17> <urn:art:18>`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	if query.Type != DescribeQueryType {
+		t.Errorf("Type = %v, want %v", query.Type, DescribeQueryType)
+	}
+
+	if len(query.Describe.Resources) != 2 {
+		t.Fatalf("Resources count = %d, want 2", len(query.Describe.Resources))
+	}
+
+	if query.Describe.Resources[0] != "<urn:art:17>" {
+		t.Errorf("Resource[0] = %v, want <urn:art:17>", query.Describe.Resources[0])
+	}
+	if query.Describe.Resources[1] != "<urn:art:18>" {
+		t.Errorf("Resource[1] = %v, want <urn:art:18>", query.Describe.Resources[1])
+	}
+}
+
+func TestParseQuery_DescribePrefixedName(t *testing.T) {
+	queryStr := `DESCRIBE reg:Art17`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	if query.Type != DescribeQueryType {
+		t.Errorf("Type = %v, want %v", query.Type, DescribeQueryType)
+	}
+
+	if len(query.Describe.Resources) != 1 {
+		t.Fatalf("Resources count = %d, want 1", len(query.Describe.Resources))
+	}
+
+	if query.Describe.Resources[0] != "reg:Art17" {
+		t.Errorf("Resource = %v, want reg:Art17", query.Describe.Resources[0])
+	}
+}
+
+func TestParseQuery_DescribeVariable(t *testing.T) {
+	queryStr := `
+		PREFIX reg: <https://regula.dev/ontology#>
+		DESCRIBE ?article WHERE {
+			?article rdf:type reg:Article .
+			?article reg:title "Right to erasure" .
+		}
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	if query.Type != DescribeQueryType {
+		t.Errorf("Type = %v, want %v", query.Type, DescribeQueryType)
+	}
+
+	if len(query.Describe.Resources) != 1 || query.Describe.Resources[0] != "?article" {
+		t.Errorf("Resources = %v, want [?article]", query.Describe.Resources)
+	}
+
+	if len(query.Describe.Where) != 2 {
+		t.Errorf("WHERE patterns = %d, want 2", len(query.Describe.Where))
+	}
+
+	if len(query.Describe.Prefixes) != 1 {
+		t.Errorf("Prefixes count = %d, want 1", len(query.Describe.Prefixes))
+	}
+}
+
+func TestParseQuery_DescribeWithOptional(t *testing.T) {
+	queryStr := `
+		DESCRIBE ?article WHERE {
+			?article rdf:type reg:Article .
+			OPTIONAL { ?article reg:title ?title . }
+		}
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	if query.Type != DescribeQueryType {
+		t.Errorf("Type = %v, want %v", query.Type, DescribeQueryType)
+	}
+
+	if len(query.Describe.Optional) != 1 {
+		t.Errorf("Optional count = %d, want 1", len(query.Describe.Optional))
+	}
+}
+
+func TestParseQuery_DescribeWithFilter(t *testing.T) {
+	queryStr := `
+		DESCRIBE ?article WHERE {
+			?article rdf:type reg:Article .
+			?article reg:title ?title .
+			FILTER(CONTAINS(?title, "erasure"))
+		}
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	if query.Type != DescribeQueryType {
+		t.Errorf("Type = %v, want %v", query.Type, DescribeQueryType)
+	}
+
+	if len(query.Describe.Filters) != 1 {
+		t.Errorf("Filters count = %d, want 1", len(query.Describe.Filters))
+	}
+
+	if !strings.Contains(query.Describe.Filters[0].Expression, "CONTAINS") {
+		t.Errorf("Filter should contain CONTAINS, got %s", query.Describe.Filters[0].Expression)
+	}
+}
+
+func TestParseQuery_DescribeWithPrefix(t *testing.T) {
+	queryStr := `
+		PREFIX ex: <http://example.org/>
+		DESCRIBE ex:Art17
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	if query.Type != DescribeQueryType {
+		t.Errorf("Type = %v, want %v", query.Type, DescribeQueryType)
+	}
+
+	if len(query.Describe.Prefixes) != 1 {
+		t.Fatalf("Prefixes count = %d, want 1", len(query.Describe.Prefixes))
+	}
+
+	if query.Describe.Prefixes["ex"] != "http://example.org/" {
+		t.Errorf("Prefix ex = %s, want http://example.org/", query.Describe.Prefixes["ex"])
+	}
+}
+
+func TestParseQuery_DescribeErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		query   string
+		wantErr string
+	}{
+		{
+			name:    "describe with no resources",
+			query:   "DESCRIBE",
+			wantErr: "no resources",
+		},
+		{
+			name:    "describe variable missing WHERE braces",
+			query:   "DESCRIBE ?article WHERE ?article rdf:type reg:Article",
+			wantErr: "missing braces",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseQuery(tc.query)
+			if err == nil {
+				t.Error("ParseQuery() should return error")
+				return
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("ParseQuery() error = %v, want error containing %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestDescribeQuery_Validate(t *testing.T) {
+	tests := []struct {
+		name       string
+		query      string
+		wantErrors int
+	}{
+		{
+			name:       "valid direct URI",
+			query:      `DESCRIBE <http://example.org/art1>`,
+			wantErrors: 0,
+		},
+		{
+			name: "valid variable with WHERE",
+			query: `DESCRIBE ?article WHERE {
+				?article rdf:type reg:Article .
+			}`,
+			wantErrors: 0,
+		},
+		{
+			name: "unbound variable in DESCRIBE",
+			query: `DESCRIBE ?article WHERE {
+				?other rdf:type reg:Article .
+			}`,
+			wantErrors: 1,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			query, err := ParseQuery(tc.query)
+			if err != nil {
+				t.Fatalf("ParseQuery() error = %v", err)
+			}
+
+			errors := query.Validate()
+			if len(errors) != tc.wantErrors {
+				t.Errorf("Validate() returned %d errors, want %d: %v", len(errors), tc.wantErrors, errors)
+			}
+		})
+	}
+}
+
+func TestDescribeQuery_String(t *testing.T) {
+	queryStr := `DESCRIBE <http://example.org/Art17>`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	str := query.String()
+
+	if !strings.Contains(str, "DESCRIBE") {
+		t.Error("String() should contain DESCRIBE")
+	}
+	if !strings.Contains(str, "<http://example.org/Art17>") {
+		t.Error("String() should contain the resource URI")
+	}
+}
+
+func TestDescribeQuery_StringWithWhere(t *testing.T) {
+	queryStr := `
+		DESCRIBE ?article WHERE {
+			?article rdf:type reg:Article .
+		}
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	str := query.String()
+
+	if !strings.Contains(str, "DESCRIBE") {
+		t.Error("String() should contain DESCRIBE")
+	}
+	if !strings.Contains(str, "WHERE") {
+		t.Error("String() should contain WHERE")
+	}
+	if !strings.Contains(str, "?article") {
+		t.Error("String() should contain ?article")
+	}
+}
+
+func TestDescribeQuery_ExpandPrefixes(t *testing.T) {
+	queryStr := `
+		PREFIX ex: <http://example.org/>
+		DESCRIBE ex:Art17
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	query.Describe.ExpandPrefixes()
+
+	if query.Describe.Resources[0] != "<http://example.org/Art17>" {
+		t.Errorf("Expanded Resource = %s, want <http://example.org/Art17>", query.Describe.Resources[0])
+	}
+}
+
+func TestDescribeQuery_ExpandPrefixesWithWhere(t *testing.T) {
+	queryStr := `
+		PREFIX ex: <http://example.org/>
+		DESCRIBE ?s WHERE {
+			?s ex:title ?title .
+		}
+	`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	query.Describe.ExpandPrefixes()
+
+	if query.Describe.Where[0].Predicate != "<http://example.org/title>" {
+		t.Errorf("Where Predicate = %s, want <http://example.org/title>", query.Describe.Where[0].Predicate)
+	}
+}

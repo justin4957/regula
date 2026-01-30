@@ -176,6 +176,59 @@ func (e *Executor) ExecuteStringWithContext(ctx context.Context, queryStr string
 	return result, nil
 }
 
+// ExecuteDescribe executes a parsed DESCRIBE query.
+func (e *Executor) ExecuteDescribe(query *Query) (*ConstructResult, error) {
+	return e.ExecuteDescribeWithContext(context.Background(), query)
+}
+
+// ExecuteDescribeWithContext executes a parsed DESCRIBE query with context for cancellation.
+func (e *Executor) ExecuteDescribeWithContext(ctx context.Context, query *Query) (*ConstructResult, error) {
+	startTime := time.Now()
+	metrics := QueryMetrics{}
+
+	// Apply timeout if set
+	if e.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, e.timeout)
+		defer cancel()
+	}
+
+	if query.Type != DescribeQueryType {
+		return nil, fmt.Errorf("expected DESCRIBE query, got: %s", query.Type)
+	}
+
+	result, err := e.executeDescribe(ctx, query.Describe, &metrics)
+	if err != nil {
+		return nil, err
+	}
+	metrics.TotalTime = time.Since(startTime)
+	result.Metrics = metrics
+	return result, nil
+}
+
+// ExecuteDescribeString parses and executes a SPARQL DESCRIBE query string.
+func (e *Executor) ExecuteDescribeString(queryStr string) (*ConstructResult, error) {
+	return e.ExecuteDescribeStringWithContext(context.Background(), queryStr)
+}
+
+// ExecuteDescribeStringWithContext parses and executes a SPARQL DESCRIBE query string with context.
+func (e *Executor) ExecuteDescribeStringWithContext(ctx context.Context, queryStr string) (*ConstructResult, error) {
+	startTime := time.Now()
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse error: %w", err)
+	}
+
+	result, err := e.ExecuteDescribeWithContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	result.Metrics.ParseTime = time.Since(startTime) - result.Metrics.PlanTime - result.Metrics.ExecuteTime
+	return result, nil
+}
+
 // ExecuteConstructString parses and executes a SPARQL CONSTRUCT query string.
 func (e *Executor) ExecuteConstructString(queryStr string) (*ConstructResult, error) {
 	return e.ExecuteConstructStringWithContext(context.Background(), queryStr)
@@ -369,6 +422,124 @@ func (e *Executor) executeConstruct(ctx context.Context, query *ConstructQuery, 
 		Triples: triples,
 		Count:   len(triples),
 	}, nil
+}
+
+// executeDescribe executes a DESCRIBE query by collecting all triples where
+// target resources appear as subject or object (bidirectional).
+func (e *Executor) executeDescribe(ctx context.Context, query *DescribeQuery, metrics *QueryMetrics) (*ConstructResult, error) {
+	planStart := time.Now()
+	metrics.PlanTime = time.Since(planStart)
+	metrics.PatternsCount = len(query.Where)
+
+	executeStart := time.Now()
+
+	var targetURIs []string
+
+	if len(query.Where) == 0 {
+		// Direct URI form: DESCRIBE <uri> or DESCRIBE prefix:name
+		for _, resource := range query.Resources {
+			resolvedURI := resolveResourceURI(resource)
+			if resolvedURI != "" {
+				targetURIs = append(targetURIs, resolvedURI)
+			}
+		}
+	} else {
+		// Variable form: DESCRIBE ?var WHERE { ... }
+		bindings := []map[string]string{{}}
+
+		for _, pattern := range query.Where {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+			}
+
+			bindings = e.matchPattern(pattern, bindings)
+			if len(bindings) == 0 {
+				break
+			}
+		}
+
+		// Process OPTIONAL patterns
+		for _, optPatterns := range query.Optional {
+			bindings = e.processOptional(ctx, optPatterns, bindings)
+		}
+
+		// Apply filters
+		for _, filter := range query.Filters {
+			bindings = e.applyFilter(filter, bindings)
+		}
+
+		// Extract unique URIs from variable bindings
+		seenURIs := make(map[string]bool)
+		for _, binding := range bindings {
+			for _, resource := range query.Resources {
+				if IsVariable(resource) {
+					varName := StripVariable(resource)
+					if uri, ok := binding[varName]; ok && uri != "" && !seenURIs[uri] {
+						seenURIs[uri] = true
+						targetURIs = append(targetURIs, uri)
+					}
+				}
+			}
+		}
+	}
+
+	// Collect all triples bidirectionally for each target URI
+	seen := make(map[string]bool)
+	var triples []ConstructedTriple
+
+	for _, uri := range targetURIs {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		// Triples where URI is the subject
+		subjectTriples := e.store.Find(uri, "", "")
+		for _, triple := range subjectTriples {
+			tripleKey := triple.Subject + "|" + triple.Predicate + "|" + triple.Object
+			if !seen[tripleKey] {
+				seen[tripleKey] = true
+				triples = append(triples, ConstructedTriple{
+					Subject:   triple.Subject,
+					Predicate: triple.Predicate,
+					Object:    triple.Object,
+				})
+			}
+		}
+
+		// Triples where URI is the object (bidirectional)
+		objectTriples := e.store.Find("", "", uri)
+		for _, triple := range objectTriples {
+			tripleKey := triple.Subject + "|" + triple.Predicate + "|" + triple.Object
+			if !seen[tripleKey] {
+				seen[tripleKey] = true
+				triples = append(triples, ConstructedTriple{
+					Subject:   triple.Subject,
+					Predicate: triple.Predicate,
+					Object:    triple.Object,
+				})
+			}
+		}
+	}
+
+	metrics.ExecuteTime = time.Since(executeStart)
+	metrics.ResultCount = len(triples)
+
+	return &ConstructResult{
+		Triples: triples,
+		Count:   len(triples),
+	}, nil
+}
+
+// resolveResourceURI resolves a resource identifier to a plain URI string.
+func resolveResourceURI(resource string) string {
+	if IsURI(resource) {
+		return StripURI(resource)
+	}
+	return resource
 }
 
 // substituteVariable replaces a variable with its bound value from the binding.

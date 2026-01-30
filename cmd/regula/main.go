@@ -316,11 +316,17 @@ func queryCmd() *cobra.Command {
 
 You must first ingest a regulation document using 'regula ingest'.
 
-Supports both SELECT and CONSTRUCT queries.
+Supports SELECT, CONSTRUCT, and DESCRIBE queries.
 
 Examples:
   # Basic SELECT query
   regula query "SELECT ?article ?title WHERE { ?article rdf:type reg:Article . ?article reg:title ?title } LIMIT 5"
+
+  # DESCRIBE query with direct URI
+  regula query "DESCRIBE GDPR:Art17"
+
+  # DESCRIBE query with variable
+  regula query "DESCRIBE ?article WHERE { ?article reg:title \"Right to erasure\" }"
 
   # CONSTRUCT query to extract subgraph
   regula query "CONSTRUCT { ?a reg:hasTitle ?t } WHERE { ?a rdf:type reg:Article . ?a reg:title ?t }"
@@ -403,6 +409,11 @@ Available templates:
 				return executeConstructQuery(cmd, parsedQuery, formatStr, showTiming, startTime)
 			}
 
+			// Handle DESCRIBE queries
+			if parsedQuery.Type == query.DescribeQueryType {
+				return executeDescribeQuery(cmd, parsedQuery, formatStr, showTiming, startTime)
+			}
+
 			// Execute SELECT query
 			result, err := executor.Execute(parsedQuery)
 			queryTime := time.Since(startTime)
@@ -433,7 +444,7 @@ Available templates:
 	}
 
 	cmd.Flags().StringP("template", "t", "", "Use a pre-built query template")
-	cmd.Flags().StringP("format", "f", "table", "Output format (table, json, csv for SELECT; turtle, ntriples, json for CONSTRUCT)")
+	cmd.Flags().StringP("format", "f", "table", "Output format (table, json, csv for SELECT; turtle, ntriples, json for CONSTRUCT/DESCRIBE)")
 	cmd.Flags().Bool("timing", false, "Show query execution timing")
 	cmd.Flags().StringP("source", "s", "", "Source document to ingest before querying")
 	cmd.Flags().Bool("list-templates", false, "List available query templates")
@@ -466,6 +477,39 @@ func executeConstructQuery(cmd *cobra.Command, parsedQuery *query.Query, formatS
 	// Show timing if requested
 	if showTiming {
 		fmt.Printf("\nCONSTRUCT query executed in %v\n", queryTime)
+		fmt.Printf("  Parse:   %v\n", result.Metrics.ParseTime)
+		fmt.Printf("  Execute: %v\n", result.Metrics.ExecuteTime)
+		fmt.Printf("  Triples: %d\n", result.Count)
+	}
+
+	return nil
+}
+
+// executeDescribeQuery handles execution and output of DESCRIBE queries.
+func executeDescribeQuery(cmd *cobra.Command, parsedQuery *query.Query, formatStr string, showTiming bool, startTime time.Time) error {
+	result, err := executor.ExecuteDescribe(parsedQuery)
+	queryTime := time.Since(startTime)
+
+	if err != nil {
+		return fmt.Errorf("DESCRIBE query error: %w", err)
+	}
+
+	// Default format for DESCRIBE is turtle
+	if formatStr == "table" || formatStr == "csv" {
+		formatStr = "turtle"
+	}
+
+	format := query.OutputFormat(formatStr)
+	output, err := result.Format(format)
+	if err != nil {
+		return fmt.Errorf("format error: %w", err)
+	}
+
+	fmt.Print(output)
+
+	// Show timing if requested
+	if showTiming {
+		fmt.Printf("\nDESCRIBE query executed in %v\n", queryTime)
 		fmt.Printf("  Parse:   %v\n", result.Metrics.ParseTime)
 		fmt.Printf("  Execute: %v\n", result.Metrics.ExecuteTime)
 		fmt.Printf("  Triples: %d\n", result.Count)
@@ -636,6 +680,11 @@ var queryTemplates = map[string]QueryTemplate{
   ?source reg:references ?target .
   ?target reg:referencedBy ?source .
 } LIMIT 20`,
+	},
+	"describe-article": {
+		Name:        "describe-article",
+		Description: "Describe Article 17 (all triples where it appears as subject or object)",
+		Query:       `DESCRIBE GDPR:Art17`,
 	},
 }
 
