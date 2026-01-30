@@ -563,6 +563,179 @@ func TestBuildGDPRGraph_Queries(t *testing.T) {
 	t.Logf("Query 'Article 17 references': %d results", len(art17Refs))
 }
 
+func TestBuildReferenceWithTemporal(t *testing.T) {
+	t.Run("as_amended_emits_temporal_triples", func(t *testing.T) {
+		tripleStore := NewTripleStore()
+		builder := NewGraphBuilder(tripleStore, "https://test.org/")
+		builder.regID = "TestReg"
+		stats := &BuildStats{}
+
+		ref := &extract.Reference{
+			Type:                extract.ReferenceTypeInternal,
+			Target:              extract.TargetArticle,
+			RawText:             "as amended by Regulation (EU) 2018/1725",
+			Identifier:          "temporal:as_amended",
+			SourceArticle:       1,
+			TextOffset:          50,
+			TextLength:          40,
+			TemporalKind:        "as_amended",
+			TemporalDescription: "Regulation (EU) 2018/1725",
+		}
+
+		builder.buildReference(ref, stats)
+
+		// Verify temporal triples
+		refURI := builder.referenceURI(1, 50)
+		temporalKind := tripleStore.Find(refURI, PropTemporalKind, "")
+		if len(temporalKind) != 1 {
+			t.Errorf("Expected 1 temporalKind triple, got %d", len(temporalKind))
+		} else if temporalKind[0].Object != "as_amended" {
+			t.Errorf("Expected temporalKind 'as_amended', got %s", temporalKind[0].Object)
+		}
+
+		temporalDesc := tripleStore.Find(refURI, PropTemporalDescription, "")
+		if len(temporalDesc) != 1 {
+			t.Errorf("Expected 1 temporalDescription triple, got %d", len(temporalDesc))
+		} else if temporalDesc[0].Object != "Regulation (EU) 2018/1725" {
+			t.Errorf("Expected description, got %s", temporalDesc[0].Object)
+		}
+
+		// Verify amendedBy relationship on source article
+		sourceURI := builder.articleURI(1)
+		amendedBy := tripleStore.Find(sourceURI, PropAmendedBy, "")
+		if len(amendedBy) != 1 {
+			t.Errorf("Expected 1 amendedBy triple on source article, got %d", len(amendedBy))
+		}
+	})
+
+	t.Run("repealed_emits_repealedBy_triple", func(t *testing.T) {
+		tripleStore := NewTripleStore()
+		builder := NewGraphBuilder(tripleStore, "https://test.org/")
+		builder.regID = "TestReg"
+		stats := &BuildStats{}
+
+		ref := &extract.Reference{
+			Type:                extract.ReferenceTypeInternal,
+			Target:              extract.TargetArticle,
+			RawText:             "repealed by this Regulation",
+			Identifier:          "temporal:repealed",
+			SourceArticle:       99,
+			TextOffset:          10,
+			TextLength:          27,
+			TemporalKind:        "repealed",
+			TemporalDescription: "this Regulation",
+		}
+
+		builder.buildReference(ref, stats)
+
+		sourceURI := builder.articleURI(99)
+		repealedBy := tripleStore.Find(sourceURI, PropRepealedBy, "")
+		if len(repealedBy) != 1 {
+			t.Errorf("Expected 1 repealedBy triple, got %d", len(repealedBy))
+		}
+	})
+
+	t.Run("temporal_date_emits_effectiveDate", func(t *testing.T) {
+		tripleStore := NewTripleStore()
+		builder := NewGraphBuilder(tripleStore, "https://test.org/")
+		builder.regID = "TestReg"
+		stats := &BuildStats{}
+
+		ref := &extract.Reference{
+			Type:                extract.ReferenceTypeInternal,
+			Target:              extract.TargetArticle,
+			RawText:             "repealed with effect from 25 May 2018",
+			Identifier:          "temporal:repealed",
+			SourceArticle:       99,
+			TextOffset:          0,
+			TextLength:          38,
+			TemporalKind:        "repealed",
+			TemporalDescription: "repealed with effect from 25 May 2018",
+			TemporalDate:        "2018-05-25",
+		}
+
+		builder.buildReference(ref, stats)
+
+		refURI := builder.referenceURI(99, 0)
+		effectiveDate := tripleStore.Find(refURI, PropEffectiveDate, "")
+		if len(effectiveDate) != 1 {
+			t.Errorf("Expected 1 effectiveDate triple, got %d", len(effectiveDate))
+		} else if effectiveDate[0].Object != "2018-05-25" {
+			t.Errorf("Expected date 2018-05-25, got %s", effectiveDate[0].Object)
+		}
+	})
+
+	t.Run("non_temporal_ref_has_no_temporal_triples", func(t *testing.T) {
+		tripleStore := NewTripleStore()
+		builder := NewGraphBuilder(tripleStore, "https://test.org/")
+		builder.regID = "TestReg"
+		stats := &BuildStats{}
+
+		ref := &extract.Reference{
+			Type:          extract.ReferenceTypeInternal,
+			Target:        extract.TargetArticle,
+			RawText:       "Article 6",
+			Identifier:    "Article 6",
+			SourceArticle: 1,
+			TextOffset:    0,
+			TextLength:    9,
+			ArticleNum:    6,
+		}
+
+		builder.buildReference(ref, stats)
+
+		refURI := builder.referenceURI(1, 0)
+		temporalKind := tripleStore.Find(refURI, PropTemporalKind, "")
+		if len(temporalKind) != 0 {
+			t.Errorf("Expected no temporalKind triple for non-temporal ref, got %d", len(temporalKind))
+		}
+	})
+}
+
+func TestBuildGDPRGraph_TemporalReferences(t *testing.T) {
+	doc := loadGDPRDocument(t)
+
+	tripleStore := NewTripleStore()
+	builder := NewGraphBuilder(tripleStore, "https://regula.dev/regulations/")
+
+	refExtractor := extract.NewReferenceExtractor()
+
+	stats, err := builder.BuildWithExtractors(doc, nil, refExtractor)
+	if err != nil {
+		t.Fatalf("BuildWithExtractors failed: %v", err)
+	}
+
+	// Check for temporal triples
+	temporalKinds := tripleStore.Find("", PropTemporalKind, "")
+	t.Logf("Temporal kind triples: %d", len(temporalKinds))
+
+	if len(temporalKinds) == 0 {
+		t.Error("Expected temporal triples in GDPR graph")
+	}
+
+	// Count by kind
+	kindCounts := make(map[string]int)
+	for _, triple := range temporalKinds {
+		kindCounts[triple.Object]++
+	}
+	for kind, count := range kindCounts {
+		t.Logf("  %s: %d", kind, count)
+	}
+
+	// Check for effectiveDate triples
+	effectiveDates := tripleStore.Find("", PropEffectiveDate, "")
+	t.Logf("Effective date triples: %d", len(effectiveDates))
+
+	// Check for amendedBy/repealedBy triples
+	amendedBy := tripleStore.Find("", PropAmendedBy, "")
+	t.Logf("AmendedBy triples: %d", len(amendedBy))
+
+	repealedBy := tripleStore.Find("", PropRepealedBy, "")
+	t.Logf("RepealedBy triples: %d", len(repealedBy))
+
+	t.Logf("Total references: %d", stats.References)
+}
+
 func TestBuildGDPRGraph_VerifyHierarchy(t *testing.T) {
 	doc := loadGDPRDocument(t)
 

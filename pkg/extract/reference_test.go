@@ -1,6 +1,8 @@
 package extract
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -469,6 +471,465 @@ func TestCrossReferenceDetection_NoOverlapping(t *testing.T) {
 	if overlaps > 0 {
 		t.Logf("Total overlapping references: %d (this may be acceptable)", overlaps)
 	}
+}
+
+// ==================== Temporal Reference Tests ====================
+
+func TestExtractTemporalAsAmendedBy(t *testing.T) {
+	extractor := NewReferenceExtractor()
+
+	testCases := []struct {
+		name        string
+		text        string
+		description string
+	}{
+		{
+			name:        "directive_amended_by_regulation",
+			text:        "Directive 95/46/EC as amended by Regulation (EU) 2016/679.",
+			description: "Regulation (EU) 2016/679",
+		},
+		{
+			name:        "act_amended_by_regulation",
+			text:        "the Act as amended by Regulation (EU) 2018/1725, shall apply.",
+			description: "Regulation (EU) 2018/1725",
+		},
+		{
+			name:        "amended_by_this_regulation",
+			text:        "Directive 95/46/EC, as amended by this Regulation.",
+			description: "this Regulation",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			article := &Article{Number: 1, Text: tc.text}
+			refs := extractor.ExtractFromArticle(article)
+
+			var temporalRefs []*Reference
+			for _, ref := range refs {
+				if ref.TemporalKind == "as_amended" {
+					temporalRefs = append(temporalRefs, ref)
+				}
+			}
+
+			if len(temporalRefs) == 0 {
+				t.Errorf("Expected at least one 'as_amended' temporal ref in %q", tc.text)
+				return
+			}
+
+			found := false
+			for _, ref := range temporalRefs {
+				if ref.TemporalDescription == tc.description {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("Expected temporal description %q, got descriptions: %v",
+					tc.description, getTemporalDescriptions(temporalRefs))
+			}
+		})
+	}
+}
+
+func TestExtractTemporalAsAmended(t *testing.T) {
+	extractor := NewReferenceExtractor()
+
+	testCases := []struct {
+		name string
+		text string
+	}{
+		{
+			name: "as_amended_standalone",
+			text: "the regulation, as amended, shall continue to apply.",
+		},
+		{
+			name: "as_amended_comma",
+			text: "the regulation, as amended, shall apply.",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			article := &Article{Number: 1, Text: tc.text}
+			refs := extractor.ExtractFromArticle(article)
+
+			var temporalRefs []*Reference
+			for _, ref := range refs {
+				if ref.TemporalKind == "as_amended" {
+					temporalRefs = append(temporalRefs, ref)
+				}
+			}
+
+			if len(temporalRefs) == 0 {
+				t.Errorf("Expected at least one 'as_amended' temporal ref in %q", tc.text)
+			}
+		})
+	}
+}
+
+func TestExtractTemporalAsInForceOn(t *testing.T) {
+	extractor := NewReferenceExtractor()
+
+	article := &Article{
+		Number: 1,
+		Text:   "Directive 95/46/EC as in force on 24 May 2016.",
+	}
+	refs := extractor.ExtractFromArticle(article)
+
+	var temporalRefs []*Reference
+	for _, ref := range refs {
+		if ref.TemporalKind == "in_force_on" {
+			temporalRefs = append(temporalRefs, ref)
+		}
+	}
+
+	if len(temporalRefs) == 0 {
+		t.Fatal("Expected at least one 'in_force_on' temporal ref")
+	}
+
+	ref := temporalRefs[0]
+	if ref.TemporalDate != "2016-05-24" {
+		t.Errorf("Expected date 2016-05-24, got %s", ref.TemporalDate)
+	}
+}
+
+func TestExtractTemporalEnterIntoForce(t *testing.T) {
+	extractor := NewReferenceExtractor()
+
+	testCases := []struct {
+		name         string
+		text         string
+		expectedDate string
+	}{
+		{
+			name:         "enter_into_force_with_date",
+			text:         "shall enter into force on 25 May 2018.",
+			expectedDate: "2018-05-25",
+		},
+		{
+			name:         "enters_into_force_no_date",
+			text:         "This Regulation enters into force on the twentieth day.",
+			expectedDate: "",
+		},
+		{
+			name:         "entered_into_force",
+			text:         "The directive entered into force.",
+			expectedDate: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			article := &Article{Number: 1, Text: tc.text}
+			refs := extractor.ExtractFromArticle(article)
+
+			var temporalRefs []*Reference
+			for _, ref := range refs {
+				if ref.TemporalKind == "in_force_on" {
+					temporalRefs = append(temporalRefs, ref)
+				}
+			}
+
+			if len(temporalRefs) == 0 {
+				t.Errorf("Expected at least one 'in_force_on' temporal ref in %q", tc.text)
+				return
+			}
+
+			if temporalRefs[0].TemporalDate != tc.expectedDate {
+				t.Errorf("Expected date %q, got %q", tc.expectedDate, temporalRefs[0].TemporalDate)
+			}
+		})
+	}
+}
+
+func TestExtractTemporalAsOriginallyEnacted(t *testing.T) {
+	extractor := NewReferenceExtractor()
+
+	article := &Article{
+		Number: 1,
+		Text:   "the Data Protection Act 1998 as originally enacted.",
+	}
+	refs := extractor.ExtractFromArticle(article)
+
+	var temporalRefs []*Reference
+	for _, ref := range refs {
+		if ref.TemporalKind == "original" {
+			temporalRefs = append(temporalRefs, ref)
+		}
+	}
+
+	if len(temporalRefs) == 0 {
+		t.Error("Expected at least one 'original' temporal ref")
+	}
+}
+
+func TestExtractTemporalAsItStoodOn(t *testing.T) {
+	extractor := NewReferenceExtractor()
+
+	article := &Article{
+		Number: 1,
+		Text:   "the regulation as it stood on 1 January 2020.",
+	}
+	refs := extractor.ExtractFromArticle(article)
+
+	var temporalRefs []*Reference
+	for _, ref := range refs {
+		if ref.TemporalKind == "original" {
+			temporalRefs = append(temporalRefs, ref)
+		}
+	}
+
+	if len(temporalRefs) == 0 {
+		t.Fatal("Expected at least one 'original' temporal ref")
+	}
+
+	if temporalRefs[0].TemporalDate != "2020-01-01" {
+		t.Errorf("Expected date 2020-01-01, got %s", temporalRefs[0].TemporalDate)
+	}
+}
+
+func TestExtractTemporalConsolidated(t *testing.T) {
+	extractor := NewReferenceExtractor()
+
+	article := &Article{
+		Number: 1,
+		Text:   "See the consolidated version of Regulation (EU) 2016/679.",
+	}
+	refs := extractor.ExtractFromArticle(article)
+
+	var temporalRefs []*Reference
+	for _, ref := range refs {
+		if ref.TemporalKind == "consolidated" {
+			temporalRefs = append(temporalRefs, ref)
+		}
+	}
+
+	if len(temporalRefs) == 0 {
+		t.Error("Expected at least one 'consolidated' temporal ref")
+	}
+}
+
+func TestExtractTemporalRepealedBy(t *testing.T) {
+	extractor := NewReferenceExtractor()
+
+	testCases := []struct {
+		name        string
+		text        string
+		description string
+	}{
+		{
+			name:        "repealed_by_this_regulation",
+			text:        "Directive 95/46/EC should be repealed by this Regulation.",
+			description: "this Regulation",
+		},
+		{
+			name:        "repealed_by_named_regulation",
+			text:        "The act was repealed by Regulation (EU) 2016/679.",
+			description: "Regulation (EU) 2016/679",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			article := &Article{Number: 1, Text: tc.text}
+			refs := extractor.ExtractFromArticle(article)
+
+			var temporalRefs []*Reference
+			for _, ref := range refs {
+				if ref.TemporalKind == "repealed" {
+					temporalRefs = append(temporalRefs, ref)
+				}
+			}
+
+			if len(temporalRefs) == 0 {
+				t.Errorf("Expected at least one 'repealed' temporal ref in %q", tc.text)
+				return
+			}
+
+			found := false
+			for _, ref := range temporalRefs {
+				if ref.TemporalDescription == tc.description {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("Expected temporal description %q, got descriptions: %v",
+					tc.description, getTemporalDescriptions(temporalRefs))
+			}
+		})
+	}
+}
+
+func TestExtractTemporalRepealedWithEffect(t *testing.T) {
+	extractor := NewReferenceExtractor()
+
+	article := &Article{
+		Number: 1,
+		Text:   "Directive 95/46/EC is repealed with effect from 25 May 2018.",
+	}
+	refs := extractor.ExtractFromArticle(article)
+
+	var temporalRefs []*Reference
+	for _, ref := range refs {
+		if ref.TemporalKind == "repealed" {
+			temporalRefs = append(temporalRefs, ref)
+		}
+	}
+
+	if len(temporalRefs) == 0 {
+		t.Fatal("Expected at least one 'repealed' temporal ref")
+	}
+
+	if temporalRefs[0].TemporalDate != "2018-05-25" {
+		t.Errorf("Expected date 2018-05-25, got %s", temporalRefs[0].TemporalDate)
+	}
+}
+
+func TestExtractTemporalParseEuropeanDate(t *testing.T) {
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"25 May 2018", "2018-05-25"},
+		{"1 January 2020", "2020-01-01"},
+		{"24 May 2016", "2016-05-24"},
+		{"3 March 2021", "2021-03-03"},
+		{"15 December 2019", "2019-12-15"},
+		{"31 October 2020", "2020-10-31"},
+		// Invalid inputs
+		{"invalid", ""},
+		{"", ""},
+		{"May 2018", ""},
+		{"25 Foo 2018", ""},
+		{"25 May", ""},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			result := parseEuropeanDate(tc.input)
+			if result != tc.expected {
+				t.Errorf("parseEuropeanDate(%q) = %q, want %q", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestExtractTemporalGDPRIntegration(t *testing.T) {
+	f := loadGDPRText(t)
+	defer f.Close()
+
+	parser := NewParser()
+	doc, err := parser.Parse(f)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	extractor := NewReferenceExtractor()
+	refs := extractor.ExtractFromDocument(doc)
+
+	// Count temporal references by kind
+	temporalCounts := make(map[string]int)
+	for _, ref := range refs {
+		if ref.TemporalKind != "" {
+			temporalCounts[ref.TemporalKind]++
+		}
+	}
+
+	totalTemporal := 0
+	for kind, count := range temporalCounts {
+		totalTemporal += count
+		t.Logf("  Temporal %s: %d", kind, count)
+	}
+
+	t.Logf("Total temporal references: %d", totalTemporal)
+
+	// GDPR should have temporal references (repealed, in force, amended patterns)
+	if totalTemporal == 0 {
+		t.Error("Expected temporal references in GDPR text")
+	}
+
+	// Should have at least "repealed" references (Directive 95/46/EC is repealed)
+	if temporalCounts["repealed"] == 0 {
+		t.Error("Expected 'repealed' temporal references in GDPR (Directive 95/46/EC repealed)")
+	}
+
+	// Should have "in_force_on" references (enter into force patterns)
+	if temporalCounts["in_force_on"] == 0 {
+		t.Error("Expected 'in_force_on' temporal references in GDPR (enters into force)")
+	}
+
+	// Log some sample temporal references
+	t.Log("Sample temporal references:")
+	count := 0
+	for _, ref := range refs {
+		if ref.TemporalKind != "" && count < 10 {
+			t.Logf("  [%s] %q (Art.%d, date=%s)", ref.TemporalKind, ref.RawText, ref.SourceArticle, ref.TemporalDate)
+			count++
+		}
+	}
+}
+
+func TestExtractTemporalUKSIIntegration(t *testing.T) {
+	testdataDir := filepath.Join("..", "..", "testdata")
+	siPath := filepath.Join(testdataDir, "uk-si-example.txt")
+
+	siFile, err := os.Open(siPath)
+	if err != nil {
+		t.Skipf("UK SI test data not available: %v", err)
+	}
+	defer siFile.Close()
+
+	parser := NewParser()
+	doc, err := parser.Parse(siFile)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	extractor := NewReferenceExtractor()
+	refs := extractor.ExtractFromDocument(doc)
+
+	// Count temporal references by kind
+	temporalCounts := make(map[string]int)
+	for _, ref := range refs {
+		if ref.TemporalKind != "" {
+			temporalCounts[ref.TemporalKind]++
+		}
+	}
+
+	totalTemporal := 0
+	for kind, count := range temporalCounts {
+		totalTemporal += count
+		t.Logf("  Temporal %s: %d", kind, count)
+	}
+
+	t.Logf("Total temporal references in UK SI: %d", totalTemporal)
+
+	// UK SI should have some temporal references (amended, in force, etc.)
+	// Note: The UK SI document uses "amended as follows" patterns which may or may not
+	// be parsed as articles depending on the document parser's ability to handle SI format.
+	if totalTemporal > 0 {
+		t.Logf("Found %d temporal references in UK SI", totalTemporal)
+	} else {
+		t.Logf("No temporal references found (UK SI format may not produce article-level extraction)")
+	}
+
+	// Log all temporal references
+	for _, ref := range refs {
+		if ref.TemporalKind != "" {
+			t.Logf("  [%s] %q (Art.%d)", ref.TemporalKind, ref.RawText, ref.SourceArticle)
+		}
+	}
+}
+
+// Helper function to get temporal descriptions from references
+func getTemporalDescriptions(refs []*Reference) []string {
+	descs := make([]string, len(refs))
+	for i, ref := range refs {
+		descs[i] = ref.TemporalDescription
+	}
+	return descs
 }
 
 // Helper function to get identifiers from references

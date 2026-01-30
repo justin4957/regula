@@ -351,6 +351,12 @@ const (
 
 	// PropTimeLimit indicates a time limit (e.g., "within 1 month").
 	PropTimeLimit = "reg:timeLimit"
+
+	// PropTemporalKind classifies the temporal qualifier (e.g., "as_amended", "in_force_on", "repealed").
+	PropTemporalKind = "reg:temporalKind"
+
+	// PropTemporalDescription is the full matched text of the temporal qualifier.
+	PropTemporalDescription = "reg:temporalDescription"
 )
 
 // Provenance Properties - Source and origin tracking.

@@ -194,6 +194,23 @@ func FuzzReferenceExtractor(f *testing.F) {
 		// Unicode
 		"Article 1 — test",
 		"Section § 100",
+
+		// Temporal reference patterns
+		"Directive 95/46/EC as amended by Regulation (EU) 2016/679.",
+		"the regulation, as amended accordingly.",
+		"as in force on 24 May 2016",
+		"remain in force on 25 May 2018",
+		"shall enter into force on 25 May 2018",
+		"This Regulation enters into force on the twentieth day",
+		"entered into force",
+		"as originally enacted",
+		"as it stood on 1 January 2020",
+		"consolidated version of Regulation (EU) 2016/679",
+		"repealed by this Regulation",
+		"repealed with effect from 25 May 2018",
+		"repealed by Regulation (EU) 2016/679.",
+		"as amended by this Regulation, shall apply.",
+		"in force from 3 March 2021",
 	}
 
 	for _, seed := range seeds {

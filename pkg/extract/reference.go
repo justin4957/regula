@@ -54,6 +54,11 @@ type Reference struct {
 	ExternalDoc string `json:"external_doc,omitempty"`
 	DocYear     string `json:"doc_year,omitempty"`
 	DocNumber   string `json:"doc_number,omitempty"`
+
+	// Temporal qualifier (optional)
+	TemporalKind        string `json:"temporal_kind,omitempty"`        // e.g. "as_amended", "in_force_on", "repealed"
+	TemporalDescription string `json:"temporal_description,omitempty"` // full matched text of temporal qualifier
+	TemporalDate        string `json:"temporal_date,omitempty"`        // ISO format YYYY-MM-DD when date is present
 }
 
 // ReferenceExtractor detects cross-references in regulatory text.
@@ -87,6 +92,18 @@ type ReferenceExtractor struct {
 	cfrPattern         *regexp.Regexp // 45 C.F.R. Part 164
 	caTitlePattern     *regexp.Regexp // Section 17014 of Title 18
 	publicLawPattern   *regexp.Regexp // Public Law 104-191
+
+	// Temporal reference patterns
+	asAmendedByPattern         *regexp.Regexp // as amended by {document}
+	asAmendedPattern           *regexp.Regexp // as amended / as amended accordingly
+	asInForceOnPattern         *regexp.Regexp // as in force on {date}
+	inForceOnPattern           *regexp.Regexp // in force on/from {date}
+	enterIntoForcePattern      *regexp.Regexp // enter(s/ed) into force (on {date})?
+	asOriginallyEnactedPattern *regexp.Regexp // as originally enacted
+	asItStoodOnPattern         *regexp.Regexp // as it stood on {date}
+	consolidatedVersionPattern *regexp.Regexp // consolidated version (of)?
+	repealedByPattern          *regexp.Regexp // repealed by {document}
+	repealedWithEffectPattern  *regexp.Regexp // repealed with effect from {date}
 }
 
 // NewReferenceExtractor creates a new ReferenceExtractor with default patterns.
@@ -144,6 +161,28 @@ func NewReferenceExtractor() *ReferenceExtractor {
 		caTitlePattern: regexp.MustCompile(`Section\s+(\d+)\s+of\s+Title\s+(\d+)`),
 		// "Public Law 104-191"
 		publicLawPattern: regexp.MustCompile(`Public\s+Law\s+(\d+)-(\d+)`),
+
+		// Temporal reference patterns
+		// "as amended by Regulation (EU) 2018/1725" or "as amended by this Regulation"
+		asAmendedByPattern: regexp.MustCompile(`(?i)as\s+amended\s+by\s+(.+?)(?:\.|,|;|$)`),
+		// "as amended" or "as amended accordingly" (standalone, no "by")
+		asAmendedPattern: regexp.MustCompile(`(?i)(?:,\s*)?as\s+amended(?:\s+accordingly)?(?:\s|,|\.|;|$)`),
+		// "as in force on 24 May 2016"
+		asInForceOnPattern: regexp.MustCompile(`(?i)as\s+in\s+force\s+on\s+(\d{1,2}\s+\w+\s+\d{4})`),
+		// "in force on 25 May 2018" or "in force from 25 May 2018"
+		inForceOnPattern: regexp.MustCompile(`(?i)in\s+force\s+(?:on|from)\s+(\d{1,2}\s+\w+\s+\d{4})`),
+		// "enter into force" or "enters into force on 25 May 2018" or "entered into force"
+		enterIntoForcePattern: regexp.MustCompile(`(?i)enter(?:s|ed)?\s+into\s+force(?:\s+on\s+(\d{1,2}\s+\w+\s+\d{4}))?`),
+		// "as originally enacted"
+		asOriginallyEnactedPattern: regexp.MustCompile(`(?i)as\s+originally\s+enacted`),
+		// "as it stood on 1 January 2020"
+		asItStoodOnPattern: regexp.MustCompile(`(?i)as\s+it\s+stood\s+on\s+(\d{1,2}\s+\w+\s+\d{4})`),
+		// "consolidated version" or "consolidated version of"
+		consolidatedVersionPattern: regexp.MustCompile(`(?i)consolidated\s+version(?:\s+of)?`),
+		// "repealed by this Regulation" or "repealed by Regulation (EU) 2016/679"
+		repealedByPattern: regexp.MustCompile(`(?i)repealed\s+by\s+(.+?)(?:\.|,|;|$)`),
+		// "repealed with effect from 25 May 2018"
+		repealedWithEffectPattern: regexp.MustCompile(`(?i)repealed\s+with\s+effect\s+from\s+(\d{1,2}\s+\w+\s+\d{4})`),
 	}
 }
 
@@ -194,6 +233,9 @@ func (e *ReferenceExtractor) ExtractFromArticle(article *Article) []*Reference {
 
 	// Extract external references (US-style)
 	refs = append(refs, e.extractUSExternalRefs(text, article.Number)...)
+
+	// Extract temporal references
+	refs = append(refs, e.extractTemporalRefs(text, article.Number)...)
 
 	return refs
 }
@@ -817,6 +859,276 @@ func (e *ReferenceExtractor) extractDecisionRefs(text string, sourceArticle int)
 	}
 
 	return refs
+}
+
+// extractTemporalRefs extracts temporal qualifiers from the text.
+// These capture patterns like "as amended by", "as in force on", "repealed by", etc.
+func (e *ReferenceExtractor) extractTemporalRefs(text string, sourceArticle int) []*Reference {
+	var refs []*Reference
+
+	// "repealed with effect from 25 May 2018" (most specific repeal pattern first)
+	matches := e.repealedWithEffectPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		rawText := text[match[0]:match[1]]
+		dateStr := text[match[2]:match[3]]
+		isoDate := parseEuropeanDate(dateStr)
+
+		refs = append(refs, &Reference{
+			Type:                ReferenceTypeInternal,
+			Target:              TargetArticle,
+			RawText:             rawText,
+			Identifier:          "temporal:repealed",
+			SourceArticle:       sourceArticle,
+			TextOffset:          match[0],
+			TextLength:          match[1] - match[0],
+			TemporalKind:        "repealed",
+			TemporalDescription: rawText,
+			TemporalDate:        isoDate,
+		})
+	}
+
+	// "repealed by {document}" (skip if overlapping with repealedWithEffect)
+	matches = e.repealedByPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+		rawText := text[match[0]:match[1]]
+		amendingDoc := strings.TrimSpace(text[match[2]:match[3]])
+
+		refs = append(refs, &Reference{
+			Type:                ReferenceTypeInternal,
+			Target:              TargetArticle,
+			RawText:             rawText,
+			Identifier:          "temporal:repealed",
+			SourceArticle:       sourceArticle,
+			TextOffset:          match[0],
+			TextLength:          match[1] - match[0],
+			TemporalKind:        "repealed",
+			TemporalDescription: amendingDoc,
+		})
+	}
+
+	// "as amended by {document}" (most specific amendment pattern)
+	matches = e.asAmendedByPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+		rawText := text[match[0]:match[1]]
+		amendingDoc := strings.TrimSpace(text[match[2]:match[3]])
+
+		refs = append(refs, &Reference{
+			Type:                ReferenceTypeInternal,
+			Target:              TargetArticle,
+			RawText:             rawText,
+			Identifier:          "temporal:as_amended",
+			SourceArticle:       sourceArticle,
+			TextOffset:          match[0],
+			TextLength:          match[1] - match[0],
+			TemporalKind:        "as_amended",
+			TemporalDescription: amendingDoc,
+		})
+	}
+
+	// "as amended" / "as amended accordingly" (standalone, no "by")
+	matches = e.asAmendedPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+		rawText := strings.TrimSpace(text[match[0]:match[1]])
+
+		refs = append(refs, &Reference{
+			Type:                ReferenceTypeInternal,
+			Target:              TargetArticle,
+			RawText:             rawText,
+			Identifier:          "temporal:as_amended",
+			SourceArticle:       sourceArticle,
+			TextOffset:          match[0],
+			TextLength:          match[1] - match[0],
+			TemporalKind:        "as_amended",
+			TemporalDescription: rawText,
+		})
+	}
+
+	// "as in force on {date}"
+	matches = e.asInForceOnPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+		rawText := text[match[0]:match[1]]
+		dateStr := text[match[2]:match[3]]
+		isoDate := parseEuropeanDate(dateStr)
+
+		refs = append(refs, &Reference{
+			Type:                ReferenceTypeInternal,
+			Target:              TargetArticle,
+			RawText:             rawText,
+			Identifier:          "temporal:in_force_on",
+			SourceArticle:       sourceArticle,
+			TextOffset:          match[0],
+			TextLength:          match[1] - match[0],
+			TemporalKind:        "in_force_on",
+			TemporalDescription: rawText,
+			TemporalDate:        isoDate,
+		})
+	}
+
+	// "in force on/from {date}" (skip if overlapping with asInForceOn)
+	matches = e.inForceOnPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+		rawText := text[match[0]:match[1]]
+		dateStr := text[match[2]:match[3]]
+		isoDate := parseEuropeanDate(dateStr)
+
+		refs = append(refs, &Reference{
+			Type:                ReferenceTypeInternal,
+			Target:              TargetArticle,
+			RawText:             rawText,
+			Identifier:          "temporal:in_force_on",
+			SourceArticle:       sourceArticle,
+			TextOffset:          match[0],
+			TextLength:          match[1] - match[0],
+			TemporalKind:        "in_force_on",
+			TemporalDescription: rawText,
+			TemporalDate:        isoDate,
+		})
+	}
+
+	// "enter(s/ed) into force (on {date})?"
+	matches = e.enterIntoForcePattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+		rawText := text[match[0]:match[1]]
+		ref := &Reference{
+			Type:                ReferenceTypeInternal,
+			Target:              TargetArticle,
+			RawText:             rawText,
+			Identifier:          "temporal:in_force_on",
+			SourceArticle:       sourceArticle,
+			TextOffset:          match[0],
+			TextLength:          match[1] - match[0],
+			TemporalKind:        "in_force_on",
+			TemporalDescription: rawText,
+		}
+		// Optional date group
+		if match[2] != -1 && match[3] != -1 {
+			dateStr := text[match[2]:match[3]]
+			ref.TemporalDate = parseEuropeanDate(dateStr)
+		}
+		refs = append(refs, ref)
+	}
+
+	// "as originally enacted"
+	matches = e.asOriginallyEnactedPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+		rawText := text[match[0]:match[1]]
+
+		refs = append(refs, &Reference{
+			Type:                ReferenceTypeInternal,
+			Target:              TargetArticle,
+			RawText:             rawText,
+			Identifier:          "temporal:original",
+			SourceArticle:       sourceArticle,
+			TextOffset:          match[0],
+			TextLength:          match[1] - match[0],
+			TemporalKind:        "original",
+			TemporalDescription: rawText,
+		})
+	}
+
+	// "as it stood on {date}"
+	matches = e.asItStoodOnPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+		rawText := text[match[0]:match[1]]
+		dateStr := text[match[2]:match[3]]
+		isoDate := parseEuropeanDate(dateStr)
+
+		refs = append(refs, &Reference{
+			Type:                ReferenceTypeInternal,
+			Target:              TargetArticle,
+			RawText:             rawText,
+			Identifier:          "temporal:original",
+			SourceArticle:       sourceArticle,
+			TextOffset:          match[0],
+			TextLength:          match[1] - match[0],
+			TemporalKind:        "original",
+			TemporalDescription: rawText,
+			TemporalDate:        isoDate,
+		})
+	}
+
+	// "consolidated version (of)?"
+	matches = e.consolidatedVersionPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+		rawText := text[match[0]:match[1]]
+
+		refs = append(refs, &Reference{
+			Type:                ReferenceTypeInternal,
+			Target:              TargetArticle,
+			RawText:             rawText,
+			Identifier:          "temporal:consolidated",
+			SourceArticle:       sourceArticle,
+			TextOffset:          match[0],
+			TextLength:          match[1] - match[0],
+			TemporalKind:        "consolidated",
+			TemporalDescription: rawText,
+		})
+	}
+
+	return refs
+}
+
+// parseEuropeanDate parses a European-style date string like "25 May 2018" to ISO format "2018-05-25".
+// Returns empty string if parsing fails.
+func parseEuropeanDate(dateStr string) string {
+	monthNames := map[string]string{
+		"january": "01", "february": "02", "march": "03", "april": "04",
+		"may": "05", "june": "06", "july": "07", "august": "08",
+		"september": "09", "october": "10", "november": "11", "december": "12",
+	}
+
+	parts := strings.Fields(strings.TrimSpace(dateStr))
+	if len(parts) != 3 {
+		return ""
+	}
+
+	day := parts[0]
+	monthStr := strings.ToLower(parts[1])
+	year := parts[2]
+
+	month, ok := monthNames[monthStr]
+	if !ok {
+		return ""
+	}
+
+	// Pad day to 2 digits
+	if len(day) == 1 {
+		day = "0" + day
+	}
+
+	// Validate year is 4 digits
+	if len(year) != 4 {
+		return ""
+	}
+
+	return year + "-" + month + "-" + day
 }
 
 // isOverlapping checks if a match overlaps with any existing reference.
