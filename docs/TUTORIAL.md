@@ -879,6 +879,7 @@ regula impact --source testdata/gdpr.txt --provision Art17 --format json | jq '.
 
 ## Next Steps
 
+- See [TUTORIAL_CCPA.md](TUTORIAL_CCPA.md) for a CCPA-focused tutorial with cross-legislation comparison
 - Review [TESTING.md](TESTING.md) for development and testing strategies
 - See [ARCHITECTURE.md](ARCHITECTURE.md) for system design details
 - Check [ROADMAP.md](ROADMAP.md) for upcoming features
