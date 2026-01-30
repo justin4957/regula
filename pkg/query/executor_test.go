@@ -928,3 +928,384 @@ func BenchmarkExecutor_SimpleConstruct(b *testing.B) {
 		_, _ = executor.ExecuteConstructString(queryStr)
 	}
 }
+
+// DESCRIBE query execution tests
+
+func TestExecutor_DescribeDirectURI(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	queryStr := `DESCRIBE GDPR:Art17`
+
+	result, err := executor.ExecuteDescribeString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteDescribeString() error = %v", err)
+	}
+
+	// Art17 has: rdf:type, reg:title, reg:number, reg:partOf, reg:references as subject
+	if result.Count < 5 {
+		t.Errorf("Count = %d, want >= 5 (Art17 has type, title, number, partOf, references)", result.Count)
+	}
+
+	// Verify expected triples where Art17 is subject
+	foundType := false
+	foundTitle := false
+	foundNumber := false
+	foundPartOf := false
+	foundReferences := false
+
+	for _, triple := range result.Triples {
+		if triple.Subject == "GDPR:Art17" {
+			switch triple.Predicate {
+			case "rdf:type":
+				foundType = true
+				if triple.Object != "reg:Article" {
+					t.Errorf("type object = %s, want reg:Article", triple.Object)
+				}
+			case "reg:title":
+				foundTitle = true
+				if triple.Object != "Right to erasure" {
+					t.Errorf("title = %s, want Right to erasure", triple.Object)
+				}
+			case "reg:number":
+				foundNumber = true
+				if triple.Object != "17" {
+					t.Errorf("number = %s, want 17", triple.Object)
+				}
+			case "reg:partOf":
+				foundPartOf = true
+			case "reg:references":
+				foundReferences = true
+				if triple.Object != "GDPR:Art6" {
+					t.Errorf("references = %s, want GDPR:Art6", triple.Object)
+				}
+			}
+		}
+	}
+
+	if !foundType {
+		t.Error("Missing rdf:type triple for Art17")
+	}
+	if !foundTitle {
+		t.Error("Missing reg:title triple for Art17")
+	}
+	if !foundNumber {
+		t.Error("Missing reg:number triple for Art17")
+	}
+	if !foundPartOf {
+		t.Error("Missing reg:partOf triple for Art17")
+	}
+	if !foundReferences {
+		t.Error("Missing reg:references triple for Art17")
+	}
+}
+
+func TestExecutor_DescribeBidirectional(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	// Art6 is referenced by Art17 (Art17 reg:references Art6)
+	queryStr := `DESCRIBE GDPR:Art6`
+
+	result, err := executor.ExecuteDescribeString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteDescribeString() error = %v", err)
+	}
+
+	// Art6 should have its own triples as subject AND the incoming reference as object
+	foundAsSubject := false
+	foundAsObject := false
+
+	for _, triple := range result.Triples {
+		if triple.Subject == "GDPR:Art6" && triple.Predicate == "rdf:type" {
+			foundAsSubject = true
+		}
+		if triple.Object == "GDPR:Art6" && triple.Predicate == "reg:references" {
+			foundAsObject = true
+			if triple.Subject != "GDPR:Art17" {
+				t.Errorf("Incoming reference from %s, want GDPR:Art17", triple.Subject)
+			}
+		}
+	}
+
+	if !foundAsSubject {
+		t.Error("DESCRIBE should include triples where resource is subject")
+	}
+	if !foundAsObject {
+		t.Error("DESCRIBE should include triples where resource is object (bidirectional)")
+	}
+}
+
+func TestExecutor_DescribeVariable(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	queryStr := `DESCRIBE ?article WHERE { ?article reg:title "Right to erasure" . }`
+
+	result, err := executor.ExecuteDescribeString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteDescribeString() error = %v", err)
+	}
+
+	// Should describe Art17 (the one with title "Right to erasure")
+	if result.Count < 5 {
+		t.Errorf("Count = %d, want >= 5", result.Count)
+	}
+
+	// Verify we got Art17's triples
+	foundArt17Title := false
+	for _, triple := range result.Triples {
+		if triple.Subject == "GDPR:Art17" && triple.Predicate == "reg:title" && triple.Object == "Right to erasure" {
+			foundArt17Title = true
+		}
+	}
+	if !foundArt17Title {
+		t.Error("Expected Art17 title triple from variable DESCRIBE")
+	}
+}
+
+func TestExecutor_DescribeMultipleResources(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	queryStr := `DESCRIBE GDPR:Art17 GDPR:Art5`
+
+	result, err := executor.ExecuteDescribeString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteDescribeString() error = %v", err)
+	}
+
+	// Should have triples from both articles
+	foundArt17 := false
+	foundArt5 := false
+
+	for _, triple := range result.Triples {
+		if triple.Subject == "GDPR:Art17" {
+			foundArt17 = true
+		}
+		if triple.Subject == "GDPR:Art5" {
+			foundArt5 = true
+		}
+	}
+
+	if !foundArt17 {
+		t.Error("Expected triples for GDPR:Art17")
+	}
+	if !foundArt5 {
+		t.Error("Expected triples for GDPR:Art5")
+	}
+}
+
+func TestExecutor_DescribeURIWithBrackets(t *testing.T) {
+	ts := setupTestStore()
+	// Add a triple with a full URI
+	ts.Add("urn:regula:gdpr:article:17", "rdf:type", "reg:Article")
+	executor := NewExecutor(ts)
+
+	queryStr := `DESCRIBE <urn:regula:gdpr:article:17>`
+
+	result, err := executor.ExecuteDescribeString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteDescribeString() error = %v", err)
+	}
+
+	if result.Count < 1 {
+		t.Errorf("Count = %d, want >= 1", result.Count)
+	}
+
+	foundType := false
+	for _, triple := range result.Triples {
+		if triple.Subject == "urn:regula:gdpr:article:17" && triple.Predicate == "rdf:type" {
+			foundType = true
+		}
+	}
+	if !foundType {
+		t.Error("Expected rdf:type triple for URI with brackets")
+	}
+}
+
+func TestExecutor_DescribeNoResults(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	queryStr := `DESCRIBE GDPR:NonExistent`
+
+	result, err := executor.ExecuteDescribeString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteDescribeString() error = %v", err)
+	}
+
+	if result.Count != 0 {
+		t.Errorf("Count = %d, want 0 for non-existent resource", result.Count)
+	}
+}
+
+func TestExecutor_DescribeDeduplication(t *testing.T) {
+	ts := store.NewTripleStore()
+	// Create a cycle: A references B, B references A
+	ts.Add("A", "reg:references", "B")
+	ts.Add("B", "reg:references", "A")
+
+	executor := NewExecutor(ts)
+
+	// Describe both A and B - triples should be deduplicated
+	queryStr := `DESCRIBE A B`
+
+	result, err := executor.ExecuteDescribeString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteDescribeString() error = %v", err)
+	}
+
+	// Should have exactly 2 triples (not 4 from double counting)
+	if result.Count != 2 {
+		t.Errorf("Count = %d, want 2 (deduplicated)", result.Count)
+	}
+}
+
+func TestExecutor_DescribeWithContext(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	queryStr := `DESCRIBE GDPR:Art17`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	result, err := executor.ExecuteDescribeWithContext(ctx, query)
+	if err != nil {
+		t.Fatalf("ExecuteDescribeWithContext() error = %v", err)
+	}
+
+	if result.Count == 0 {
+		t.Error("Expected some results")
+	}
+}
+
+func TestExecutor_DescribeContextCancelled(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	queryStr := `DESCRIBE ?article WHERE { ?article ?p ?o . }`
+
+	query, err := ParseQuery(queryStr)
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	_, err = executor.ExecuteDescribeWithContext(ctx, query)
+	if err == nil {
+		t.Error("Expected context cancellation error")
+	}
+}
+
+func TestExecutor_DescribeMetrics(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	queryStr := `DESCRIBE GDPR:Art17`
+
+	result, err := executor.ExecuteDescribeString(queryStr)
+	if err != nil {
+		t.Fatalf("ExecuteDescribeString() error = %v", err)
+	}
+
+	if result.Metrics.TotalTime == 0 {
+		t.Error("TotalTime should be > 0")
+	}
+	if result.Metrics.ExecuteTime == 0 {
+		t.Error("ExecuteTime should be > 0")
+	}
+	if result.Metrics.ResultCount < 5 {
+		t.Errorf("ResultCount = %d, want >= 5", result.Metrics.ResultCount)
+	}
+}
+
+func TestExecutor_DescribeFormatTurtle(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	result, err := executor.ExecuteDescribeString(`DESCRIBE GDPR:Art17`)
+	if err != nil {
+		t.Fatalf("ExecuteDescribeString() error = %v", err)
+	}
+
+	turtle := result.FormatTurtle()
+
+	if !strings.Contains(turtle, "GDPR:Art17") {
+		t.Error("Turtle output should contain GDPR:Art17")
+	}
+	if !strings.Contains(turtle, "Right to erasure") {
+		t.Error("Turtle output should contain title")
+	}
+}
+
+func TestExecutor_DescribeFormatJSON(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	result, err := executor.ExecuteDescribeString(`DESCRIBE GDPR:Art17`)
+	if err != nil {
+		t.Fatalf("ExecuteDescribeString() error = %v", err)
+	}
+
+	jsonOut, err := result.FormatJSON()
+	if err != nil {
+		t.Fatalf("FormatJSON() error = %v", err)
+	}
+
+	if !strings.Contains(jsonOut, `"triples"`) {
+		t.Error("JSON should contain 'triples'")
+	}
+	if !strings.Contains(jsonOut, `"GDPR:Art17"`) {
+		t.Error("JSON should contain GDPR:Art17")
+	}
+}
+
+func TestExecutor_DescribeWrongQueryType(t *testing.T) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+
+	// Try to execute a SELECT query as DESCRIBE
+	query := &Query{
+		Type:   SelectQueryType,
+		Select: &SelectQuery{Variables: []string{"?s"}, Where: []TriplePattern{{Subject: "?s", Predicate: "?p", Object: "?o"}}},
+	}
+
+	_, err := executor.ExecuteDescribe(query)
+	if err == nil {
+		t.Error("Expected error for wrong query type")
+	}
+	if !strings.Contains(err.Error(), "expected DESCRIBE") {
+		t.Errorf("Error should mention DESCRIBE, got: %v", err)
+	}
+}
+
+func BenchmarkExecutor_DescribeQuery(b *testing.B) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+	queryStr := `DESCRIBE GDPR:Art17`
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = executor.ExecuteDescribeString(queryStr)
+	}
+}
+
+func BenchmarkExecutor_DescribeVariableQuery(b *testing.B) {
+	ts := setupTestStore()
+	executor := NewExecutor(ts)
+	queryStr := `DESCRIBE ?article WHERE { ?article reg:title "Right to erasure" . }`
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = executor.ExecuteDescribeString(queryStr)
+	}
+}

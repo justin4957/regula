@@ -6,6 +6,7 @@ type Query struct {
 	Type      QueryType
 	Select    *SelectQuery
 	Construct *ConstructQuery
+	Describe  *DescribeQuery
 }
 
 // QueryType represents the type of SPARQL query.
@@ -16,6 +17,8 @@ const (
 	SelectQueryType QueryType = "SELECT"
 	// ConstructQueryType represents a CONSTRUCT query.
 	ConstructQueryType QueryType = "CONSTRUCT"
+	// DescribeQueryType represents a DESCRIBE query.
+	DescribeQueryType QueryType = "DESCRIBE"
 )
 
 // SelectQuery represents a parsed SELECT query.
@@ -38,6 +41,15 @@ type ConstructQuery struct {
 	Optional [][]TriplePattern // OPTIONAL clause patterns
 	Filters  []Filter          // FILTER clauses
 	Prefixes map[string]string // Prefix declarations
+}
+
+// DescribeQuery represents a parsed DESCRIBE query.
+type DescribeQuery struct {
+	Resources []string          // URIs, variables, or prefixed names to describe
+	Where     []TriplePattern   // WHERE clause triple patterns (optional, for variable form)
+	Optional  [][]TriplePattern // OPTIONAL clause patterns
+	Filters   []Filter          // FILTER clauses
+	Prefixes  map[string]string // Prefix declarations
 }
 
 // TriplePattern represents a triple pattern in a WHERE clause.

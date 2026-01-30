@@ -15,12 +15,26 @@ func ParseQuery(queryStr string) (*Query, error) {
 		return nil, fmt.Errorf("empty query")
 	}
 
-	// Detect query type - check CONSTRUCT first since it may also contain WHERE
+	// Detect query type by keyword position
 	upperQuery := strings.ToUpper(queryStr)
 
-	// Find positions of keywords to determine query type
+	describeIdx := strings.Index(upperQuery, "DESCRIBE")
 	constructIdx := strings.Index(upperQuery, "CONSTRUCT")
 	selectIdx := strings.Index(upperQuery, "SELECT")
+
+	// DESCRIBE query takes priority if it appears first
+	if describeIdx >= 0 &&
+		(constructIdx < 0 || describeIdx < constructIdx) &&
+		(selectIdx < 0 || describeIdx < selectIdx) {
+		describeQuery, err := parseDescribeQuery(queryStr)
+		if err != nil {
+			return nil, err
+		}
+		return &Query{
+			Type:     DescribeQueryType,
+			Describe: describeQuery,
+		}, nil
+	}
 
 	// CONSTRUCT query if CONSTRUCT appears and (SELECT doesn't appear or CONSTRUCT appears first)
 	if constructIdx >= 0 && (selectIdx < 0 || constructIdx < selectIdx) {
@@ -45,7 +59,7 @@ func ParseQuery(queryStr string) (*Query, error) {
 		}, nil
 	}
 
-	return nil, fmt.Errorf("unsupported query type: only SELECT and CONSTRUCT queries are supported")
+	return nil, fmt.Errorf("unsupported query type: only SELECT, CONSTRUCT, and DESCRIBE queries are supported")
 }
 
 // parseSelectQuery parses a SELECT query.
@@ -233,6 +247,136 @@ func parseConstructQuery(queryStr string) (*ConstructQuery, error) {
 	query.Where = patterns
 
 	return query, nil
+}
+
+// parseDescribeQuery parses a DESCRIBE query.
+func parseDescribeQuery(queryStr string) (*DescribeQuery, error) {
+	describeQuery := &DescribeQuery{
+		Prefixes: make(map[string]string),
+	}
+
+	// Extract PREFIX declarations
+	prefixRegex := regexp.MustCompile(`(?i)PREFIX\s+(\w+):\s*<([^>]+)>`)
+	prefixMatches := prefixRegex.FindAllStringSubmatch(queryStr, -1)
+	for _, match := range prefixMatches {
+		if len(match) == 3 {
+			describeQuery.Prefixes[match[1]] = match[2]
+		}
+	}
+
+	// Remove PREFIX declarations for easier parsing
+	queryStr = prefixRegex.ReplaceAllString(queryStr, "")
+
+	// Detect query form by checking for WHERE clause
+	upperQuery := strings.ToUpper(queryStr)
+	whereIdx := strings.Index(upperQuery, "WHERE")
+	hasWhere := whereIdx > 0
+
+	if hasWhere {
+		// Variable form: DESCRIBE ?var WHERE { ... }
+		describeRegex := regexp.MustCompile(`(?i)DESCRIBE\s+([\s\S]*?)\s+WHERE`)
+		describeMatch := describeRegex.FindStringSubmatch(queryStr)
+		if describeMatch == nil {
+			return nil, fmt.Errorf("invalid DESCRIBE query: could not parse resources before WHERE")
+		}
+
+		resourcesStr := strings.TrimSpace(describeMatch[1])
+		describeQuery.Resources = parseResourceList(resourcesStr)
+
+		if len(describeQuery.Resources) == 0 {
+			return nil, fmt.Errorf("DESCRIBE query has no resources to describe")
+		}
+
+		// Extract the main WHERE clause content
+		whereRegex := regexp.MustCompile(`(?i)WHERE\s*\{([\s\S]*)\}`)
+		whereMatch := whereRegex.FindStringSubmatch(queryStr)
+		if whereMatch == nil {
+			return nil, fmt.Errorf("invalid WHERE clause: missing braces")
+		}
+
+		whereClause := whereMatch[1]
+
+		// Extract OPTIONAL clauses before parsing main patterns
+		optionalRegex := regexp.MustCompile(`(?i)OPTIONAL\s*\{([^}]+)\}`)
+		optionalMatches := optionalRegex.FindAllStringSubmatch(whereClause, -1)
+		for _, match := range optionalMatches {
+			if len(match) == 2 {
+				optionalPatterns, err := parseTriplePatterns(match[1], describeQuery.Prefixes)
+				if err != nil {
+					return nil, fmt.Errorf("error parsing OPTIONAL clause: %w", err)
+				}
+				describeQuery.Optional = append(describeQuery.Optional, optionalPatterns)
+			}
+		}
+
+		// Remove OPTIONAL clauses from main WHERE clause
+		mainWhereClause := optionalRegex.ReplaceAllString(whereClause, "")
+
+		// Extract FILTER clauses
+		describeQuery.Filters = extractFilters(mainWhereClause)
+
+		// Remove FILTER clauses before parsing triple patterns
+		filterRemoveRegex := regexp.MustCompile(`(?i)FILTER\s*\([^)]*\)`)
+		mainWhereClause = filterRemoveRegex.ReplaceAllString(mainWhereClause, "")
+
+		// Parse main triple patterns
+		patterns, err := parseTriplePatterns(mainWhereClause, describeQuery.Prefixes)
+		if err != nil {
+			return nil, err
+		}
+		describeQuery.Where = patterns
+
+	} else {
+		// Direct URI form: DESCRIBE <uri> or DESCRIBE prefix:name
+		describeRegex := regexp.MustCompile(`(?i)DESCRIBE\s+([\s\S]+)`)
+		describeMatch := describeRegex.FindStringSubmatch(queryStr)
+		if describeMatch == nil {
+			return nil, fmt.Errorf("invalid DESCRIBE query: no resources specified")
+		}
+
+		resourcesStr := strings.TrimSpace(describeMatch[1])
+		describeQuery.Resources = parseResourceList(resourcesStr)
+
+		if len(describeQuery.Resources) == 0 {
+			return nil, fmt.Errorf("DESCRIBE query has no resources to describe")
+		}
+	}
+
+	return describeQuery, nil
+}
+
+// parseResourceList parses a space-separated list of URIs, variables, prefixed names,
+// or bare identifiers used as resource references.
+func parseResourceList(resourcesStr string) []string {
+	var resources []string
+	tokens := tokenize(resourcesStr)
+
+	for _, token := range tokens {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+		// Accept URIs (<...>), variables (?...), prefixed names (prefix:local),
+		// or bare identifiers used as resource references in the store
+		if IsURI(token) || IsVariable(token) || IsPrefixed(token) || isIdentifier(token) {
+			resources = append(resources, token)
+		}
+	}
+
+	return resources
+}
+
+// isIdentifier checks if a string is a bare identifier (alphanumeric, not a keyword).
+func isIdentifier(s string) bool {
+	if len(s) == 0 || s[0] == '"' || s[0] == '<' || s[0] == '?' {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.') {
+			return false
+		}
+	}
+	return true
 }
 
 // parseOrderBy parses ORDER BY clause variables.
@@ -531,12 +675,21 @@ func (q *Query) Validate() []error {
 		return errors
 	}
 
+	if q.Describe == nil && q.Type == DescribeQueryType {
+		errors = append(errors, fmt.Errorf("DESCRIBE query missing describe clause"))
+		return errors
+	}
+
 	if q.Select != nil {
 		errors = append(errors, q.Select.Validate()...)
 	}
 
 	if q.Construct != nil {
 		errors = append(errors, q.Construct.Validate()...)
+	}
+
+	if q.Describe != nil {
+		errors = append(errors, q.Describe.Validate()...)
 	}
 
 	return errors
@@ -622,6 +775,9 @@ func (q *Query) String() string {
 	}
 	if q.Construct != nil {
 		return q.Construct.String()
+	}
+	if q.Describe != nil {
+		return q.Describe.String()
 	}
 	return "<unknown query type>"
 }
@@ -775,6 +931,111 @@ func (q *ConstructQuery) String() string {
 		sb.WriteString("  }\n")
 	}
 	sb.WriteString("}")
+
+	return sb.String()
+}
+
+// Validate checks if the DESCRIBE query is well-formed.
+func (q *DescribeQuery) Validate() []error {
+	var errors []error
+
+	if len(q.Resources) == 0 {
+		errors = append(errors, fmt.Errorf("DESCRIBE query has no resources"))
+	}
+
+	// If WHERE clause exists, verify resource variables are bound
+	if len(q.Where) > 0 {
+		boundVars := make(map[string]bool)
+		for _, p := range q.Where {
+			if IsVariable(p.Subject) {
+				boundVars[p.Subject] = true
+			}
+			if IsVariable(p.Predicate) {
+				boundVars[p.Predicate] = true
+			}
+			if IsVariable(p.Object) {
+				boundVars[p.Object] = true
+			}
+		}
+		for _, opt := range q.Optional {
+			for _, p := range opt {
+				if IsVariable(p.Subject) {
+					boundVars[p.Subject] = true
+				}
+				if IsVariable(p.Predicate) {
+					boundVars[p.Predicate] = true
+				}
+				if IsVariable(p.Object) {
+					boundVars[p.Object] = true
+				}
+			}
+		}
+
+		for _, resource := range q.Resources {
+			if IsVariable(resource) && !boundVars[resource] {
+				errors = append(errors, fmt.Errorf("variable %s in DESCRIBE is not bound in WHERE clause", resource))
+			}
+		}
+	}
+
+	return errors
+}
+
+// ExpandPrefixes expands all prefixed URIs in a DESCRIBE query using the declared prefixes.
+func (q *DescribeQuery) ExpandPrefixes() {
+	// Expand resources
+	for i := range q.Resources {
+		q.Resources[i] = expandPrefix(q.Resources[i], q.Prefixes)
+	}
+
+	// Expand in WHERE patterns
+	for i := range q.Where {
+		q.Where[i].Subject = expandPrefix(q.Where[i].Subject, q.Prefixes)
+		q.Where[i].Predicate = expandPrefix(q.Where[i].Predicate, q.Prefixes)
+		q.Where[i].Object = expandPrefix(q.Where[i].Object, q.Prefixes)
+	}
+
+	// Expand in OPTIONAL patterns
+	for i := range q.Optional {
+		for j := range q.Optional[i] {
+			q.Optional[i][j].Subject = expandPrefix(q.Optional[i][j].Subject, q.Prefixes)
+			q.Optional[i][j].Predicate = expandPrefix(q.Optional[i][j].Predicate, q.Prefixes)
+			q.Optional[i][j].Object = expandPrefix(q.Optional[i][j].Object, q.Prefixes)
+		}
+	}
+}
+
+// String returns a string representation of the DESCRIBE query.
+func (q *DescribeQuery) String() string {
+	var sb strings.Builder
+
+	// Prefixes
+	for prefix, uri := range q.Prefixes {
+		sb.WriteString(fmt.Sprintf("PREFIX %s: <%s>\n", prefix, uri))
+	}
+
+	// DESCRIBE clause
+	sb.WriteString("DESCRIBE ")
+	sb.WriteString(strings.Join(q.Resources, " "))
+
+	// WHERE clause (if present)
+	if len(q.Where) > 0 {
+		sb.WriteString(" WHERE {\n")
+		for _, p := range q.Where {
+			sb.WriteString(fmt.Sprintf("  %s %s %s .\n", p.Subject, p.Predicate, p.Object))
+		}
+		for _, f := range q.Filters {
+			sb.WriteString(fmt.Sprintf("  FILTER(%s)\n", f.Expression))
+		}
+		for _, opt := range q.Optional {
+			sb.WriteString("  OPTIONAL {\n")
+			for _, p := range opt {
+				sb.WriteString(fmt.Sprintf("    %s %s %s .\n", p.Subject, p.Predicate, p.Object))
+			}
+			sb.WriteString("  }\n")
+		}
+		sb.WriteString("}")
+	}
 
 	return sb.String()
 }
