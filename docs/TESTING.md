@@ -376,6 +376,65 @@ go run cmd/regula/main.go validate --source testdata/gdpr.txt --check gates
 go run cmd/regula/main.go validate --source testdata/gdpr.txt --check gates --format json
 ```
 
+### Validation Report Generation Tests
+
+Test HTML and Markdown report generation for validation results and gate reports:
+
+```bash
+# Run all report generation tests
+go test ./pkg/validate/... -v -run "TestValidationResult_To|TestGateReport_To" -count=1
+
+# Run Markdown report tests
+go test ./pkg/validate/... -v -run TestValidationResult_ToMarkdown -count=1
+go test ./pkg/validate/... -v -run TestGateReport_ToMarkdown -count=1
+
+# Run HTML report tests
+go test ./pkg/validate/... -v -run TestValidationResult_ToHTML -count=1
+go test ./pkg/validate/... -v -run TestGateReport_ToHTML -count=1
+
+# Run helper function tests
+go test ./pkg/validate/... -v -run "TestStatusToMarkdownBadge|TestEscapeMarkdownTableCell|TestStatusToHTMLColor|TestScoreToHTMLColor" -count=1
+
+# CLI: Generate Markdown report to stdout
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --format markdown
+
+# CLI: Generate HTML report to stdout
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --format html
+
+# CLI: Generate gate report in Markdown
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --check gates --format markdown
+
+# CLI: Save report to file (format based on extension)
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --report report.html
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --report report.md
+go run cmd/regula/main.go validate --source testdata/gdpr.txt --check gates --report gates.html
+```
+
+### Test Coverage
+
+| Test | What it verifies |
+|------|------------------|
+| `TestValidationResult_ToMarkdown` | Headers, summary table, scores, status badge |
+| `TestValidationResult_ToMarkdown_AllComponents` | All 5 component sections rendered with data |
+| `TestValidationResult_ToMarkdown_EmptyComponents` | Nil components omitted gracefully |
+| `TestValidationResult_ToMarkdown_FailStatus` | FAIL badge rendered for failing results |
+| `TestValidationResult_ToMarkdown_TableEscaping` | Pipe characters escaped in table cells |
+| `TestValidationResult_ToHTML` | HTML structure, CSS, tables, details elements |
+| `TestValidationResult_ToHTML_PassStatus` | Green color (#4caf50) for PASS |
+| `TestValidationResult_ToHTML_FailStatus` | Red color (#f44336) for FAIL |
+| `TestValidationResult_ToHTML_ComponentScoreBars` | Score bar widths match component scores |
+| `TestValidationResult_ToHTML_HTMLEscaping` | XSS-safe HTML escaping |
+| `TestValidationResult_ToHTML_EmptyComponents` | Valid HTML with no components |
+| `TestGateReport_ToMarkdown` | Gate headers, summary, results |
+| `TestGateReport_ToMarkdown_WithWarnings` | Warning content rendered |
+| `TestGateReport_ToMarkdown_SkippedGates` | Skip badge and reason |
+| `TestGateReport_ToMarkdown_FailedGates` | Fail badge and error content |
+| `TestGateReport_ToHTML` | HTML structure with gate cards |
+| `TestGateReport_ToHTML_PassStatus` | Green styling for overall pass |
+| `TestGateReport_ToHTML_FailStatus` | Red styling for overall fail |
+| `TestGateReport_ToHTML_HaltedPipeline` | Halted pipeline warning alert |
+| `TestGateReport_ToHTML_SkippedGateCard` | Grey styling for skipped gates |
+
 ### E2E Tests
 
 The E2E test script validates the complete MVP functionality:
