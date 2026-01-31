@@ -1022,6 +1022,89 @@ regula ingest --source gdpr.txt --fetch-refs --cache-dir ~/.regula/cache
 | `TestRecursiveFetcher_Plan_DryRun` | No HTTP calls in dry-run mode |
 | `TestRecursiveFetcher_FederatedTriples` | Cross-document RDF triples generated |
 
+## Cross-Legislation Analysis Tests
+
+Test the cross-reference analysis engine:
+
+```bash
+# Run all cross-reference tests
+go test ./pkg/analysis/... -v -run "TestCrossRef|TestCompare|TestAnalyzeExternal" -count=1
+
+# Run specific test categories
+go test ./pkg/analysis/... -v -run "TestCompareDocuments" -count=1     # pair-wise comparison
+go test ./pkg/analysis/... -v -run "TestAnalyzeExternalRefs" -count=1   # external ref analysis
+go test ./pkg/analysis/... -v -run "TestAnalyze_Multi" -count=1         # multi-document analysis
+go test ./pkg/analysis/... -v -run "TestNormalize" -count=1             # normalization helpers
+go test ./pkg/analysis/... -v -run "ToDOT" -count=1                    # DOT graph output
+```
+
+### CLI Integration Tests
+
+Test the compare and refs commands end-to-end:
+
+```bash
+# Compare two documents
+go run cmd/regula/main.go compare --sources testdata/gdpr.txt,testdata/ccpa.txt --format table
+
+# Compare three documents
+go run cmd/regula/main.go compare --sources testdata/gdpr.txt,testdata/ccpa.txt,testdata/eu-ai-act.txt --format table
+
+# Export comparison as JSON
+go run cmd/regula/main.go compare --sources testdata/gdpr.txt,testdata/ccpa.txt --format json
+
+# Export comparison as DOT graph
+go run cmd/regula/main.go compare --sources testdata/gdpr.txt,testdata/eu-ai-act.txt --format dot --output comparison.dot
+
+# Analyze all references in a document
+go run cmd/regula/main.go refs --source testdata/gdpr.txt
+
+# Analyze external references only
+go run cmd/regula/main.go refs --source testdata/eu-ai-act.txt --external-only
+
+# Export external ref analysis as JSON
+go run cmd/regula/main.go refs --source testdata/gdpr.txt --external-only --format json
+
+# Verify enhanced summary export includes external refs
+go run cmd/regula/main.go export --source testdata/gdpr.txt --format summary
+```
+
+### Cross-Reference Test Matrix
+
+| Test | What it verifies |
+|---|---|
+| `TestNewCrossRefAnalyzer` | Constructor, empty state |
+| `TestCrossRefAnalyzer_AddDocument` | Document registration |
+| `TestAnalyzeExternalRefs_SingleDoc` | External ref clustering and frequency |
+| `TestAnalyzeExternalRefs_Empty` | No external refs |
+| `TestAnalyzeExternalRefs_NonexistentDoc` | Nonexistent document handling |
+| `TestCompareDocuments_DefinitionOverlap` | Shared defined terms via normalized matching |
+| `TestCompareDocuments_RightsOverlap` | Shared rights across documents |
+| `TestCompareDocuments_ObligationOverlap` | Shared obligations across documents |
+| `TestCompareDocuments_ExternalRefOverlap` | Common external reference targets |
+| `TestAnalyze_MultiDocument` | Full 3-document analysis |
+| `TestCrossRefResult_String` | Human-readable output formatting |
+| `TestCrossRefResult_FormatTable` | Table comparison formatting |
+| `TestCrossRefResult_ToJSON` | JSON serialization |
+| `TestCrossRefResult_ToDOT` | Graphviz DOT generation |
+| `TestComparisonResult_String` | Pair-wise comparison output |
+| `TestComparisonResult_ToDOT` | Pair-wise DOT generation |
+| `TestExternalRefReport_String` | External ref report formatting |
+| `TestNormalizeExternalRef` | External ref normalization |
+| `TestNormalizeConceptName` | Concept name normalization |
+| `TestSanitizeDOTID` | DOT ID sanitization |
+| `TestBuildDocumentSummary` | Document summary construction |
+| `TestBuildDocumentSummary_Nonexistent` | Nonexistent document summary |
+
+### Test Data Files
+
+| File | Type | Articles | Definitions | Cross-refs |
+|---|---|---|---|---|
+| `testdata/gdpr.txt` | EU Regulation | 99 | 26 | 179 |
+| `testdata/ccpa.txt` | US State Law | 21 | 15 | 10 |
+| `testdata/eu-ai-act.txt` | EU Regulation | 15 | 57 | 51 |
+| `testdata/eu-dsa.txt` | EU Regulation | 11 | 15 | 46 |
+| `testdata/us-coppa.txt` | US Federal Law | 10 | 7 | 4 |
+
 ## Troubleshooting Tests
 
 ### Common Issues
