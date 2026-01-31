@@ -96,14 +96,34 @@ func TestMapURN_Treaty(t *testing.T) {
 func TestMapURN_USSource(t *testing.T) {
 	urnMapper := NewURNMapper()
 
-	usURNs := []string{
-		"urn:us:usc:18/17014",
-		"urn:us:cfr:47/222",
+	// USC and CFR URNs should now resolve successfully
+	successURNs := []struct {
+		urn      string
+		contains string
+	}{
+		{"urn:us:usc:18/17014", "uscode.house.gov"},
+		{"urn:us:cfr:47/222", "ecfr.gov"},
+	}
+
+	for _, testCase := range successURNs {
+		t.Run(testCase.urn, func(t *testing.T) {
+			resolvedURL, err := urnMapper.MapURN(testCase.urn)
+			if err != nil {
+				t.Errorf("Expected success for URN %q, got error: %v", testCase.urn, err)
+			}
+			if resolvedURL == "" {
+				t.Errorf("Expected non-empty URL for URN %q", testCase.urn)
+			}
+		})
+	}
+
+	// Other US URN subtypes still return errors
+	errorURNs := []string{
 		"urn:us:pl:116-283",
 		"urn:us:ca:title1/sec100",
 	}
 
-	for _, urn := range usURNs {
+	for _, urn := range errorURNs {
 		t.Run(urn, func(t *testing.T) {
 			_, err := urnMapper.MapURN(urn)
 			if err == nil {

@@ -1014,7 +1014,7 @@ regula ingest --source gdpr.txt --fetch-refs --cache-dir ~/.regula/cache
 | `TestMapURN_EUDirective` | Directive URN → ELI URL |
 | `TestMapURN_EUDecision` | Decision URN → ELI URL |
 | `TestMapURN_Treaty` | Treaty URNs return error |
-| `TestMapURN_USSource` | US URNs return error |
+| `TestMapURN_USSource` | US USC/CFR URNs resolve; other US subtypes return error |
 | `TestDiskCache_*` | Set/Get, TTL expiration, overwrite, corruption |
 | `TestRecursiveFetcher_Fetch_*` | Success, depth/doc limits, domain filtering |
 | `TestRecursiveFetcher_Fetch_CacheHit` | Disk cache prevents redundant HTTP calls |
@@ -1161,6 +1161,175 @@ regula library remove eu-gdpr --path /tmp/test-lib
 # Clean up
 rm -rf /tmp/test-lib
 ```
+
+## Legislation Crawler Tests
+
+The `pkg/crawler` package provides a BFS tree-walking crawler that discovers and ingests US legislation by following cross-references.
+
+### Unit Tests
+
+```bash
+# Run all crawler tests
+go test ./pkg/crawler/... -v -count=1
+
+# Run specific test suites
+go test ./pkg/crawler/... -run TestResolve -v         # Citation-to-URL resolution
+go test ./pkg/crawler/... -run TestContentFetcher -v   # HTTP fetching + rate limiting
+go test ./pkg/crawler/... -run TestCrawlState -v       # Frontier queue + visited set
+go test ./pkg/crawler/... -run TestCrawler -v           # BFS engine integration
+go test ./pkg/crawler/... -run TestExtractText -v       # HTML-to-text conversion
+go test ./pkg/crawler/... -run TestProvenance -v        # RDF provenance tracking
+```
+
+### Citation Resolution Tests
+
+```bash
+# Test USC citation resolution (uscode.house.gov)
+go test ./pkg/crawler/... -run "TestResolve_USCCitation|TestResolve_USCSection" -v
+
+# Test CFR citation resolution (ecfr.gov)
+go test ./pkg/crawler/... -run "TestResolve_CFRCitation|TestResolve_CFRPart" -v
+
+# Test state code resolution (CA, VA, CO, CT, TX)
+go test ./pkg/crawler/... -run "TestResolve_CaliforniaCode|TestResolve_VirginiaCode" -v
+
+# Test Public Law and LII fallback
+go test ./pkg/crawler/... -run "TestResolve_PublicLaw|TestResolve_LIIFallback" -v
+
+# Test URN resolution (extends pkg/fetch URNMapper)
+go test ./pkg/crawler/... -run TestResolveURN -v
+go test ./pkg/fetch/... -run TestMapURN_USSource -v
+```
+
+### Fetcher Tests
+
+```bash
+# Test HTTP fetching with mock server
+go test ./pkg/crawler/... -run TestContentFetcher -v
+
+# Test HTML-to-text extraction
+go test ./pkg/crawler/... -run "TestExtractTextFromHTML" -v
+
+# Test per-domain rate limiting
+go test ./pkg/crawler/... -run TestContentFetcher_RateLimit -v
+
+# Test error handling (404, empty URL, etc.)
+go test ./pkg/crawler/... -run "TestContentFetcher_HTTPError|TestContentFetcher_EmptyURL" -v
+```
+
+### State Persistence Tests
+
+```bash
+# Test frontier enqueue/dequeue
+go test ./pkg/crawler/... -run TestCrawlStateEnqueueDequeue -v
+
+# Test visited set and deduplication
+go test ./pkg/crawler/... -run TestCrawlStateVisited -v
+
+# Test save/load round-trip
+go test ./pkg/crawler/... -run TestCrawlStateSaveAndLoad -v
+
+# Test limit enforcement
+go test ./pkg/crawler/... -run TestCrawlStateWithinLimits -v
+```
+
+### Engine Integration Tests
+
+Tests use `httptest.Server` mock HTTP servers to verify BFS expansion without real network calls:
+
+```bash
+# Test crawl from URL seed
+go test ./pkg/crawler/... -run TestCrawlerFromURL -v
+
+# Test depth and document limits
+go test ./pkg/crawler/... -run "TestCrawlerDepthLimit|TestCrawlerDocumentLimit" -v
+
+# Test URL deduplication
+go test ./pkg/crawler/... -run TestCrawlerDeduplication -v
+
+# Test dry-run planning mode
+go test ./pkg/crawler/... -run TestCrawlerDryRun -v
+
+# Test report formatting (table + JSON)
+go test ./pkg/crawler/... -run TestCrawlerReportFormat -v
+
+# Test provenance tracking
+go test ./pkg/crawler/... -run "TestCrawlerProvenance|TestCrawlerProvenanceFailure" -v
+
+# Test error paths
+go test ./pkg/crawler/... -run "TestCrawlerFromCitationNotFound|TestCrawlerFromDocumentNotFound" -v
+```
+
+### CLI End-to-End Testing
+
+```bash
+# Build the binary
+go build -o regula ./cmd/regula
+
+# Initialize a library and seed with test data
+regula library init --path /tmp/test-crawl
+regula library seed --testdata-dir testdata --path /tmp/test-crawl
+
+# Dry-run: plan crawl from an existing document (no network calls)
+regula crawl --seed us-ca-ccpa --dry-run --max-depth 2 --path /tmp/test-crawl
+
+# Dry-run from a citation
+regula crawl --citation "42 U.S.C. § 1320d" --dry-run --max-depth 1 --path /tmp/test-crawl
+
+# Dry-run with JSON output
+regula crawl --seed us-ca-ccpa --dry-run --max-depth 1 --max-documents 3 --format json --path /tmp/test-crawl
+
+# Live crawl from seed (hits real servers, rate-limited)
+regula crawl --seed us-ca-ccpa --max-depth 1 --max-documents 5 --path /tmp/test-crawl
+
+# Crawl from a URL
+regula crawl --url https://uscode.house.gov/view.xhtml?req=granuleid:USC-prelim-title42-section1320d --max-depth 1 --path /tmp/test-crawl
+
+# Resume an interrupted crawl
+regula crawl --resume --path /tmp/test-crawl
+
+# Restrict to specific domains
+regula crawl --seed us-ca-ccpa --allowed-domains uscode.house.gov,ecfr.gov --max-depth 2 --path /tmp/test-crawl
+
+# Check what was discovered
+regula library list --path /tmp/test-crawl
+regula library status --path /tmp/test-crawl
+
+# Clean up
+rm -rf /tmp/test-crawl
+```
+
+### Crawler Test Coverage
+
+| Test | What it verifies |
+|---|---|
+| `TestResolve_USCCitation` | USC citation → uscode.house.gov URL |
+| `TestResolve_CFRCitation` | CFR citation → ecfr.gov URL |
+| `TestResolve_PublicLaw` | Public Law → congress.gov URL |
+| `TestResolve_CaliforniaCode` | California code → leginfo.legislature.ca.gov URL |
+| `TestResolve_VirginiaCode` | Virginia code → law.lis.virginia.gov URL |
+| `TestResolve_LIIFallback` | LII URL passthrough resolution |
+| `TestResolve_UnrecognizedCitation` | Unknown citations return error |
+| `TestResolveURN_USC` | URN-based USC resolution |
+| `TestResolveURN_CFR` | URN-based CFR resolution |
+| `TestContentFetcher_Success` | HTML fetch + text extraction |
+| `TestContentFetcher_PlainText` | Plain text fetch passthrough |
+| `TestContentFetcher_HTTPError` | 4xx/5xx error handling |
+| `TestContentFetcher_RateLimit` | Per-domain throttling |
+| `TestExtractTextFromHTML_*` | Body extraction, tag stripping, entity decoding |
+| `TestCrawlStateEnqueueDequeue` | FIFO frontier queue ordering |
+| `TestCrawlStateVisited` | Visited set prevents re-enqueue |
+| `TestCrawlStateSaveAndLoad` | JSON state round-trip persistence |
+| `TestCrawlStateWithinLimits` | Document limit enforcement |
+| `TestCrawlerFromURL` | BFS expansion from URL seed |
+| `TestCrawlerDepthLimit` | MaxDepth enforcement |
+| `TestCrawlerDocumentLimit` | MaxDocuments enforcement |
+| `TestCrawlerDeduplication` | Same URL ingested once |
+| `TestCrawlerDryRun` | Plan mode (no fetching) |
+| `TestCrawlerReportFormat` | Table + JSON output formatting |
+| `TestCrawlerProvenance` | Discovery chain RDF triples |
+| `TestCrawlerProvenanceFailure` | Failure recording in triples |
+| `TestMapURN_USSource` | USC/CFR URN mapping in fetch package |
 
 ## Troubleshooting Tests
 

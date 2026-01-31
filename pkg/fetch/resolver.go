@@ -6,6 +6,7 @@ import (
 
 	"github.com/coolbeans/regula/pkg/citation"
 	"github.com/coolbeans/regula/pkg/eurlex"
+	"github.com/coolbeans/regula/pkg/uscode"
 )
 
 // URNMapper translates URN-style identifiers (produced by the reference resolver)
@@ -43,8 +44,14 @@ func (mapper *URNMapper) MapURN(urn string) (string, error) {
 	case strings.HasPrefix(urn, "urn:eu:treaty:"):
 		return "", fmt.Errorf("treaties are not fetchable from EUR-Lex: %s", urn)
 
+	case strings.HasPrefix(urn, "urn:us:usc:"):
+		return mapper.mapUSCDocument(urn)
+
+	case strings.HasPrefix(urn, "urn:us:cfr:"):
+		return mapper.mapCFRDocument(urn)
+
 	case strings.HasPrefix(urn, "urn:us:"):
-		return "", fmt.Errorf("US legislation sources are not yet supported for fetching: %s", urn)
+		return "", fmt.Errorf("unsupported US legislation URN subtype: %s", urn)
 
 	case strings.HasPrefix(urn, "urn:external:"):
 		return "", fmt.Errorf("generic external references are not fetchable: %s", urn)
@@ -91,4 +98,50 @@ func parseEUDocURN(urn string, prefix string) (year string, number string, err e
 	}
 
 	return parts[0], parts[1], nil
+}
+
+// mapUSCDocument maps a USC URN to a fetchable uscode.house.gov URL.
+// Expected format: urn:us:usc:{title}/{section}
+func (mapper *URNMapper) mapUSCDocument(urn string) (string, error) {
+	suffix := strings.TrimPrefix(urn, "urn:us:usc:")
+	if suffix == "" {
+		return "", fmt.Errorf("USC URN has no title/section: %s", urn)
+	}
+
+	parts := strings.SplitN(suffix, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", fmt.Errorf("USC URN has invalid title/section format: %s (expected urn:us:usc:{title}/{section})", urn)
+	}
+
+	uscURI := uscode.USCURI{
+		Title:   parts[0],
+		Section: parts[1],
+	}
+	return uscURI.String(), nil
+}
+
+// mapCFRDocument maps a CFR URN to a fetchable ecfr.gov URL.
+// Expected formats:
+//
+//	urn:us:cfr:{title}/{part}
+//	urn:us:cfr:{title}/{part}/{section}
+func (mapper *URNMapper) mapCFRDocument(urn string) (string, error) {
+	suffix := strings.TrimPrefix(urn, "urn:us:cfr:")
+	if suffix == "" {
+		return "", fmt.Errorf("CFR URN has no title/part: %s", urn)
+	}
+
+	parts := strings.SplitN(suffix, "/", 3)
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return "", fmt.Errorf("CFR URN has invalid format: %s (expected urn:us:cfr:{title}/{part}[/{section}])", urn)
+	}
+
+	cfrURI := uscode.CFRURI{
+		Title: parts[0],
+		Part:  parts[1],
+	}
+	if len(parts) == 3 && parts[2] != "" {
+		cfrURI.Section = parts[2]
+	}
+	return cfrURI.String(), nil
 }

@@ -440,6 +440,30 @@ const (
 	PropExternalDocURI = "reg:externalDocURI"
 )
 
+// Crawl Provenance Properties - Tracking legislation discovery via crawling.
+const (
+	// ClassCrawledDocument represents a document discovered and ingested by the crawler.
+	ClassCrawledDocument = "reg:CrawledDocument"
+
+	// PropCrawlDiscoveredBy records which document led to the discovery of this one.
+	PropCrawlDiscoveredBy = "reg:crawlDiscoveredBy"
+
+	// PropCrawlCitation records the citation text that triggered discovery.
+	PropCrawlCitation = "reg:crawlCitation"
+
+	// PropCrawlDepth records the BFS depth at which the document was discovered.
+	PropCrawlDepth = "reg:crawlDepth"
+
+	// PropCrawlSource records the source domain or URL from which the document was fetched.
+	PropCrawlSource = "reg:crawlSource"
+
+	// PropCrawlStatus records the crawl processing status of this document.
+	PropCrawlStatus = "reg:crawlStatus"
+
+	// PropCrawlFetchedAt records when the crawler fetched this document.
+	PropCrawlFetchedAt = "reg:crawlFetchedAt"
+)
+
 // Legal basis types (for GDPR Article 6).
 const (
 	LegalBasisConsent            = "reg:Consent"
