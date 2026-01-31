@@ -1331,6 +1331,72 @@ rm -rf /tmp/test-crawl
 | `TestCrawlerProvenanceFailure` | Failure recording in triples |
 | `TestMapURN_USSource` | USC/CFR URN mapping in fetch package |
 
+## Bulk Download & Ingest Tests
+
+### Unit Tests
+
+Run all bulk package tests:
+
+```bash
+go test ./pkg/bulk/... -v -count=1
+```
+
+Test files cover:
+- `types_test.go` — Source resolution, config defaults
+- `manifest_test.go` — JSON manifest save/load, record tracking
+- `downloader_test.go` — HTTP download with httptest, ZIP/tar.gz extraction, resume, path traversal protection
+- `uscode_test.go` — 54-title dataset listing, download to local path
+- `cfr_test.go` — 50-title listing, configurable year, download
+- `california_test.go` — 30-code listing, HTML text extraction, branch URL parsing
+- `archive_test.go` — Best file selection, jurisdiction extraction from IA identifiers
+- `xmlparse_test.go` — USLM and CFR XML parsing, plaintext conversion
+- `ingest_test.go` — Document ID derivation, AddOptions generation, title filtering
+- `report_test.go` — Byte formatting, dataset tables, ingest/status reports
+
+| Test | Purpose |
+|------|---------|
+| `TestManifestSaveAndLoad` | JSON manifest round-trip persistence |
+| `TestDownloadFile` | HTTP GET streaming with progress callbacks |
+| `TestDownloadFileSkipsExisting` | Resume support (skip existing files) |
+| `TestExtractZIP` | ZIP extraction with nested directories |
+| `TestExtractZIPPathTraversal` | Path traversal attack prevention |
+| `TestExtractTarGZ` | tar.gz extraction |
+| `TestParseUSLMXML` | USLM XML struct deserialization |
+| `TestParseCFRXML` | CFR XML struct deserialization |
+| `TestUSLMToPlaintext` | USLM → plaintext with chapters/sections |
+| `TestCFRToPlaintext` | CFR → plaintext with parts/subparts |
+| `TestExtractCaliforniaText` | HTML tag stripping and entity decoding |
+| `TestExtractBranchURLs` | TOC link extraction with deduplication |
+| `TestFindBestArchiveFile` | IA file selection priority (tar.gz > zip > xml > txt) |
+| `TestExtractJurisdictionFromID` | State code extraction from IA identifiers |
+| `TestDeriveDocumentID` | Source-specific document ID mapping |
+| `TestMatchesTitleFilter` | Case-insensitive title filtering |
+
+### CLI Manual Testing
+
+```bash
+# List datasets
+regula bulk list uscode
+regula bulk list cfr
+regula bulk list california
+
+# Dry-run download (no network requests)
+regula bulk download uscode --titles 04 --dry-run
+regula bulk download cfr --titles 1 --dry-run
+
+# Download a small title for local testing
+regula bulk download uscode --titles 04
+
+# Check download status
+regula bulk status
+
+# Ingest downloaded files (dry run)
+regula bulk ingest --source uscode --titles 04 --dry-run
+
+# Ingest downloaded files
+regula bulk ingest --source uscode --titles 04
+```
+
 ## Troubleshooting Tests
 
 ### Common Issues

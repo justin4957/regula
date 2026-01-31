@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/coolbeans/regula/pkg/analysis"
+	"github.com/coolbeans/regula/pkg/bulk"
 	"github.com/coolbeans/regula/pkg/crawler"
 	"github.com/coolbeans/regula/pkg/eurlex"
 	"github.com/coolbeans/regula/pkg/extract"
@@ -63,6 +64,7 @@ It ingests regulatory documents and produces:
 	rootCmd.AddCommand(refsCmd())
 	rootCmd.AddCommand(libraryCmd())
 	rootCmd.AddCommand(crawlCmd())
+	rootCmd.AddCommand(bulkCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -2838,6 +2840,327 @@ or exhausts all discoverable references.`,
 	cmd.Flags().String("allowed-domains", "", "Comma-separated list of allowed domains")
 	cmd.Flags().String("rate-limit", "3s", "Minimum interval between requests per domain")
 	cmd.Flags().String("format", "table", "Output format (table, json)")
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+
+	return cmd
+}
+
+func bulkCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "bulk",
+		Short: "Bulk download and ingest legislation from official sources",
+		Long: `Download and ingest legislation data in bulk from 4 official sources:
+
+  uscode      US Code XML from uscode.house.gov (54 titles)
+  cfr         Code of Federal Regulations from govinfo.gov (50 titles)
+  california  California codes from leginfo.legislature.ca.gov (30 codes)
+  archive     State code archives from Internet Archive govlaw collection
+
+Workflow:
+  1. regula bulk list <source>          List available datasets
+  2. regula bulk download <source>      Download archives to .regula/downloads/
+  3. regula bulk ingest --source <src>  Parse downloaded files and add to library
+  4. regula bulk status                 Check download/ingest progress`,
+	}
+
+	cmd.AddCommand(bulkListCmd())
+	cmd.AddCommand(bulkDownloadCmd())
+	cmd.AddCommand(bulkIngestCmd())
+	cmd.AddCommand(bulkStatusCmd())
+
+	return cmd
+}
+
+func bulkListCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "list <source>",
+		Short: "List available datasets from a bulk source",
+		Long: `List all available datasets from a bulk legislation source.
+
+Sources: uscode, cfr, california, archive
+
+Examples:
+  regula bulk list uscode         List all 54 US Code titles
+  regula bulk list cfr            List all 50 CFR titles
+  regula bulk list california     List all 30 California codes
+  regula bulk list archive        List Internet Archive govlaw items`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sourceName := args[0]
+			yearFlag, _ := cmd.Flags().GetString("year")
+
+			downloadConfig := bulk.DefaultDownloadConfig()
+			if yearFlag != "" {
+				downloadConfig.CFRYear = yearFlag
+			}
+
+			source, err := bulk.ResolveSource(sourceName, downloadConfig)
+			if err != nil {
+				return err
+			}
+
+			fmt.Fprintf(os.Stderr, "Listing datasets from %s: %s\n\n", source.Name(), source.Description())
+
+			datasets, err := source.ListDatasets()
+			if err != nil {
+				return fmt.Errorf("failed to list datasets: %w", err)
+			}
+
+			fmt.Print(bulk.FormatDatasetTable(datasets))
+			return nil
+		},
+	}
+
+	cmd.Flags().String("year", "", "CFR edition year (default: 2024)")
+
+	return cmd
+}
+
+func bulkDownloadCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "download <source>",
+		Short: "Download legislation archives from a bulk source",
+		Long: `Download legislation data from a bulk source to .regula/downloads/.
+
+Files are downloaded with resume support: existing files are skipped.
+A manifest.json tracks all completed downloads.
+
+Sources: uscode, cfr, california, archive
+
+Examples:
+  regula bulk download uscode                     Download all 54 USC title ZIPs
+  regula bulk download uscode --titles 42,26      Download specific titles
+  regula bulk download cfr --year 2024            Download all CFR for 2024
+  regula bulk download california --titles CIV,PEN Download specific CA codes
+  regula bulk download uscode --dry-run           Show what would be downloaded`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sourceName := args[0]
+			titlesFlag, _ := cmd.Flags().GetString("titles")
+			yearFlag, _ := cmd.Flags().GetString("year")
+			rateLimitFlag, _ := cmd.Flags().GetString("rate-limit")
+			dryRunFlag, _ := cmd.Flags().GetBool("dry-run")
+			libraryPath, _ := cmd.Flags().GetString("path")
+
+			downloadConfig := bulk.DefaultDownloadConfig()
+			downloadConfig.DownloadDirectory = filepath.Join(libraryPath, "downloads")
+			downloadConfig.DryRun = dryRunFlag
+
+			if yearFlag != "" {
+				downloadConfig.CFRYear = yearFlag
+			}
+			if rateLimitFlag != "" {
+				parsedDuration, err := time.ParseDuration(rateLimitFlag)
+				if err != nil {
+					return fmt.Errorf("invalid rate limit %q: %w", rateLimitFlag, err)
+				}
+				downloadConfig.RateLimit = parsedDuration
+			}
+			if titlesFlag != "" {
+				downloadConfig.TitleFilter = strings.Split(titlesFlag, ",")
+			}
+
+			source, err := bulk.ResolveSource(sourceName, downloadConfig)
+			if err != nil {
+				return err
+			}
+
+			fmt.Fprintf(os.Stderr, "Source: %s — %s\n", source.Name(), source.Description())
+
+			datasets, err := source.ListDatasets()
+			if err != nil {
+				return fmt.Errorf("failed to list datasets: %w", err)
+			}
+
+			// Apply title filter
+			if len(downloadConfig.TitleFilter) > 0 {
+				var filteredDatasets []bulk.Dataset
+				for _, dataset := range datasets {
+					for _, filterTitle := range downloadConfig.TitleFilter {
+						if strings.Contains(
+							strings.ToLower(dataset.Identifier),
+							strings.ToLower(strings.TrimSpace(filterTitle))) {
+							filteredDatasets = append(filteredDatasets, dataset)
+							break
+						}
+					}
+				}
+				datasets = filteredDatasets
+			}
+
+			if len(datasets) == 0 {
+				fmt.Fprintln(os.Stderr, "No datasets match the filter.")
+				return nil
+			}
+
+			if dryRunFlag {
+				fmt.Fprintf(os.Stderr, "\nDry run: would download %d datasets\n\n", len(datasets))
+				fmt.Print(bulk.FormatDatasetTable(datasets))
+				return nil
+			}
+
+			downloader, err := bulk.NewDownloader(downloadConfig)
+			if err != nil {
+				return fmt.Errorf("failed to initialize downloader: %w", err)
+			}
+
+			fmt.Fprintf(os.Stderr, "\nDownloading %d datasets to %s\n\n", len(datasets), downloadConfig.DownloadDirectory)
+
+			var downloadedCount, skippedCount, failedCount int
+			for datasetIndex, dataset := range datasets {
+				fmt.Fprintf(os.Stderr, "[%d/%d] %s\n", datasetIndex+1, len(datasets), dataset.DisplayName)
+
+				result, err := source.DownloadDataset(dataset, downloader)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "  ERROR: %v\n", err)
+					failedCount++
+					continue
+				}
+				if result.Skipped {
+					fmt.Fprintf(os.Stderr, "  Skipped (already downloaded: %s)\n", bulk.FormatBytes(result.BytesWritten))
+					skippedCount++
+				} else {
+					fmt.Fprintf(os.Stderr, "  Downloaded: %s\n", bulk.FormatBytes(result.BytesWritten))
+					downloadedCount++
+				}
+			}
+
+			fmt.Fprintf(os.Stderr, "\nDone: %d downloaded, %d skipped, %d failed (of %d total)\n",
+				downloadedCount, skippedCount, failedCount, len(datasets))
+			return nil
+		},
+	}
+
+	cmd.Flags().String("titles", "", "Comma-separated title/code filter (e.g., '42,26' or 'CIV,PEN')")
+	cmd.Flags().String("year", "", "CFR edition year (default: 2024)")
+	cmd.Flags().String("rate-limit", "", "Minimum interval between requests per domain (default: 3s)")
+	cmd.Flags().Bool("dry-run", false, "Show what would be downloaded without fetching")
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+
+	return cmd
+}
+
+func bulkIngestCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ingest",
+		Short: "Ingest downloaded bulk data into the library",
+		Long: `Parse downloaded bulk legislation files and add them to the library.
+
+Downloads must be completed first via 'regula bulk download'.
+Each downloaded file is parsed (XML, text, or archive) and ingested
+as a library document with extracted RDF triples.
+
+Examples:
+  regula bulk ingest --source uscode              Ingest downloaded USC files
+  regula bulk ingest --source cfr                 Ingest downloaded CFR files
+  regula bulk ingest --source california          Ingest California codes
+  regula bulk ingest --all                        Ingest all downloaded sources
+  regula bulk ingest --source uscode --titles 42  Ingest specific title
+  regula bulk ingest --dry-run --all              Show what would be ingested
+  regula bulk ingest --force --source uscode      Re-ingest even if already in library`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sourceFilter, _ := cmd.Flags().GetString("source")
+			allSources, _ := cmd.Flags().GetBool("all")
+			titlesFlag, _ := cmd.Flags().GetString("titles")
+			forceFlag, _ := cmd.Flags().GetBool("force")
+			dryRunFlag, _ := cmd.Flags().GetBool("dry-run")
+			formatFlag, _ := cmd.Flags().GetString("format")
+			libraryPath, _ := cmd.Flags().GetString("path")
+
+			if sourceFilter == "" && !allSources {
+				return fmt.Errorf("specify --source <name> or --all")
+			}
+
+			downloadDirectory := filepath.Join(libraryPath, "downloads")
+
+			ingestConfig := bulk.IngestConfig{
+				LibraryPath:       libraryPath,
+				DownloadDirectory: downloadDirectory,
+				SourceFilter:      sourceFilter,
+				Force:             forceFlag,
+				DryRun:            dryRunFlag,
+				BaseURI:           "https://regula.dev/regulations/",
+			}
+			if titlesFlag != "" {
+				ingestConfig.TitleFilter = strings.Split(titlesFlag, ",")
+			}
+
+			// Open or initialize library
+			lib, err := library.Open(libraryPath)
+			if err != nil {
+				lib, err = library.Init(libraryPath, ingestConfig.BaseURI)
+				if err != nil {
+					return fmt.Errorf("failed to open library at %s: %w", libraryPath, err)
+				}
+			}
+
+			ingester := bulk.NewBulkIngester(ingestConfig, lib)
+
+			var report *bulk.IngestReport
+
+			if allSources {
+				fmt.Fprintf(os.Stderr, "Ingesting all downloaded sources from %s\n", downloadDirectory)
+				report, err = ingester.IngestAll(downloadDirectory)
+			} else {
+				fmt.Fprintf(os.Stderr, "Ingesting source %q from %s\n", sourceFilter, downloadDirectory)
+				report, err = ingester.IngestSource(sourceFilter, downloadDirectory)
+			}
+
+			if err != nil {
+				return fmt.Errorf("ingest failed: %w", err)
+			}
+
+			switch formatFlag {
+			case "json":
+				fmt.Print(bulk.FormatIngestReportJSON(report))
+			default:
+				fmt.Print(bulk.FormatIngestReport(report))
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("source", "", "Source to ingest (uscode, cfr, california, archive)")
+	cmd.Flags().Bool("all", false, "Ingest all downloaded sources")
+	cmd.Flags().String("titles", "", "Comma-separated title filter (e.g., '42,26')")
+	cmd.Flags().Bool("force", false, "Re-ingest documents even if already in library")
+	cmd.Flags().Bool("dry-run", false, "Show what would be ingested without adding to library")
+	cmd.Flags().String("format", "table", "Output format (table, json)")
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+
+	return cmd
+}
+
+func bulkStatusCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show bulk download and ingest status",
+		Long: `Display the current state of bulk downloads and ingestion.
+
+Shows per-source download counts, file sizes, and timestamps.
+
+Examples:
+  regula bulk status                  Show all download status
+  regula bulk status --source uscode  Show status for USC only`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sourceFilter, _ := cmd.Flags().GetString("source")
+			libraryPath, _ := cmd.Flags().GetString("path")
+
+			downloadDirectory := filepath.Join(libraryPath, "downloads")
+			manifestPath := filepath.Join(downloadDirectory, "manifest.json")
+
+			manifest, err := bulk.LoadManifest(manifestPath)
+			if err != nil {
+				return fmt.Errorf("failed to load download manifest: %w", err)
+			}
+
+			fmt.Print(bulk.FormatStatusReport(manifest, sourceFilter))
+			return nil
+		},
+	}
+
+	cmd.Flags().String("source", "", "Filter status to a specific source")
 	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
 
 	return cmd
