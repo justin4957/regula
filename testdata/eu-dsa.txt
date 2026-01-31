@@ -1,0 +1,517 @@
+REGULATION (EU) 2022/2065 OF THE EUROPEAN PARLIAMENT AND OF THE COUNCIL
+
+of 19 October 2022
+
+on a Single Market For Digital Services and amending Directive 2000/31/EC
+(Digital Services Act)
+
+(Text with EEA relevance)
+
+THE EUROPEAN PARLIAMENT AND THE COUNCIL OF THE EUROPEAN UNION,
+
+Having regard to the Treaty on the Functioning of the European Union,
+and in particular Article 114 thereof,
+
+Having regard to the proposal from the European Commission,
+
+After transmission of the draft legislative act to the national
+parliaments,
+
+Having regard to the opinion of the European Economic and Social
+Committee,
+
+Having regard to the opinion of the Committee of the Regions,
+
+Acting in accordance with the ordinary legislative procedure,
+
+Whereas:
+
+(1) Information society services and especially intermediary services have
+become an important part of the Union's economy and the daily life of
+Union citizens. Twenty years after the adoption of the existing legal
+framework applicable to such services laid down in Directive 2000/31/EC
+of the European Parliament and of the Council, new and innovative business
+models and services, such as online social networks and online platforms
+allowing consumers to conclude distance contracts with traders, have
+allowed business users and consumers to impart and access information and
+engage in transactions in novel ways.
+
+(2) A majority of Union citizens use intermediary services on a daily basis.
+The digital transformation and the increased use of those services have
+also created new risks and challenges, both for individual users and for
+society as a whole.
+
+(3) Responsible and diligent behaviour by providers of intermediary
+services is essential for a safe, predictable and trusted online
+environment, and for allowing Union citizens and other persons to exercise
+their fundamental rights guaranteed in the Charter of Fundamental Rights
+of the European Union, in particular the freedom of expression and
+information, the freedom to conduct a business, the right to
+non-discrimination and the achievement of a high level of consumer
+protection.
+
+(4) Therefore, in order to safeguard and improve the functioning of the
+internal market, a targeted set of uniform, effective and proportionate
+mandatory rules should be established at Union level. This Regulation
+provides the conditions for innovative digital services to emerge and to
+scale up in the internal market. The approximation of national regulatory
+measures at Union level concerning the requirements for providers of
+intermediary services is necessary in order to avoid and put an end to
+fragmentation of the internal market.
+
+(5) This Regulation should apply to providers of certain information
+society services as defined in Directive (EU) 2015/1535 of the European
+Parliament and of the Council, that is to say, any service normally
+provided for remuneration, at a distance, by electronic means and at the
+individual request of a recipient of the service.
+
+(6) In practice, this Regulation should apply to providers of intermediary
+services, in particular intermediary services known as mere conduit,
+caching and hosting services, given that the exponential growth of the
+use of those services, mainly for all kinds of lawful purposes and
+societal activities, has also increased their role in the intermediation
+and spread of unlawful or otherwise harmful information and activities.
+
+CHAPTER I
+
+General provisions
+
+Article 1
+
+Subject matter
+
+1.   This Regulation lays down harmonised rules for a safe, predictable
+and trusted online environment that facilitates innovation and in which
+fundamental rights enshrined in the Charter, including the principle of
+consumer protection, are effectively protected.
+
+2.   This Regulation establishes:
+
+(a) a framework for the conditional exemption from liability of providers
+of intermediary services;
+
+(b) rules on specific due diligence obligations tailored to certain
+specific categories of providers of intermediary services;
+
+(c) rules on the implementation and enforcement of this Regulation,
+including as regards the cooperation of and coordination between the
+competent authorities.
+
+Article 2
+
+Scope
+
+1.   This Regulation applies to intermediary services offered to recipients
+of the service who have their place of establishment or are located in the
+Union, irrespective of the place of establishment of the providers of
+those intermediary services.
+
+2.   This Regulation does not apply to any service that is not an
+intermediary service or to any requirements imposed in respect of such a
+service, irrespective of whether the service is provided through the use
+of an intermediary service.
+
+3.   This Regulation does not affect the application of Directive
+2000/31/EC.
+
+4.   This Regulation is without prejudice to the rules laid down by other
+Union legal acts regulating other aspects of the provision of intermediary
+services in the internal market or specifying and complementing this
+Regulation, in particular, the following:
+
+(a) Directive 2010/13/EU;
+
+(b) Union law on copyright and related rights;
+
+(c) Regulation (EU) 2021/784;
+
+(d) Regulation (EU) 2019/1148;
+
+(e) Regulation (EU) 2019/1150;
+
+(f) Union law on consumer protection and product safety, including
+Regulation (EU) 2017/2394 and Directive 2001/95/EC as well as Directive
+2005/29/EC;
+
+(g) Union law on the protection of personal data, in particular Regulation
+(EU) 2016/679 and Directive 2002/58/EC;
+
+(h) Union law in the field of judicial cooperation in civil matters, in
+particular Regulation (EU) No 1215/2012 or any Union legal act laying down
+the rules on law applicable to contractual and non-contractual obligations;
+
+(i) Regulation (EU) 2022/2560;
+
+(j) Regulation (EU) 2022/1925;
+
+(k) Directive (EU) 2019/882.
+
+Article 3
+
+Definitions
+
+For the purpose of this Regulation, the following definitions apply:
+
+(a) 'information society service' means a service within the meaning of
+Article 1(1), point (b), of Directive (EU) 2015/1535;
+
+(b) 'recipient of the service' means any natural or legal person who uses
+an intermediary service, in particular for the purposes of seeking
+information or making it accessible;
+
+(c) 'consumer' means any natural person who is acting for purposes which
+are outside that person's trade, business, craft or profession;
+
+(d) 'to offer services in the Union' means enabling natural or legal
+persons in one or more Member States to use the services of the provider
+of intermediary services that has a substantial connection to the Union;
+
+(e) 'intermediary service' means one of the following information society
+services:
+
+(i) a 'mere conduit' service, consisting of the transmission in a
+communication network of information provided by a recipient of the
+service, or the provision of access to a communication network;
+
+(ii) a 'caching' service, consisting of the transmission in a
+communication network of information provided by a recipient of the
+service, involving the automatic, intermediate and temporary storage of
+that information, performed for the sole purpose of making more efficient
+the information's onward transmission to other recipients upon their
+request;
+
+(iii) a 'hosting' service, consisting of the storage of information
+provided by, and at the request of, a recipient of the service;
+
+(f) 'illegal content' means any information that, in itself or in relation
+to an activity, including the sale of products or the provision of
+services, is not in compliance with Union law or the law of any Member
+State which is in compliance with Union law, irrespective of the precise
+subject matter or nature of that law;
+
+(g) 'online platform' means a hosting service that, at the request of a
+recipient of the service, stores and disseminates information to the public,
+unless that activity is a minor and purely ancillary feature of another
+service or a minor functionality of the principal service and, for
+objective and technical reasons, cannot be used without that other service,
+and the integration of the feature or functionality into the other service
+is not a means to circumvent the applicability of this Regulation;
+
+(h) 'online search engine' means an intermediary service that allows users
+to input queries in order to perform searches of, in principle, all
+websites, or all websites in a particular language, on the basis of a
+query on any subject in the form of a keyword, voice request, phrase or
+other input, and returns results in any format in which information
+related to the requested content can be found;
+
+(i) 'very large online platform' means an online platform which has a
+number of average monthly active recipients of the service in the Union
+equal to or above 45 million, and which is designated pursuant to Article 33;
+
+(j) 'very large online search engine' means an online search engine which
+has a number of average monthly active recipients of the service in the
+Union equal to or above 45 million, and which is designated pursuant to
+Article 33;
+
+(k) 'editorial content' means content that the provider of an intermediary
+service or the provider of an online platform initiates, selects or
+otherwise exercises control over;
+
+(l) 'terms and conditions' means all clauses, irrespective of their name
+or form, which govern the contractual relationship between the provider
+of intermediary services and the recipients of the service;
+
+(m) 'persons with disabilities' means 'persons with disabilities' as
+referred to in Article 3, point (1), of Directive (EU) 2019/882;
+
+(n) 'commercial communication' means information designed to promote,
+directly or indirectly, the goods, services or image of a natural or
+legal person pursuing a trade, business, craft or profession;
+
+(o) 'turnover' means the amount derived by an undertaking within the
+meaning of Article 5(1) of Council Regulation (EC) No 139/2004.
+
+CHAPTER III
+
+Due diligence obligations for a transparent and safe online environment
+
+Section 1
+
+Provisions applicable to all providers of intermediary services
+
+Article 14
+
+Terms and conditions
+
+1.   Providers of intermediary services shall include information on any
+restrictions that they impose in relation to the use of their service in
+respect of information provided by the recipients of the service, in their
+terms and conditions. That information shall include information on any
+policies, procedures, measures and tools used for the purpose of content
+moderation, including algorithmic decision-making and human review, as well
+as the rules of procedure of their internal complaint handling system.
+
+2.   Providers of intermediary services shall act in a diligent, objective
+and proportionate manner in applying and enforcing the restrictions
+referred to in paragraph 1, with due regard to the rights and legitimate
+interests of all parties involved, including the fundamental rights of the
+recipients of the service, such as the freedom of expression, freedom and
+pluralism of the media, and other fundamental rights and freedoms as
+enshrined in the Charter.
+
+3.   Providers of very large online platforms and of very large online
+search engines shall provide recipients of the service with a concise,
+easily-accessible and machine-readable summary of the terms and conditions,
+including the available remedies and redress mechanisms, in clear and
+unambiguous language.
+
+4.   Providers of intermediary services shall inform the recipients of the
+service of any significant change to the terms and conditions.
+
+5.   Where the terms and conditions of an intermediary service are changed,
+the provider shall notify the recipients of the service before the changes
+take effect.
+
+Article 15
+
+Transparency reporting obligations for providers of intermediary services
+
+1.   Providers of intermediary services shall make publicly available, in a
+machine-readable format and in an easily accessible manner, at least once
+a year, clear and easily comprehensible reports on any content moderation
+that they engaged in during the relevant period. Those reports shall
+include, in particular, information on the following, as applicable:
+
+(a) for providers of intermediary services, the number of orders received
+from Member States' authorities, categorised by the type of illegal
+content concerned, including orders issued in accordance with Articles 9
+and 10, and the median time needed for informing the authority issuing the
+order or any other authority specified in the order about its receipt, and
+the effect given to the order;
+
+(b) for providers of hosting services, the number of notices submitted in
+accordance with Article 16, categorised by the type of alleged illegal
+content concerned, the number of notices submitted by trusted flaggers,
+any action taken pursuant to the notices by differentiating whether the
+action was taken on the basis of the law or the terms and conditions of
+the provider, and the median time needed for taking the action;
+
+(c) for providers of intermediary services, meaningful and comprehensible
+information about the content moderation engaged in at the provider's own
+initiative, including the use of automated tools, the measures taken to
+provide training and assistance to persons responsible for content
+moderation, and the number and type of measures taken that affect the
+availability, visibility and accessibility of information provided by the
+recipients of the service and the recipients' ability to provide
+information, categorised by the type of reason and type of content
+concerned;
+
+(d) for providers of intermediary services, the number of complaints
+received through the internal complaint handling systems referred to in
+Article 20, the basis for those complaints, decisions taken in respect of
+those complaints, the median time needed for taking those decisions and
+the number of instances where those decisions were reversed.
+
+Article 16
+
+Notice and action mechanisms
+
+1.   Providers of hosting services shall put in place mechanisms to allow
+any individual or entity to notify them of the presence on their service
+of specific items of information that the individual or entity considers
+to be illegal content. Those mechanisms shall be easy to access, user-
+friendly, and allow for the submission of notices exclusively by electronic
+means.
+
+2.   The mechanisms referred to in paragraph 1 shall be such as to
+facilitate the submission of sufficiently precise and adequately
+substantiated notices. To that end, the providers of hosting services
+shall take the necessary measures to enable and facilitate the submission
+of notices containing all of the following elements:
+
+(a) a sufficiently substantiated explanation of the reasons why the
+individual or entity alleges the information in question to be illegal
+content;
+
+(b) a clear indication of the exact electronic location of that
+information, such as the exact URL or URLs, and, where necessary,
+additional information enabling the identification of the illegal content
+adapted to the type of content and to the specific type of hosting service;
+
+(c) the name and email address of the individual or entity submitting the
+notice, except in the case of information considered to involve one of the
+offences referred to in Articles 3 to 7 of Directive 2011/93/EU;
+
+(d) a statement confirming the bona fide belief of the individual or
+entity submitting the notice that the information and allegations contained
+therein are accurate and complete.
+
+Section 4
+
+Additional obligations for providers of very large online platforms and of
+very large online search engines to manage systemic risks
+
+Article 33
+
+Designation of very large online platforms and of very large online
+search engines
+
+1.   The Commission shall designate very large online platforms and very
+large online search engines.
+
+2.   The Commission shall adopt a delegated act, after consulting the
+Board, to adjust the average number of monthly active recipients of the
+service in the Union referred to in Article 2, points (i) and (j), where
+the Union's population increases or decreases by at least 5 % in relation
+to the population at the time of the adoption of this Regulation.
+
+Article 34
+
+Risk assessment
+
+1.   Providers of very large online platforms and of very large online
+search engines shall diligently identify, analyse and assess any systemic
+risks in the Union stemming from the design, functioning and use, including
+possible misuse, of their services, including by any algorithmic systems
+used in the provision of their services. They shall carry out the risk
+assessments by the date of application referred to in Article 33(6) and at
+least once a year thereafter. The risk assessment shall be specific to their
+services. The systemic risks shall include the following:
+
+(a) the dissemination of illegal content through their services;
+
+(b) any actual or foreseeable negative effects for the exercise of
+fundamental rights, in particular the fundamental rights to human dignity
+enshrined in Article 1 of the Charter, to respect for private and family
+life enshrined in Article 7 of the Charter, to the protection of personal
+data enshrined in Article 8 of the Charter, to freedom of expression and
+information, including the freedom and pluralism of the media, enshrined in
+Article 11 of the Charter, to non-discrimination enshrined in Article 21
+of the Charter, to respect for the rights of the child enshrined in
+Article 24 of the Charter, and to a high level of consumer protection
+enshrined in Article 38 of the Charter;
+
+(c) any actual or foreseeable negative effects on civic discourse and
+electoral processes, and public security;
+
+(d) any actual or foreseeable negative effects in relation to gender-based
+violence, the protection of public health and minors and serious negative
+consequences to the person's physical and mental well-being.
+
+2.   When conducting risk assessments, providers of very large online
+platforms and of very large online search engines shall take into account,
+in particular, whether and how any of the following factors influence any
+of the systemic risks referred to in paragraph 1:
+
+(a) the design of their recommender systems and any other relevant
+algorithmic system;
+
+(b) their content moderation systems;
+
+(c) the applicable terms and conditions and their enforcement;
+
+(d) systems for selecting and presenting advertisements;
+
+(e) data-related practices of the provider.
+
+Article 35
+
+Mitigation of risks
+
+1.   Providers of very large online platforms and of very large online
+search engines shall put in place reasonable, proportionate and effective
+mitigation measures, tailored to the specific systemic risks identified
+pursuant to Article 34, with particular consideration to the impacts of
+such measures on fundamental rights.
+
+2.   Such measures may include the following:
+
+(a) adapting the design, features or functioning of their services,
+including their online interfaces;
+
+(b) adapting their terms and conditions and their enforcement;
+
+(c) adapting content moderation processes, including the speed and quality
+of processing notices related to specific types of illegal content and,
+where appropriate, the expeditious removal of, or the disabling of access
+to, the content notified, in particular with regard to illegal hate speech;
+
+(d) testing and adapting their algorithmic systems, including their
+recommender systems;
+
+(e) adapting their advertising systems and adopting targeted measures
+aimed at limiting or adjusting the presentation of advertisements in
+association with the service they provide;
+
+(f) reinforcing the internal processes, resources, testing, documentation
+or oversight of any of their activities, in particular as regards
+detection of systemic risk;
+
+(g) initiating or adjusting cooperation with trusted flaggers in
+accordance with Article 22 and the implementation of the decisions of
+out-of-court dispute settlement bodies in accordance with Article 21;
+
+(h) initiating or adjusting cooperation with other providers of
+intermediary services through the codes of conduct and the crisis
+protocols referred to in Articles 45 and 48, respectively;
+
+(i) taking awareness-raising measures and adapting their online interface
+in order to give recipients of the service more information;
+
+(j) taking targeted measures to protect the rights of the child, including
+age verification and parental control tools, tools aimed at helping minors
+signal abuse or obtain support, as applicable;
+
+(k) ensuring that an item of information, whether it constitutes a
+generated or manipulated image, audio or video that appreciably resembles
+existing persons, objects, places or other entities or events and falsely
+appears to a person to be authentic or truthful, is distinguishable through
+prominent markings when it is presented on their online interfaces, and,
+in addition, providing an easy to use functionality which enables
+recipients of the service to indicate such information.
+
+CHAPTER VII
+
+Penalties
+
+Article 49
+
+Penalties
+
+1.   Member States shall lay down the rules on penalties applicable to
+infringements of this Regulation by providers of intermediary services
+under their jurisdiction and shall take all measures necessary to ensure
+that they are implemented. The penalties provided for shall be effective,
+proportionate and dissuasive.
+
+2.   Member States shall, by 17 February 2024, notify those rules and
+measures to the Commission and shall notify it, without delay, of any
+subsequent amendment affecting them.
+
+3.   Member States shall ensure that the maximum amount of penalties
+imposed for a failure to comply with an obligation laid down in this
+Regulation shall be 6 % of the annual worldwide turnover of the provider
+of intermediary services concerned in the preceding financial year.
+
+4.   Member States shall ensure that the maximum amount of a penalty
+imposed for the supply of incorrect, incomplete or misleading information,
+failure to reply or rectify incorrect, incomplete or misleading information
+and failure to submit to an inspection shall be 1 % of the annual income
+or worldwide turnover of the provider of intermediary services or person
+concerned in the preceding financial year.
+
+Article 51
+
+Exercise of the power of the Digital Services Coordinator of establishment
+and monitoring thereof
+
+1.   Where a Digital Services Coordinator of establishment considers, based
+on the information at its disposal, that a provider of intermediary
+services infringes this Regulation, it shall request the provider concerned
+to put an end to the infringement within a reasonable period.
+
+2.   Where the provider of intermediary services fails to comply with the
+request referred to in paragraph 1, the Digital Services Coordinator of
+establishment may, where appropriate, having regard to all relevant
+circumstances, impose penalties, including periodic penalty payments, to
+bring the infringement to an end without undue delay.

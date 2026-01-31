@@ -57,6 +57,8 @@ It ingests regulatory documents and produces:
 	rootCmd.AddCommand(simulateCmd())
 	rootCmd.AddCommand(auditCmd())
 	rootCmd.AddCommand(exportCmd())
+	rootCmd.AddCommand(compareCmd())
+	rootCmd.AddCommand(refsCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -1705,6 +1707,17 @@ Example:
 					}
 				}
 
+				if summary.ExternalRefCount > 0 {
+					fmt.Printf("\nExternal References: %d total, %d unique targets\n",
+						summary.ExternalRefCount, len(summary.ExternalRefTargets))
+					if len(summary.TopExternalTargets) > 0 {
+						fmt.Println("\nTop External Reference Targets:")
+						for _, ext := range summary.TopExternalTargets {
+							fmt.Printf("  %-40s %d\n", ext.Target, ext.Count)
+						}
+					}
+				}
+
 			default:
 				return fmt.Errorf("unknown format: %s (use json, dot, turtle, jsonld, rdfxml, or summary)", formatStr)
 			}
@@ -1721,6 +1734,315 @@ Example:
 	cmd.Flags().Bool("expanded", false, "Output expanded JSON-LD (full URIs, no @context) instead of compact form")
 
 	return cmd
+}
+
+func compareCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "compare",
+		Short: "Compare multiple regulation documents",
+		Long: `Compare two or more regulation documents to find shared definitions,
+rights, obligations, and external reference targets.
+
+Outputs structural comparison, concept overlaps, and external reference analysis.
+
+Example:
+  regula compare --sources testdata/gdpr.txt,testdata/ccpa.txt
+  regula compare --sources testdata/gdpr.txt,testdata/ccpa.txt --format json
+  regula compare --sources testdata/gdpr.txt,testdata/ccpa.txt,testdata/eu-ai-act.txt --format dot --output comparison.dot`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sourcesStr, _ := cmd.Flags().GetString("sources")
+			formatStr, _ := cmd.Flags().GetString("format")
+			output, _ := cmd.Flags().GetString("output")
+
+			if sourcesStr == "" {
+				return fmt.Errorf("--sources flag is required (comma-separated list of document paths)")
+			}
+
+			sources := strings.Split(sourcesStr, ",")
+			if len(sources) < 2 {
+				return fmt.Errorf("at least 2 source documents are required for comparison")
+			}
+
+			// Trim whitespace from paths
+			for i := range sources {
+				sources[i] = strings.TrimSpace(sources[i])
+			}
+
+			fmt.Printf("Comparing %d documents...\n\n", len(sources))
+			startTime := time.Now()
+
+			crossRefAnalyzer := analysis.NewCrossRefAnalyzer()
+
+			// Ingest each document into its own store
+			for _, sourcePath := range sources {
+				if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
+					return fmt.Errorf("source file not found: %s", sourcePath)
+				}
+
+				file, err := os.Open(sourcePath)
+				if err != nil {
+					return fmt.Errorf("failed to open %s: %w", sourcePath, err)
+				}
+
+				parser := extract.NewParser()
+				doc, err := parser.Parse(file)
+				file.Close()
+				if err != nil {
+					return fmt.Errorf("failed to parse %s: %w", sourcePath, err)
+				}
+
+				docStore := store.NewTripleStore()
+				baseURI := "https://regula.dev/regulations/"
+				builder := store.NewGraphBuilder(docStore, baseURI)
+				defExtractor := extract.NewDefinitionExtractor()
+				refExtractor := extract.NewReferenceExtractor()
+				semExtractor := extract.NewSemanticExtractor()
+
+				docID := extractDocID(sourcePath)
+				resolver := extract.NewReferenceResolver(baseURI, docID)
+				resolver.IndexDocument(doc)
+
+				_, err = builder.BuildComplete(doc, defExtractor, refExtractor, resolver, semExtractor)
+				if err != nil {
+					return fmt.Errorf("failed to build graph for %s: %w", sourcePath, err)
+				}
+
+				label := doc.Title
+				if label == "" {
+					label = docID
+				}
+				crossRefAnalyzer.AddDocument(docID, label, docStore)
+				fmt.Printf("  Loaded %s: %d triples\n", docID, docStore.Count())
+			}
+
+			fmt.Printf("\nAnalysis completed in %s\n\n", time.Since(startTime))
+
+			// Run analysis based on number of documents
+			if len(sources) == 2 {
+				docIDs := make([]string, 2)
+				for i, src := range sources {
+					docIDs[i] = extractDocID(src)
+				}
+				comparison := crossRefAnalyzer.CompareDocuments(docIDs[0], docIDs[1])
+
+				switch formatStr {
+				case "table":
+					fmt.Print(comparison.String())
+				case "json":
+					jsonData, err := comparison.ToJSON()
+					if err != nil {
+						return fmt.Errorf("failed to serialize JSON: %w", err)
+					}
+					if output != "" {
+						if err := os.WriteFile(output, jsonData, 0644); err != nil {
+							return fmt.Errorf("failed to write file: %w", err)
+						}
+						fmt.Printf("Comparison exported to: %s\n", output)
+					} else {
+						fmt.Println(string(jsonData))
+					}
+				case "dot":
+					dotContent := comparison.ToDOT()
+					if output != "" {
+						if err := os.WriteFile(output, []byte(dotContent), 0644); err != nil {
+							return fmt.Errorf("failed to write file: %w", err)
+						}
+						fmt.Printf("DOT graph exported to: %s\n", output)
+						fmt.Println("\nTo visualize with Graphviz:")
+						fmt.Printf("  dot -Tpng %s -o comparison.png\n", output)
+					} else {
+						fmt.Println(dotContent)
+					}
+				default:
+					return fmt.Errorf("unknown format: %s (use table, json, or dot)", formatStr)
+				}
+			} else {
+				result := crossRefAnalyzer.Analyze()
+
+				switch formatStr {
+				case "table":
+					fmt.Print(result.FormatTable())
+					fmt.Println()
+					fmt.Print(result.String())
+				case "json":
+					jsonData, err := result.ToJSON()
+					if err != nil {
+						return fmt.Errorf("failed to serialize JSON: %w", err)
+					}
+					if output != "" {
+						if err := os.WriteFile(output, jsonData, 0644); err != nil {
+							return fmt.Errorf("failed to write file: %w", err)
+						}
+						fmt.Printf("Analysis exported to: %s\n", output)
+					} else {
+						fmt.Println(string(jsonData))
+					}
+				case "dot":
+					dotContent := result.ToDOT()
+					if output != "" {
+						if err := os.WriteFile(output, []byte(dotContent), 0644); err != nil {
+							return fmt.Errorf("failed to write file: %w", err)
+						}
+						fmt.Printf("DOT graph exported to: %s\n", output)
+						fmt.Println("\nTo visualize with Graphviz:")
+						fmt.Printf("  dot -Tpng %s -o comparison.png\n", output)
+					} else {
+						fmt.Println(dotContent)
+					}
+				default:
+					return fmt.Errorf("unknown format: %s (use table, json, or dot)", formatStr)
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("sources", "", "Comma-separated list of source document paths")
+	cmd.Flags().StringP("format", "f", "table", "Output format (table, json, dot)")
+	cmd.Flags().StringP("output", "o", "", "Output file path")
+
+	return cmd
+}
+
+func refsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "refs",
+		Short: "Analyze references in a regulation document",
+		Long: `Analyze internal and external references in a regulation document.
+
+Shows clustered external references, reference frequency, and per-provision details.
+
+Example:
+  regula refs --source testdata/gdpr.txt
+  regula refs --source testdata/gdpr.txt --format json
+  regula refs --source testdata/eu-ai-act.txt --external-only`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			source, _ := cmd.Flags().GetString("source")
+			formatStr, _ := cmd.Flags().GetString("format")
+			externalOnly, _ := cmd.Flags().GetBool("external-only")
+			output, _ := cmd.Flags().GetString("output")
+
+			if source == "" {
+				return fmt.Errorf("--source flag is required")
+			}
+
+			if _, err := os.Stat(source); os.IsNotExist(err) {
+				return fmt.Errorf("source file not found: %s", source)
+			}
+
+			file, err := os.Open(source)
+			if err != nil {
+				return fmt.Errorf("failed to open source: %w", err)
+			}
+
+			parser := extract.NewParser()
+			doc, err := parser.Parse(file)
+			file.Close()
+			if err != nil {
+				return fmt.Errorf("failed to parse document: %w", err)
+			}
+
+			docStore := store.NewTripleStore()
+			baseURI := "https://regula.dev/regulations/"
+			builder := store.NewGraphBuilder(docStore, baseURI)
+			defExtractor := extract.NewDefinitionExtractor()
+			refExtractor := extract.NewReferenceExtractor()
+			semExtractor := extract.NewSemanticExtractor()
+
+			docID := extractDocID(source)
+			resolver := extract.NewReferenceResolver(baseURI, docID)
+			resolver.IndexDocument(doc)
+
+			_, err = builder.BuildComplete(doc, defExtractor, refExtractor, resolver, semExtractor)
+			if err != nil {
+				return fmt.Errorf("failed to build graph: %w", err)
+			}
+
+			label := doc.Title
+			if label == "" {
+				label = docID
+			}
+
+			crossRefAnalyzer := analysis.NewCrossRefAnalyzer()
+			crossRefAnalyzer.AddDocument(docID, label, docStore)
+
+			if externalOnly {
+				report := crossRefAnalyzer.AnalyzeExternalRefs(docID)
+
+				switch formatStr {
+				case "table":
+					fmt.Print(report.String())
+				case "json":
+					jsonData, err := report.ToJSON()
+					if err != nil {
+						return fmt.Errorf("failed to serialize JSON: %w", err)
+					}
+					if output != "" {
+						if err := os.WriteFile(output, jsonData, 0644); err != nil {
+							return fmt.Errorf("failed to write file: %w", err)
+						}
+						fmt.Printf("External reference report exported to: %s\n", output)
+					} else {
+						fmt.Println(string(jsonData))
+					}
+				default:
+					return fmt.Errorf("unknown format: %s (use table or json)", formatStr)
+				}
+			} else {
+				// Full reference summary (internal + external)
+				summary := store.CalculateRelationshipSummary(docStore)
+
+				fmt.Printf("Reference Analysis: %s\n", label)
+				fmt.Println("=" + strings.Repeat("=", 50))
+				fmt.Printf("\nTotal relationships: %d\n", summary.TotalRelationships)
+				fmt.Printf("Internal references: %d\n", summary.RelationshipCounts["reg:references"])
+				fmt.Printf("External references: %d\n\n", summary.ExternalRefCount)
+
+				if summary.ExternalRefCount > 0 {
+					fmt.Printf("External Reference Targets (%d unique):\n", len(summary.ExternalRefTargets))
+					for _, ext := range summary.TopExternalTargets {
+						fmt.Printf("  %-45s %d\n", ext.Target, ext.Count)
+					}
+					fmt.Println()
+				}
+
+				if len(summary.MostReferencedArticles) > 0 {
+					fmt.Println("Most Referenced Articles (internal):")
+					for _, arc := range summary.MostReferencedArticles {
+						fmt.Printf("  Article %d: %d incoming references\n", arc.ArticleNum, arc.Count)
+					}
+					fmt.Println()
+				}
+
+				if len(summary.MostReferencingArticles) > 0 {
+					fmt.Println("Articles With Most Outgoing References:")
+					for _, arc := range summary.MostReferencingArticles {
+						fmt.Printf("  Article %d: %d outgoing references\n", arc.ArticleNum, arc.Count)
+					}
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringP("source", "s", "", "Source document path")
+	cmd.Flags().StringP("format", "f", "table", "Output format (table, json)")
+	cmd.Flags().StringP("output", "o", "", "Output file path")
+	cmd.Flags().Bool("external-only", false, "Show only external references")
+
+	return cmd
+}
+
+// extractDocID extracts a document identifier from a file path.
+func extractDocID(sourcePath string) string {
+	baseName := filepath.Base(sourcePath)
+	// Remove extension
+	if idx := strings.LastIndex(baseName, "."); idx != -1 {
+		baseName = baseName[:idx]
+	}
+	return strings.ToUpper(baseName)
 }
 
 // collectExternalURIs extracts external reference URIs from resolved references.

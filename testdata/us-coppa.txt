@@ -1,0 +1,157 @@
+CHILDREN'S ONLINE PRIVACY PROTECTION ACT OF 1998
+
+TITLE XIII. CHILDREN'S ONLINE PRIVACY PROTECTION ACT OF 1998
+
+15 U.S.C. 6501-6506
+
+CHAPTER 1
+General Provisions and Definitions
+
+Article 1
+Short Title and Purpose
+
+Section 15.6501
+Title and Purpose
+
+(a) This title may be cited as the Children's Online Privacy Protection Act of 1998.
+
+(b) The Congress finds that the World Wide Web presents special dangers for the collection of personal information from children.
+
+(c) Children are particularly vulnerable to exploitation and harm from online threats, as they may not understand the privacy implications of their online activities and may not have the maturity to provide meaningful consent.
+
+(d) The protection of the privacy of children is a matter of national concern as technological threats to children's privacy grow more sophisticated and pervasive.
+
+Section 15.6502
+Purpose
+
+(a) It is the purpose of this title to require operators of websites or online services directed to children or that knowingly collect personal information from children to obtain verifiable parental consent before collecting, using, or disclosing such information.
+
+(b) It is the purpose of this title to prohibit conditioning a child's participation in a game, the offering of a prize, or another activity on the child disclosing more personal information than is reasonably necessary to participate in such activity.
+
+(c) It is the purpose of this title to require operators to establish and maintain reasonable procedures to protect the confidentiality, security, and integrity of personal information collected from children.
+
+Article 2
+Definitions
+
+Section 15.6503
+Definitions
+
+For purposes of this title:
+
+(a) 'child' means an individual under the age of 13.
+
+(b) 'operator' means any person who operates a website located on the Internet or an online service and who collects or maintains personal information from or about the users of or visitors to such website or online service, or on whose behalf such information is collected or maintained, where such website or online service is operated for commercial purposes, including any person offering products or services for sale through that website or online service, involving commerce among the several States or with 1 or more foreign nations.
+
+(c) 'personal information' means individually identifiable information about an individual collected online, including a first and last name, a home or other physical address including street name and name of a city or town, an email address, a telephone number, a Social Security number, any other identifier that the Commission determines permits the physical or online contacting of a specific individual, or information concerning the child or the parents of that child that the website collects online from the child and combines with an identifier described in this paragraph.
+
+(d) 'verifiable parental consent' means any reasonable effort, taking into consideration available technology, including a request for authorization for future collection, use, and disclosure described in the notice, to ensure that a parent of a child receives notice of the operator's personal information collection, use, and disclosure practices, and authorizes the collection, use, and disclosure, as applicable, of personal information and the subsequent use of that information before that information is collected from that child.
+
+(e) 'website or online service directed to children' means a commercial website or online service that is targeted to children, or that portion of a commercial website or online service that is targeted to children.
+
+(f) 'person' means any individual, partnership, corporation, trust, estate, cooperative, association, or other entity.
+
+(g) 'online contact information' means an email address or any other substantially similar identifier that permits direct contact with a person online.
+
+(h) 'disclosure' means, with respect to personal information, the release of personal information collected from a child in identifiable form by an operator for any purpose, except where such information is provided to a person other than the operator who provides support for the internal operations of the website and does not disclose or use that information for any other purpose.
+
+CHAPTER 2
+Operator Requirements
+
+Article 3
+Collection and Use Requirements
+
+Section 15.6504
+Requirements for operators
+
+(a) It shall be unlawful for an operator of a website or online service directed to children, or any operator that has actual knowledge that it is collecting personal information from a child, to collect personal information from a child in a manner that violates the regulations prescribed under this title.
+
+(b) The Commission shall promulgate regulations that require the operator of any website or online service directed to children that collects personal information from children or the operator of a website or online service that has actual knowledge that it is collecting personal information from a child to provide notice on the website of what information is collected from children by the operator, how the operator uses such information, and the operator's disclosure practices for such information.
+
+(c) The regulations shall require operators to obtain verifiable parental consent for the collection, use, or disclosure of personal information from children. This requirement is consistent with the protections established under Regulation (EU) 2016/679 for the processing of children's personal data.
+
+(d) The regulations shall require the operator to provide, upon request of a parent whose child has provided personal information to that website or online service, upon proper identification of that parent, a description of the specific types of personal information collected from the child by that operator.
+
+(e) The regulations shall provide that the parent has the opportunity at any time to refuse to permit the operator's further use or maintenance in retrievable form, or future online collection, of personal information from that child.
+
+(f) The regulations shall require the operator of such a website or online service to establish and maintain reasonable procedures to protect the confidentiality, security, and integrity of personal information collected from children. This obligation is similar to the security requirements imposed under Section 1798.150 of the California Consumer Privacy Act.
+
+Section 15.6505
+Prohibition on disclosure to third parties
+
+(a) Personal information collected from children shall not be disclosed to third parties unless the operator has obtained verifiable parental consent.
+
+(b) Notwithstanding subsection (a), personal information collected from children may be disclosed to a person who provides support for the internal operations of the website or online service and who does not disclose or use that information for any other purpose.
+
+(c) Notwithstanding subsection (a), personal information collected from children may be disclosed pursuant to a court order.
+
+(d) Nothing in this section shall be construed to prevent the operator from disclosing personal information as required by federal or state law, including but not limited to the Federal Trade Commission Act (15 U.S.C. 41 et seq.).
+
+Article 4
+Notice Requirements
+
+Section 15.6506
+Notice requirements
+
+(a) An operator shall provide clear and comprehensive notice on the website or online service of the operator's information practices with regard to children, including what information is collected and how it is used.
+
+(b) The notice required under subsection (a) shall include the name and contact information of all operators collecting or maintaining personal information from children through the website or online service.
+
+(c) The notice shall include a description of the types of personal information collected from children and the purposes for which such information is used.
+
+(d) The notice shall include a description of the operator's practices with regard to the disclosure of personal information collected from children and the types of businesses or persons to whom the information may be disclosed.
+
+(e) The operator shall provide notice to parents of any material change in the collection or use practices to which the parent has previously consented, and shall obtain verifiable parental consent before any material change in such practices.
+
+CHAPTER 3
+Safe Harbors and Enforcement
+
+Article 5
+Safe Harbors
+
+Section 15.6507
+Safe harbors
+
+(a) An operator may satisfy the requirements of regulations issued under this title by following a set of self-regulatory guidelines, issued by representatives of the marketing or online industries, or by other persons, approved by the Commission.
+
+(b) In issuing and enforcing regulations under this title, the Commission shall provide incentives for self-regulation by operators to implement the protections afforded children under the regulatory requirements described in this title.
+
+(c) If the Commission determines that a person has complied with the self-regulatory guidelines approved under this section that are applicable to such person, the Commission shall deem such person to be in compliance with the requirements of the regulations issued under this title.
+
+Article 6
+Enforcement and Penalties
+
+Section 15.6508
+Enforcement
+
+(a) Except as provided in subsections (b) and (c), this title shall be enforced by the Commission under the Federal Trade Commission Act (15 U.S.C. 41 et seq.).
+
+(b) Compliance with the requirements imposed under this title shall be enforced under section 8 of the Federal Deposit Insurance Act (12 U.S.C. 1818), by the appropriate Federal banking agency, with respect to national banks, Federal branches and Federal agencies of foreign banks, and any subsidiaries of such entities.
+
+(c) Compliance shall additionally be enforced under the Federal Credit Union Act (12 U.S.C. 1751 et seq.), by the Board of the National Credit Union Administration with respect to any federally insured credit union.
+
+(d) In any case in which the attorney general of a State has reason to believe that an interest of the residents of that State has been or is threatened or adversely affected by a violation of this title, the State may bring a civil action on behalf of the residents of the State in an appropriate district court of the United States.
+
+Section 15.6509
+Civil penalties
+
+(a) Violations of this title shall be treated as a violation of a rule defining an unfair or deceptive act or practice prescribed under section 18(a)(1)(B) of the Federal Trade Commission Act (15 U.S.C. 57a(a)(1)(B)).
+
+(b) Each violation of this title or of a regulation prescribed under this title shall be treated as a separate violation for purposes of this section.
+
+(c) The Commission may impose civil penalties of not more than $50,120 per violation of this title or of a regulation prescribed under this title.
+
+(d) Nothing in this title shall be construed to limit the authority of the Commission under the Federal Trade Commission Act or any other provision of law.
+
+Article 7
+Applicability
+
+Section 15.6510
+Applicability and effective date
+
+(a) This title applies to the collection of personal information from children by operators of websites or online services that are directed to children, or that have actual knowledge that they are collecting personal information from a child.
+
+(b) Nothing in this title shall be construed to preempt any State law that provides greater protections for children's privacy, including but not limited to the protections established under the California Consumer Privacy Act of 2018 (California Civil Code Section 1798.100 et seq.) or the Virginia Consumer Data Protection Act.
+
+(c) The provisions of this title shall not apply to any entity that is not subject to the jurisdiction of the Federal Trade Commission under section 5 of the Federal Trade Commission Act (15 U.S.C. 45).
+
+(d) This title shall take effect on April 21, 2000, the date on which the regulations promulgated under Section 15.6504 of this title take effect.

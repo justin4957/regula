@@ -373,12 +373,21 @@ func (g *GraphExport) ToDOT() string {
 
 // RelationshipSummary provides a summary of relationships in the graph.
 type RelationshipSummary struct {
-	TotalRelationships   int                    `json:"total_relationships"`
-	RelationshipCounts   map[string]int         `json:"relationship_counts"`
-	ArticlesWithIncoming map[int]int            `json:"articles_with_incoming"`
-	ArticlesWithOutgoing map[int]int            `json:"articles_with_outgoing"`
-	MostReferencedArticles []ArticleRefCount    `json:"most_referenced_articles"`
+	TotalRelationships      int                 `json:"total_relationships"`
+	RelationshipCounts      map[string]int      `json:"relationship_counts"`
+	ArticlesWithIncoming    map[int]int         `json:"articles_with_incoming"`
+	ArticlesWithOutgoing    map[int]int         `json:"articles_with_outgoing"`
+	MostReferencedArticles  []ArticleRefCount   `json:"most_referenced_articles"`
 	MostReferencingArticles []ArticleRefCount   `json:"most_referencing_articles"`
+	ExternalRefCount        int                 `json:"external_ref_count"`
+	ExternalRefTargets      map[string]int      `json:"external_ref_targets"`
+	TopExternalTargets      []ExternalRefStat   `json:"top_external_targets"`
+}
+
+// ExternalRefStat holds a count of references to an external document.
+type ExternalRefStat struct {
+	Target string `json:"target"`
+	Count  int    `json:"count"`
 }
 
 // ArticleRefCount holds reference count for an article.
@@ -393,6 +402,7 @@ func CalculateRelationshipSummary(store *TripleStore) *RelationshipSummary {
 		RelationshipCounts:     make(map[string]int),
 		ArticlesWithIncoming:   make(map[int]int),
 		ArticlesWithOutgoing:   make(map[int]int),
+		ExternalRefTargets:     make(map[string]int),
 	}
 
 	for _, t := range store.All() {
@@ -413,6 +423,13 @@ func CalculateRelationshipSummary(store *TripleStore) *RelationshipSummary {
 			if targetNum > 0 {
 				summary.ArticlesWithIncoming[targetNum]++
 			}
+		}
+
+		// Track external references
+		if t.Predicate == PropExternalRef {
+			summary.ExternalRefCount++
+			normalizedTarget := strings.ToLower(strings.TrimSpace(t.Object))
+			summary.ExternalRefTargets[normalizedTarget]++
 		}
 	}
 
@@ -453,6 +470,25 @@ func CalculateRelationshipSummary(store *TripleStore) *RelationshipSummary {
 	}
 	if len(summary.MostReferencingArticles) > 10 {
 		summary.MostReferencingArticles = summary.MostReferencingArticles[:10]
+	}
+
+	// Calculate top external reference targets
+	for target, count := range summary.ExternalRefTargets {
+		summary.TopExternalTargets = append(summary.TopExternalTargets, ExternalRefStat{
+			Target: target,
+			Count:  count,
+		})
+	}
+	for i := 0; i < len(summary.TopExternalTargets); i++ {
+		for j := i + 1; j < len(summary.TopExternalTargets); j++ {
+			if summary.TopExternalTargets[j].Count > summary.TopExternalTargets[i].Count {
+				summary.TopExternalTargets[i], summary.TopExternalTargets[j] =
+					summary.TopExternalTargets[j], summary.TopExternalTargets[i]
+			}
+		}
+	}
+	if len(summary.TopExternalTargets) > 10 {
+		summary.TopExternalTargets = summary.TopExternalTargets[:10]
 	}
 
 	return summary
