@@ -136,10 +136,13 @@ regula/
 
 ```bash
 # Build the CLI
-go build ./cmd/regula
+go build -o regula ./cmd/regula
+
+# Or install to $GOPATH/bin
+make install
 
 # Ingest a regulation document and display statistics
-./regula ingest --source testdata/gdpr.txt --stats
+regula ingest --source testdata/gdpr.txt --stats
 
 # Output:
 # Ingesting regulation from: testdata/gdpr.txt
@@ -149,20 +152,20 @@ go build ./cmd/regula
 #   4. Building knowledge graph... done (4226 triples)
 
 # Query the regulation graph with SPARQL
-./regula query --source testdata/gdpr.txt \
+regula query --source testdata/gdpr.txt \
   "SELECT ?article ?title WHERE { ?article rdf:type reg:Article . ?article reg:title ?title } LIMIT 5"
 
 # Use built-in query templates
-./regula query --source testdata/gdpr.txt --template definitions
-./regula query --source testdata/gdpr.txt --template chapters
-./regula query --source testdata/gdpr.txt --template references --limit 10
+regula query --source testdata/gdpr.txt --template definitions
+regula query --source testdata/gdpr.txt --template chapters
+regula query --source testdata/gdpr.txt --template references --limit 10
 
 # Output as JSON or CSV
-./regula query --source testdata/gdpr.txt --template articles --format json --limit 3
-./regula query --source testdata/gdpr.txt --template articles --format csv --limit 3
+regula query --source testdata/gdpr.txt --template articles --format json --limit 3
+regula query --source testdata/gdpr.txt --template articles --format csv --limit 3
 
 # Show query execution time
-./regula query --source testdata/gdpr.txt --template articles --timing
+regula query --source testdata/gdpr.txt --template articles --timing
 ```
 
 ### Query Templates
@@ -182,15 +185,15 @@ go build ./cmd/regula
 
 ```bash
 # Find all articles mentioning "right" in the title
-./regula query --source testdata/gdpr.txt \
+regula query --source testdata/gdpr.txt \
   "SELECT ?article ?title WHERE { ?article rdf:type reg:Article . ?article reg:title ?title . FILTER(CONTAINS(?title, \"Right\")) }"
 
 # Find articles that reference other articles
-./regula query --source testdata/gdpr.txt \
+regula query --source testdata/gdpr.txt \
   "SELECT ?from ?to WHERE { ?from reg:references ?to . ?to rdf:type reg:Article } LIMIT 20"
 
 # List all defined terms
-./regula query --source testdata/gdpr.txt \
+regula query --source testdata/gdpr.txt \
   "SELECT ?term ?text WHERE { ?term rdf:type reg:DefinedTerm . ?term reg:term ?text }"
 ```
 

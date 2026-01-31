@@ -6,8 +6,16 @@ For the GDPR-focused tutorial, see [TUTORIAL.md](TUTORIAL.md).
 
 ## Prerequisites
 
+Build Regula from source:
+
 ```bash
-go build -o regula cmd/regula/main.go
+go build -o regula ./cmd/regula
+```
+
+Or install to your `$GOPATH/bin`:
+
+```bash
+make install
 ```
 
 Both test documents are included: `testdata/ccpa.txt` and `testdata/gdpr.txt`.
@@ -771,6 +779,7 @@ regula validate --source testdata/ccpa.txt --format json
 ## Next Steps
 
 - See [TUTORIAL.md](TUTORIAL.md) for the GDPR-focused tutorial with deeper coverage of impact analysis and scenario matching
+- See [TUTORIAL_US_CROSSREF.md](TUTORIAL_US_CROSSREF.md) for US privacy law cross-reference analysis
 - Review [TESTING.md](TESTING.md) for development and testing strategies
 - See [ARCHITECTURE.md](ARCHITECTURE.md) for system design details
 - Check [ROADMAP.md](ROADMAP.md) for upcoming features
