@@ -36,3 +36,6 @@ bin/
 .env
 .env.local
 *.local.yaml
+
+# Legislation library data
+.regula/
