@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/coolbeans/regula/pkg/analysis"
+	"github.com/coolbeans/regula/pkg/crawler"
 	"github.com/coolbeans/regula/pkg/eurlex"
 	"github.com/coolbeans/regula/pkg/extract"
 	"github.com/coolbeans/regula/pkg/fetch"
@@ -61,6 +62,7 @@ It ingests regulatory documents and produces:
 	rootCmd.AddCommand(compareCmd())
 	rootCmd.AddCommand(refsCmd())
 	rootCmd.AddCommand(libraryCmd())
+	rootCmd.AddCommand(crawlCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -2703,4 +2705,140 @@ func truncateString(inputStr string, maxLength int) string {
 		return inputStr
 	}
 	return inputStr[:maxLength-3] + "..."
+}
+
+// crawlCmd creates the crawl command for legislation discovery.
+func crawlCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "crawl",
+		Short: "Crawl and discover legislation by following cross-references",
+		Long: `Performs a BFS tree-walking crawl starting from a seed document, citation,
+or URL. The crawler follows cross-references in ingested legislation to discover
+and ingest related documents from US law sources (USC, CFR, state codes).
+
+Each discovered document is ingested into the library, its cross-references are
+extracted, and newly discovered citations are enqueued for further crawling.
+
+The crawl stops when it reaches the configured depth limit, document limit,
+or exhausts all discoverable references.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			seedDocID, _ := cmd.Flags().GetString("seed")
+			citationStr, _ := cmd.Flags().GetString("citation")
+			seedURL, _ := cmd.Flags().GetString("url")
+			maxDepth, _ := cmd.Flags().GetInt("max-depth")
+			maxDocuments, _ := cmd.Flags().GetInt("max-documents")
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			resumeCrawl, _ := cmd.Flags().GetBool("resume")
+			allowedDomainsStr, _ := cmd.Flags().GetString("allowed-domains")
+			rateLimitStr, _ := cmd.Flags().GetString("rate-limit")
+			outputFormat, _ := cmd.Flags().GetString("format")
+			libraryPath, _ := cmd.Flags().GetString("path")
+
+			if seedDocID == "" && citationStr == "" && seedURL == "" && !resumeCrawl {
+				return fmt.Errorf("specify at least one of --seed, --citation, --url, or --resume")
+			}
+
+			// Parse rate limit
+			rateLimit := crawler.DefaultCrawlRateLimit
+			if rateLimitStr != "" {
+				parsedDuration, err := time.ParseDuration(rateLimitStr)
+				if err != nil {
+					return fmt.Errorf("invalid rate limit %q: %w", rateLimitStr, err)
+				}
+				rateLimit = parsedDuration
+			}
+
+			// Parse allowed domains
+			var allowedDomains []string
+			if allowedDomainsStr != "" {
+				allowedDomains = strings.Split(allowedDomainsStr, ",")
+				for i := range allowedDomains {
+					allowedDomains[i] = strings.TrimSpace(allowedDomains[i])
+				}
+			}
+
+			crawlConfig := crawler.CrawlConfig{
+				MaxDepth:       maxDepth,
+				MaxDocuments:   maxDocuments,
+				AllowedDomains: allowedDomains,
+				RateLimit:      rateLimit,
+				Timeout:        crawler.DefaultCrawlTimeout,
+				LibraryPath:    libraryPath,
+				BaseURI:        "https://regula.dev/regulations/",
+				DryRun:         dryRun,
+				Resume:         resumeCrawl,
+				UserAgent:      crawler.DefaultCrawlUserAgent,
+				DomainConfigs:  crawler.DefaultDomainConfigs(),
+				OutputFormat:   outputFormat,
+			}
+
+			crawlerInstance, err := crawler.NewCrawler(crawlConfig)
+			if err != nil {
+				return fmt.Errorf("failed to initialize crawler: %w", err)
+			}
+
+			// Handle resume
+			if resumeCrawl {
+				statePath := filepath.Join(libraryPath, "crawl-state.json")
+				fmt.Fprintf(os.Stderr, "Resuming crawl from %s...\n", statePath)
+				crawlReport, err := crawlerInstance.Resume(statePath)
+				if err != nil {
+					return fmt.Errorf("failed to resume crawl: %w", err)
+				}
+				fmt.Print(crawlReport.Format(outputFormat))
+				return nil
+			}
+
+			// Build seeds
+			var seeds []crawler.CrawlSeed
+			if seedDocID != "" {
+				seeds = append(seeds, crawler.CrawlSeed{
+					Type:  crawler.SeedTypeDocumentID,
+					Value: seedDocID,
+				})
+			}
+			if citationStr != "" {
+				seeds = append(seeds, crawler.CrawlSeed{
+					Type:  crawler.SeedTypeCitation,
+					Value: citationStr,
+				})
+			}
+			if seedURL != "" {
+				seeds = append(seeds, crawler.CrawlSeed{
+					Type:  crawler.SeedTypeURL,
+					Value: seedURL,
+				})
+			}
+
+			if dryRun {
+				fmt.Fprintf(os.Stderr, "Planning crawl (dry run) with %d seed(s), max depth %d, max documents %d...\n",
+					len(seeds), maxDepth, maxDocuments)
+			} else {
+				fmt.Fprintf(os.Stderr, "Starting crawl with %d seed(s), max depth %d, max documents %d...\n",
+					len(seeds), maxDepth, maxDocuments)
+			}
+
+			crawlReport, err := crawlerInstance.Crawl(seeds)
+			if err != nil {
+				return fmt.Errorf("crawl failed: %w", err)
+			}
+
+			fmt.Print(crawlReport.Format(outputFormat))
+			return nil
+		},
+	}
+
+	cmd.Flags().String("seed", "", "Seed from an existing library document ID")
+	cmd.Flags().String("citation", "", "Seed from a US law citation (e.g., '42 U.S.C. § 1320d')")
+	cmd.Flags().String("url", "", "Seed from a direct URL")
+	cmd.Flags().Int("max-depth", crawler.DefaultCrawlMaxDepth, "Maximum BFS depth for following references")
+	cmd.Flags().Int("max-documents", crawler.DefaultCrawlMaxDocuments, "Maximum number of documents to ingest")
+	cmd.Flags().Bool("dry-run", false, "Plan the crawl without making network requests")
+	cmd.Flags().Bool("resume", false, "Resume a previously interrupted crawl")
+	cmd.Flags().String("allowed-domains", "", "Comma-separated list of allowed domains")
+	cmd.Flags().String("rate-limit", "3s", "Minimum interval between requests per domain")
+	cmd.Flags().String("format", "table", "Output format (table, json)")
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+
+	return cmd
 }
