@@ -6,7 +6,7 @@ import (
 )
 
 const testUSLMXML = `<?xml version="1.0" encoding="UTF-8"?>
-<usc>
+<uscDoc xmlns="http://xml.house.gov/schemas/uslm/1.0">
   <main>
     <title identifier="/us/usc/t4">
       <num>4</num>
@@ -44,7 +44,7 @@ const testUSLMXML = `<?xml version="1.0" encoding="UTF-8"?>
       </chapter>
     </title>
   </main>
-</usc>`
+</uscDoc>`
 
 const testCFRXML = `<?xml version="1.0" encoding="UTF-8"?>
 <CFRDOC>

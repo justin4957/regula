@@ -32,7 +32,7 @@ func (source *USCodeSource) ListDatasets() ([]Dataset, error) {
 		titleName := titleEntry.Name
 
 		downloadURL := fmt.Sprintf("%s/xml_usc%s@%s.zip",
-			uscBaseURL, titleNumber, uscReleasePoint)
+			uscBaseURL, titleNumber, uscReleaseTag)
 
 		datasets = append(datasets, Dataset{
 			SourceName:  "uscode",
@@ -50,7 +50,8 @@ func (source *USCodeSource) ListDatasets() ([]Dataset, error) {
 // DownloadDataset downloads a USC title ZIP to the downloads directory.
 func (source *USCodeSource) DownloadDataset(dataset Dataset, downloader *Downloader) (*DownloadResult, error) {
 	sourceDir := downloader.SourceDirectory("uscode")
-	localPath := filepath.Join(sourceDir, filepath.Base(dataset.URL))
+	// Use identifier-based filename since the URL contains @ which complicates filepath.Base
+	localPath := filepath.Join(sourceDir, dataset.Identifier+".zip")
 
 	bytesWritten, skipped, err := downloader.DownloadFile(
 		dataset.URL, localPath, PrintDownloadProgress)
@@ -87,8 +88,11 @@ func (source *USCodeSource) DownloadDataset(dataset Dataset, downloader *Downloa
 // uscBaseURL is the base URL for US Code release point downloads.
 const uscBaseURL = "https://uscode.house.gov/download/releasepoints/us/pl/" + uscReleasePoint
 
-// uscReleasePoint is the latest known release point.
+// uscReleasePoint is the latest known release point (path form for URL directories).
 const uscReleasePoint = "119/73not60"
+
+// uscReleaseTag is the release point in filename form (hyphens instead of slashes).
+const uscReleaseTag = "119-73not60"
 
 // uscTitles contains the 54 US Code titles with display names.
 var uscTitles = []struct {
