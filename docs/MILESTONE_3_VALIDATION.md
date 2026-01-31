@@ -137,7 +137,7 @@ Definition Coverage:
 ### 1. Ingest Regulation
 
 ```bash
-$ ./regula ingest --source testdata/gdpr.txt --stats
+$ regula ingest --source testdata/gdpr.txt --stats
 Ingesting regulation from: testdata/gdpr.txt
   1. Parsing document structure... done (11 chapters, 99 articles)
   2. Extracting defined terms... done (26 definitions)
@@ -162,7 +162,7 @@ Graph Statistics:
 ### 2. Query Rights by Article
 
 ```bash
-$ ./regula query --source testdata/gdpr.txt --template rights | head -12
+$ regula query --source testdata/gdpr.txt --template rights | head -12
 Template: rights
 Description: Find articles that grant rights
 
@@ -180,7 +180,7 @@ Description: Find articles that grant rights
 ### 3. Query Obligations
 
 ```bash
-$ ./regula query --source testdata/gdpr.txt --template obligations | head -12
+$ regula query --source testdata/gdpr.txt --template obligations | head -12
 Template: obligations
 Description: Find articles that impose obligations
 
@@ -197,7 +197,7 @@ Description: Find articles that impose obligations
 ### 4. Query Term Usage
 
 ```bash
-$ ./regula query --source testdata/gdpr.txt --template term-usage | head -15
+$ regula query --source testdata/gdpr.txt --template term-usage | head -15
 Template: term-usage
 Description: Find which articles use defined terms
 
@@ -216,7 +216,7 @@ Description: Find which articles use defined terms
 ### 5. Query Cross-References
 
 ```bash
-$ ./regula query --source testdata/gdpr.txt --template references | head -15
+$ regula query --source testdata/gdpr.txt --template references | head -15
 Template: references
 Description: List all cross-references between articles
 
@@ -234,7 +234,7 @@ Description: List all cross-references between articles
 ### 6. Export Graph Summary
 
 ```bash
-$ ./regula export --source testdata/gdpr.txt --format summary
+$ regula export --source testdata/gdpr.txt --format summary
 Relationship Graph Summary
 ==========================
 
@@ -256,7 +256,7 @@ Articles With Most Outgoing References:
 ### 7. Validate for CI
 
 ```bash
-$ ./regula validate --source testdata/gdpr.txt --format json | jq '{status, score: .overall_score, threshold}'
+$ regula validate --source testdata/gdpr.txt --format json | jq '{status, score: .overall_score, threshold}'
 {
   "status": "PASS",
   "score": 0.946969696969697,
@@ -267,7 +267,7 @@ $ ./regula validate --source testdata/gdpr.txt --format json | jq '{status, scor
 ### 8. Custom SPARQL Query
 
 ```bash
-$ ./regula query --source testdata/gdpr.txt "SELECT ?article ?title WHERE {
+$ regula query --source testdata/gdpr.txt "SELECT ?article ?title WHERE {
   ?article rdf:type reg:Article .
   ?article reg:title ?title .
   FILTER(CONTAINS(?title, 'erasure'))

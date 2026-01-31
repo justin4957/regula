@@ -61,13 +61,13 @@ go test ./pkg/store/... -run TestJSONLD_IsRelationship -v  # Relationship detect
 go test ./pkg/store/... -run TestJSONLD_Serialize_GDPRIntegration -v
 
 # CLI: Export as compact JSON-LD (with @context)
-go run cmd/regula/main.go export --source testdata/gdpr.txt --format jsonld --output graph.jsonld
+regula export --source testdata/gdpr.txt --format jsonld --output graph.jsonld
 
 # CLI: Export as expanded JSON-LD (full URIs, no @context)
-go run cmd/regula/main.go export --source testdata/gdpr.txt --format jsonld --expanded --output graph-expanded.jsonld
+regula export --source testdata/gdpr.txt --format jsonld --expanded --output graph-expanded.jsonld
 
 # CLI: Export with ELI enrichment
-go run cmd/regula/main.go export --source testdata/gdpr.txt --format jsonld --eli --output graph-eli.jsonld
+regula export --source testdata/gdpr.txt --format jsonld --eli --output graph-eli.jsonld
 ```
 
 ### RDF/XML Serialization Tests
@@ -106,10 +106,10 @@ go test ./pkg/store/... -run TestRDFXMLSerialize_GDPRIntegration -v
 go test ./pkg/store/... -run TestRDFXMLSerialize_ConcurrentAccess -v
 
 # CLI: Export as RDF/XML
-go run cmd/regula/main.go export --source testdata/gdpr.txt --format rdfxml
-go run cmd/regula/main.go export --source testdata/gdpr.txt --format rdfxml --output graph.rdf
-go run cmd/regula/main.go export --source testdata/gdpr.txt --format xml --output graph.xml
-go run cmd/regula/main.go export --source testdata/gdpr.txt --format rdfxml --eli --output graph-eli.rdf
+regula export --source testdata/gdpr.txt --format rdfxml
+regula export --source testdata/gdpr.txt --format rdfxml --output graph.rdf
+regula export --source testdata/gdpr.txt --format xml --output graph.xml
+regula export --source testdata/gdpr.txt --format rdfxml --eli --output graph-eli.rdf
 ```
 
 ### Citation Parser Tests
@@ -241,13 +241,13 @@ go test ./pkg/linkcheck/... -run "TestBatchValidator" -v
 go test ./pkg/linkcheck/... -run "TestRateLimited|TestDomainRateLimiter" -v
 
 # CLI: Run link validation
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --check links
+regula validate --source testdata/gdpr.txt --check links
 
 # CLI: Save link report to JSON
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --check links --report links.json
+regula validate --source testdata/gdpr.txt --check links --report links.json
 
 # CLI: Save link report to Markdown
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --check links --report links.md
+regula validate --source testdata/gdpr.txt --check links --report links.md
 ```
 
 ### US Code Connector Tests
@@ -300,19 +300,19 @@ go test ./pkg/query/... -run "TestExecutor_SimpleConstruct|TestExecutor_Construc
 go test ./pkg/query/... -run "TestConstructResult_FormatTurtle|TestConstructResult_FormatNTriples|TestConstructResult_FormatJSON" -v
 
 # CLI: Run CONSTRUCT query with Turtle output (default)
-go run cmd/regula/main.go query --source testdata/gdpr.txt \
+regula query --source testdata/gdpr.txt \
   "CONSTRUCT { ?a <http://example.org/title> ?t } WHERE { ?a rdf:type reg:Article . ?a reg:title ?t }"
 
 # CLI: Run CONSTRUCT query with N-Triples output
-go run cmd/regula/main.go query --source testdata/gdpr.txt --format ntriples \
+regula query --source testdata/gdpr.txt --format ntriples \
   "CONSTRUCT { ?a <http://example.org/type> <http://example.org/Article> } WHERE { ?a rdf:type reg:Article }"
 
 # CLI: Run CONSTRUCT query with JSON output
-go run cmd/regula/main.go query --source testdata/gdpr.txt --format json \
+regula query --source testdata/gdpr.txt --format json \
   "CONSTRUCT { ?a <http://example.org/type> <http://example.org/Article> } WHERE { ?a rdf:type reg:Article }"
 
 # CLI: Run CONSTRUCT query with timing
-go run cmd/regula/main.go query --source testdata/gdpr.txt --timing \
+regula query --source testdata/gdpr.txt --timing \
   "CONSTRUCT { ?a <http://example.org/title> ?t } WHERE { ?a rdf:type reg:Article . ?a reg:title ?t }"
 ```
 
@@ -337,20 +337,20 @@ go test ./pkg/query/... -v -run "TestExecutor_DescribeFormatTurtle|TestExecutor_
 go test ./pkg/query/... -v -bench BenchmarkExecutor_Describe -benchmem
 
 # CLI: DESCRIBE with direct URI
-go run cmd/regula/main.go query --source testdata/gdpr.txt "DESCRIBE GDPR:Art17"
+regula query --source testdata/gdpr.txt "DESCRIBE GDPR:Art17"
 
 # CLI: DESCRIBE with variable
-go run cmd/regula/main.go query --source testdata/gdpr.txt \
+regula query --source testdata/gdpr.txt \
   "DESCRIBE ?article WHERE { ?article reg:title \"Right to erasure\" }"
 
 # CLI: DESCRIBE with JSON output
-go run cmd/regula/main.go query --source testdata/gdpr.txt --format json "DESCRIBE GDPR:Art17"
+regula query --source testdata/gdpr.txt --format json "DESCRIBE GDPR:Art17"
 
 # CLI: DESCRIBE with timing
-go run cmd/regula/main.go query --source testdata/gdpr.txt --timing "DESCRIBE GDPR:Art17"
+regula query --source testdata/gdpr.txt --timing "DESCRIBE GDPR:Art17"
 
 # CLI: Use describe-article template
-go run cmd/regula/main.go query --source testdata/gdpr.txt --template describe-article
+regula query --source testdata/gdpr.txt --template describe-article
 ```
 
 ### UK Legislation Connector Tests
@@ -409,13 +409,13 @@ go test ./pkg/validate/... -run TestGateReport -v
 go test ./pkg/validate/... -run TestGatePipeline_GDPRIntegration -v
 
 # CLI: Run ingestion with gates enabled
-go run cmd/regula/main.go ingest --source testdata/gdpr.txt --gates
-go run cmd/regula/main.go ingest --source testdata/gdpr.txt --gates --strict
-go run cmd/regula/main.go ingest --source testdata/gdpr.txt --gates --skip-gates V0
+regula ingest --source testdata/gdpr.txt --gates
+regula ingest --source testdata/gdpr.txt --gates --strict
+regula ingest --source testdata/gdpr.txt --gates --skip-gates V0
 
 # CLI: Run gate-based validation
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --check gates
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --check gates --format json
+regula validate --source testdata/gdpr.txt --check gates
+regula validate --source testdata/gdpr.txt --check gates --format json
 ```
 
 ### Validation Report Generation Tests
@@ -438,18 +438,18 @@ go test ./pkg/validate/... -v -run TestGateReport_ToHTML -count=1
 go test ./pkg/validate/... -v -run "TestStatusToMarkdownBadge|TestEscapeMarkdownTableCell|TestStatusToHTMLColor|TestScoreToHTMLColor" -count=1
 
 # CLI: Generate Markdown report to stdout
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --format markdown
+regula validate --source testdata/gdpr.txt --format markdown
 
 # CLI: Generate HTML report to stdout
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --format html
+regula validate --source testdata/gdpr.txt --format html
 
 # CLI: Generate gate report in Markdown
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --check gates --format markdown
+regula validate --source testdata/gdpr.txt --check gates --format markdown
 
 # CLI: Save report to file (format based on extension)
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --report report.html
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --report report.md
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --check gates --report gates.html
+regula validate --source testdata/gdpr.txt --report report.html
+regula validate --source testdata/gdpr.txt --report report.md
+regula validate --source testdata/gdpr.txt --check gates --report gates.html
 ```
 
 ### Test Coverage
@@ -510,19 +510,19 @@ go test ./pkg/validate/... -v -run "TestAnalyzeDocument|TestSuggestWeights_Norma
 go test ./pkg/validate/... -v -run TestComputeConfidence -count=1
 
 # CLI: Suggest a profile from document analysis
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --suggest-profile
+regula validate --source testdata/gdpr.txt --suggest-profile
 
 # CLI: Suggest profile with JSON output
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --suggest-profile --format json
+regula validate --source testdata/gdpr.txt --suggest-profile --format json
 
 # CLI: Suggest profile with YAML output
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --suggest-profile --format yaml
+regula validate --source testdata/gdpr.txt --suggest-profile --format yaml
 
 # CLI: Generate and save profile to YAML file
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --generate-profile gdpr-custom.yaml
+regula validate --source testdata/gdpr.txt --generate-profile gdpr-custom.yaml
 
 # CLI: Load a custom profile for validation
-go run cmd/regula/main.go validate --source testdata/gdpr.txt --load-profile gdpr-custom.yaml
+regula validate --source testdata/gdpr.txt --load-profile gdpr-custom.yaml
 ```
 
 ### Test Coverage
@@ -558,7 +558,7 @@ The E2E test script validates the complete MVP functionality:
 
 ```bash
 # Build the binary first
-go build -o ./regula ./cmd/regula
+go build -o regula ./cmd/regula
 
 # Run E2E tests
 ./scripts/e2e-test.sh
@@ -619,7 +619,7 @@ The GitHub Actions workflow (`.github/workflows/e2e-test.yml`) runs tests automa
 - name: Run E2E tests
   run: ./scripts/e2e-test.sh
   env:
-    REGULA_BIN: ./regula
+    REGULA_BIN: regula
     GDPR_FILE: testdata/gdpr.txt
     CI: true
 ```
@@ -659,7 +659,7 @@ Virginia Consumer Data Protection Act at `testdata/vcdpa.txt`:
 
 ```bash
 # Validate VCDPA document
-go run cmd/regula/main.go validate --source testdata/vcdpa.txt
+regula validate --source testdata/vcdpa.txt
 
 # Auto-detects VCDPA profile based on document content
 # Expected output:
@@ -951,7 +951,7 @@ go test ./pkg/extract/... -bench=. -benchmem
 Use `--timing` flag to measure query performance:
 
 ```bash
-./regula query --source testdata/gdpr.txt --template articles --timing
+regula query --source testdata/gdpr.txt --template articles --timing
 ```
 
 ## Recursive Document Fetching (`pkg/fetch/`)
@@ -1044,28 +1044,28 @@ Test the compare and refs commands end-to-end:
 
 ```bash
 # Compare two documents
-go run cmd/regula/main.go compare --sources testdata/gdpr.txt,testdata/ccpa.txt --format table
+regula compare --sources testdata/gdpr.txt,testdata/ccpa.txt --format table
 
 # Compare three documents
-go run cmd/regula/main.go compare --sources testdata/gdpr.txt,testdata/ccpa.txt,testdata/eu-ai-act.txt --format table
+regula compare --sources testdata/gdpr.txt,testdata/ccpa.txt,testdata/eu-ai-act.txt --format table
 
 # Export comparison as JSON
-go run cmd/regula/main.go compare --sources testdata/gdpr.txt,testdata/ccpa.txt --format json
+regula compare --sources testdata/gdpr.txt,testdata/ccpa.txt --format json
 
 # Export comparison as DOT graph
-go run cmd/regula/main.go compare --sources testdata/gdpr.txt,testdata/eu-ai-act.txt --format dot --output comparison.dot
+regula compare --sources testdata/gdpr.txt,testdata/eu-ai-act.txt --format dot --output comparison.dot
 
 # Analyze all references in a document
-go run cmd/regula/main.go refs --source testdata/gdpr.txt
+regula refs --source testdata/gdpr.txt
 
 # Analyze external references only
-go run cmd/regula/main.go refs --source testdata/eu-ai-act.txt --external-only
+regula refs --source testdata/eu-ai-act.txt --external-only
 
 # Export external ref analysis as JSON
-go run cmd/regula/main.go refs --source testdata/gdpr.txt --external-only --format json
+regula refs --source testdata/gdpr.txt --external-only --format json
 
 # Verify enhanced summary export includes external refs
-go run cmd/regula/main.go export --source testdata/gdpr.txt --format summary
+regula export --source testdata/gdpr.txt --format summary
 ```
 
 ### Cross-Reference Test Matrix
