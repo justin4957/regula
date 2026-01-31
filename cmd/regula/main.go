@@ -12,6 +12,7 @@ import (
 	"github.com/coolbeans/regula/pkg/eurlex"
 	"github.com/coolbeans/regula/pkg/extract"
 	"github.com/coolbeans/regula/pkg/fetch"
+	"github.com/coolbeans/regula/pkg/library"
 	"github.com/coolbeans/regula/pkg/linkcheck"
 	"github.com/coolbeans/regula/pkg/query"
 	"github.com/coolbeans/regula/pkg/simulate"
@@ -59,6 +60,7 @@ It ingests regulatory documents and produces:
 	rootCmd.AddCommand(exportCmd())
 	rootCmd.AddCommand(compareCmd())
 	rootCmd.AddCommand(refsCmd())
+	rootCmd.AddCommand(libraryCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -2106,4 +2108,599 @@ func formatSourceContext(ref *extract.ResolvedReference) string {
 	}
 
 	return ref.Original.RawText
+}
+
+// defaultLibraryPath returns the default library location.
+func defaultLibraryPath() string {
+	return ".regula"
+}
+
+func libraryCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "library",
+		Short: "Manage the legislation library",
+		Long: `Manage a persistent library of ingested legislation documents.
+
+The library stores both plain text sources and serialized RDF graphs
+on disk, enabling cross-legislation analysis without re-ingesting.
+
+Examples:
+  regula library init
+  regula library seed --testdata-dir testdata
+  regula library list
+  regula library status
+  regula library add --source testdata/gdpr.txt --id eu-gdpr --jurisdiction EU
+  regula library query --template rights --documents eu-gdpr,us-ca-ccpa
+  regula library source eu-gdpr
+  regula library export --document eu-gdpr --format json
+  regula library remove test-doc`,
+	}
+
+	cmd.AddCommand(libraryInitCmd())
+	cmd.AddCommand(libraryAddCmd())
+	cmd.AddCommand(librarySeedCmd())
+	cmd.AddCommand(libraryListCmd())
+	cmd.AddCommand(libraryStatusCmd())
+	cmd.AddCommand(libraryQueryCmd())
+	cmd.AddCommand(libraryRemoveCmd())
+	cmd.AddCommand(libraryExportCmd())
+	cmd.AddCommand(librarySourceCmd())
+
+	return cmd
+}
+
+func libraryInitCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "init",
+		Short: "Initialize a new legislation library",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			libraryPath, _ := cmd.Flags().GetString("path")
+			baseURI, _ := cmd.Flags().GetString("base-uri")
+
+			lib, err := library.Init(libraryPath, baseURI)
+			if err != nil {
+				return fmt.Errorf("failed to initialize library: %w", err)
+			}
+
+			fmt.Printf("Library initialized at: %s\n", lib.Path())
+			fmt.Printf("Base URI: %s\n", lib.BaseURI())
+			fmt.Println("\nNext steps:")
+			fmt.Println("  regula library seed --testdata-dir testdata")
+			fmt.Println("  regula library add --source path/to/legislation.txt --id my-doc")
+			return nil
+		},
+	}
+
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+	cmd.Flags().String("base-uri", "", "Base URI for the knowledge graph (default: https://regula.dev/regulations/)")
+
+	return cmd
+}
+
+func libraryAddCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "add",
+		Short: "Add a legislation document to the library",
+		Long: `Ingest a legislation document and store it in the library.
+
+The document is parsed, extracted, and its RDF graph is serialized to disk.
+
+Examples:
+  regula library add --source testdata/gdpr.txt --id eu-gdpr --jurisdiction EU
+  regula library add --source testdata/ccpa.txt --id us-ca-ccpa --name CCPA --jurisdiction US-CA
+  regula library add --source my-law.txt --force`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sourcePath, _ := cmd.Flags().GetString("source")
+			documentID, _ := cmd.Flags().GetString("id")
+			documentName, _ := cmd.Flags().GetString("name")
+			jurisdiction, _ := cmd.Flags().GetString("jurisdiction")
+			format, _ := cmd.Flags().GetString("format")
+			tags, _ := cmd.Flags().GetStringSlice("tags")
+			force, _ := cmd.Flags().GetBool("force")
+			libraryPath, _ := cmd.Flags().GetString("path")
+
+			if sourcePath == "" {
+				return fmt.Errorf("--source flag is required")
+			}
+
+			sourceText, err := os.ReadFile(sourcePath)
+			if err != nil {
+				return fmt.Errorf("failed to read source: %w", err)
+			}
+
+			if documentID == "" {
+				documentID = library.DeriveDocumentID(sourcePath)
+			}
+
+			lib, err := library.Open(libraryPath)
+			if err != nil {
+				return fmt.Errorf("library not found at %s (run 'regula library init' first): %w", libraryPath, err)
+			}
+
+			if documentName == "" {
+				documentName = documentID
+			}
+
+			fmt.Printf("Adding document: %s\n", documentID)
+			fmt.Printf("  Source: %s (%d bytes)\n", sourcePath, len(sourceText))
+
+			entry, err := lib.AddDocument(documentID, sourceText, library.AddOptions{
+				Name:         documentName,
+				ShortName:    documentName,
+				Jurisdiction: jurisdiction,
+				Format:       format,
+				Tags:         tags,
+				Force:        force,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to add document: %w", err)
+			}
+
+			if entry.Status == library.StatusReady {
+				fmt.Printf("  Status: ready\n")
+				if entry.Stats != nil {
+					fmt.Printf("  Triples: %d\n", entry.Stats.TotalTriples)
+					fmt.Printf("  Articles: %d\n", entry.Stats.Articles)
+					fmt.Printf("  Definitions: %d\n", entry.Stats.Definitions)
+					fmt.Printf("  References: %d\n", entry.Stats.References)
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringP("source", "s", "", "Source document path")
+	cmd.Flags().String("id", "", "Document identifier (derived from filename if omitted)")
+	cmd.Flags().String("name", "", "Human-readable name")
+	cmd.Flags().String("jurisdiction", "", "Jurisdiction code (e.g., EU, US-CA, GB)")
+	cmd.Flags().String("format", "", "Parser format hint (eu, us, uk, generic)")
+	cmd.Flags().StringSlice("tags", []string{}, "Tags for categorization")
+	cmd.Flags().Bool("force", false, "Overwrite existing document")
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+
+	return cmd
+}
+
+func librarySeedCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "seed",
+		Short: "Seed the library with testdata legislation",
+		Long: `Ingest all known testdata documents into the library.
+
+Processes 18 legislation documents spanning EU, US (state and federal),
+UK, Australian, and international jurisdictions.
+
+Example:
+  regula library seed --testdata-dir testdata`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			testdataDir, _ := cmd.Flags().GetString("testdata-dir")
+			libraryPath, _ := cmd.Flags().GetString("path")
+
+			lib, err := library.Open(libraryPath)
+			if err != nil {
+				// Auto-init if not exists
+				lib, err = library.Init(libraryPath, "")
+				if err != nil {
+					return fmt.Errorf("failed to initialize library: %w", err)
+				}
+				fmt.Printf("Library initialized at: %s\n\n", lib.Path())
+			}
+
+			entries := library.DefaultCorpusEntries()
+			fmt.Printf("Seeding library with %d documents from %s\n\n", len(entries), testdataDir)
+
+			seedReport, err := library.SeedFromCorpus(lib, testdataDir, entries)
+			if err != nil {
+				return fmt.Errorf("seeding failed: %w", err)
+			}
+
+			for _, entryState := range seedReport.Entries {
+				switch entryState.Status {
+				case "ingested":
+					entry := lib.GetDocument(entryState.ID)
+					tripleCount := 0
+					if entry != nil && entry.Stats != nil {
+						tripleCount = entry.Stats.TotalTriples
+					}
+					fmt.Printf("  [OK] %-20s %d triples\n", entryState.ID, tripleCount)
+				case "skipped":
+					fmt.Printf("  [SKIP] %-18s already in library\n", entryState.ID)
+				case "failed":
+					fmt.Printf("  [FAIL] %-18s %s\n", entryState.ID, entryState.Error)
+				}
+			}
+
+			fmt.Printf("\nSeed complete: %d ingested, %d skipped, %d failed\n",
+				seedReport.Succeeded, seedReport.Skipped, seedReport.Failed)
+
+			libraryStats := lib.Stats()
+			fmt.Printf("\nLibrary totals: %d documents, %d triples\n",
+				libraryStats.TotalDocuments, libraryStats.TotalTriples)
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("testdata-dir", "testdata", "Path to testdata directory")
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+
+	return cmd
+}
+
+func libraryListCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all documents in the library",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			libraryPath, _ := cmd.Flags().GetString("path")
+			formatStr, _ := cmd.Flags().GetString("format")
+			jurisdiction, _ := cmd.Flags().GetString("jurisdiction")
+
+			lib, err := library.Open(libraryPath)
+			if err != nil {
+				return fmt.Errorf("library not found at %s: %w", libraryPath, err)
+			}
+
+			docs := lib.ListDocuments()
+
+			// Filter by jurisdiction
+			if jurisdiction != "" {
+				filtered := make([]*library.DocumentEntry, 0)
+				for _, entry := range docs {
+					if entry.Jurisdiction == jurisdiction {
+						filtered = append(filtered, entry)
+					}
+				}
+				docs = filtered
+			}
+
+			if formatStr == "json" {
+				encoder := json.NewEncoder(os.Stdout)
+				encoder.SetIndent("", "  ")
+				return encoder.Encode(docs)
+			}
+
+			if len(docs) == 0 {
+				fmt.Println("Library is empty. Run 'regula library seed' to add testdata documents.")
+				return nil
+			}
+
+			fmt.Printf("%-22s %-22s %-12s %-8s %8s %8s %8s\n",
+				"ID", "NAME", "JURISDICTION", "STATUS", "TRIPLES", "ARTICLES", "DEFS")
+			fmt.Println(strings.Repeat("-", 100))
+
+			for _, entry := range docs {
+				tripleCount := 0
+				articleCount := 0
+				definitionCount := 0
+				if entry.Stats != nil {
+					tripleCount = entry.Stats.TotalTriples
+					articleCount = entry.Stats.Articles
+					definitionCount = entry.Stats.Definitions
+				}
+				name := entry.ShortName
+				if name == "" {
+					name = entry.Name
+				}
+				if name == "" {
+					name = entry.ID
+				}
+				fmt.Printf("%-22s %-22s %-12s %-8s %8d %8d %8d\n",
+					truncateString(entry.ID, 22),
+					truncateString(name, 22),
+					entry.Jurisdiction,
+					entry.Status,
+					tripleCount,
+					articleCount,
+					definitionCount,
+				)
+			}
+
+			fmt.Printf("\n%d document(s)\n", len(docs))
+			return nil
+		},
+	}
+
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+	cmd.Flags().StringP("format", "f", "table", "Output format (table, json)")
+	cmd.Flags().String("jurisdiction", "", "Filter by jurisdiction")
+
+	return cmd
+}
+
+func libraryStatusCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show library statistics",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			libraryPath, _ := cmd.Flags().GetString("path")
+
+			lib, err := library.Open(libraryPath)
+			if err != nil {
+				return fmt.Errorf("library not found at %s: %w", libraryPath, err)
+			}
+
+			libraryStats := lib.Stats()
+
+			fmt.Printf("Library: %s\n", lib.Path())
+			fmt.Printf("Base URI: %s\n\n", lib.BaseURI())
+			fmt.Printf("Documents:    %d\n", libraryStats.TotalDocuments)
+			fmt.Printf("Total triples: %d\n", libraryStats.TotalTriples)
+			fmt.Printf("Total articles: %d\n", libraryStats.TotalArticles)
+			fmt.Printf("Total definitions: %d\n", libraryStats.TotalDefinitions)
+			fmt.Printf("Total references: %d\n", libraryStats.TotalReferences)
+			fmt.Printf("Total rights: %d\n", libraryStats.TotalRights)
+			fmt.Printf("Total obligations: %d\n", libraryStats.TotalObligations)
+
+			if len(libraryStats.ByJurisdiction) > 0 {
+				fmt.Println("\nBy Jurisdiction:")
+				for jurisdictionKey, jurisdictionCount := range libraryStats.ByJurisdiction {
+					fmt.Printf("  %-15s %d\n", jurisdictionKey, jurisdictionCount)
+				}
+			}
+
+			if len(libraryStats.ByStatus) > 0 {
+				fmt.Println("\nBy Status:")
+				for statusKey, statusCount := range libraryStats.ByStatus {
+					fmt.Printf("  %-15s %d\n", statusKey, statusCount)
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+
+	return cmd
+}
+
+func libraryQueryCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "query [sparql-query]",
+		Short: "Query across library documents",
+		Long: `Execute a SPARQL query against one or more library documents.
+
+By default queries all documents. Use --documents to specify a subset.
+
+Examples:
+  regula library query --template definitions
+  regula library query --template rights --documents eu-gdpr,us-ca-ccpa
+  regula library query "SELECT ?article ?title WHERE { ?article rdf:type reg:Article . ?article reg:title ?title } LIMIT 10"`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			libraryPath, _ := cmd.Flags().GetString("path")
+			templateName, _ := cmd.Flags().GetString("template")
+			formatStr, _ := cmd.Flags().GetString("format")
+			documentIDs, _ := cmd.Flags().GetStringSlice("documents")
+			showTiming, _ := cmd.Flags().GetBool("timing")
+			limit, _ := cmd.Flags().GetInt("limit")
+
+			lib, err := library.Open(libraryPath)
+			if err != nil {
+				return fmt.Errorf("library not found at %s: %w", libraryPath, err)
+			}
+
+			// Determine query string
+			var queryStr string
+			if templateName != "" {
+				tmpl, ok := queryTemplates[templateName]
+				if !ok {
+					return fmt.Errorf("unknown template: %s\nUse 'regula query --list-templates' to see available templates", templateName)
+				}
+				queryStr = tmpl.Query
+				if !showTiming {
+					fmt.Printf("Template: %s\n", templateName)
+					fmt.Printf("Description: %s\n\n", tmpl.Description)
+				}
+			} else if len(args) > 0 {
+				queryStr = args[0]
+			} else {
+				return fmt.Errorf("provide a query or use --template")
+			}
+
+			// Add LIMIT if specified and not already in query
+			if limit > 0 && !strings.Contains(strings.ToUpper(queryStr), "LIMIT") {
+				queryStr += fmt.Sprintf(" LIMIT %d", limit)
+			}
+
+			// Load triple stores
+			var mergedStore *store.TripleStore
+			if len(documentIDs) > 0 {
+				mergedStore, err = lib.LoadMergedTripleStore(documentIDs...)
+			} else {
+				mergedStore, err = lib.LoadAllTripleStores()
+			}
+			if err != nil {
+				return fmt.Errorf("failed to load triple stores: %w", err)
+			}
+
+			// Parse the SPARQL query
+			parsedQuery, parseErr := query.ParseQuery(queryStr)
+			if parseErr != nil {
+				return fmt.Errorf("query parse error: %w", parseErr)
+			}
+
+			queryExecutor := query.NewExecutor(mergedStore)
+
+			startTime := time.Now()
+			result, queryErr := queryExecutor.Execute(parsedQuery)
+			elapsed := time.Since(startTime)
+
+			if queryErr != nil {
+				return fmt.Errorf("query failed: %w", queryErr)
+			}
+
+			if showTiming {
+				fmt.Printf("Query executed in %v (%d results, %d triples searched)\n",
+					elapsed, result.Count, mergedStore.Count())
+			}
+
+			// Format output
+			outputFormat := query.OutputFormat(formatStr)
+			output, fmtErr := result.Format(outputFormat)
+			if fmtErr != nil {
+				return fmt.Errorf("format error: %w", fmtErr)
+			}
+			fmt.Print(output)
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+	cmd.Flags().String("template", "", "Use a built-in query template")
+	cmd.Flags().StringP("format", "f", "table", "Output format (table, json, csv)")
+	cmd.Flags().StringSlice("documents", []string{}, "Document IDs to query (comma-separated, default: all)")
+	cmd.Flags().Bool("timing", false, "Show query execution time")
+	cmd.Flags().Int("limit", 0, "Limit number of results")
+
+	return cmd
+}
+
+func libraryRemoveCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "remove <document-id>",
+		Short: "Remove a document from the library",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			libraryPath, _ := cmd.Flags().GetString("path")
+			documentID := args[0]
+
+			lib, err := library.Open(libraryPath)
+			if err != nil {
+				return fmt.Errorf("library not found at %s: %w", libraryPath, err)
+			}
+
+			if err := lib.RemoveDocument(documentID); err != nil {
+				return fmt.Errorf("failed to remove document: %w", err)
+			}
+
+			fmt.Printf("Removed document: %s\n", documentID)
+			return nil
+		},
+	}
+
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+
+	return cmd
+}
+
+func libraryExportCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "export",
+		Short: "Export a document's RDF graph",
+		Long: `Export a document's serialized RDF graph in various formats.
+
+Examples:
+  regula library export --document eu-gdpr --format json
+  regula library export --document eu-gdpr --format summary`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			libraryPath, _ := cmd.Flags().GetString("path")
+			documentID, _ := cmd.Flags().GetString("document")
+			formatStr, _ := cmd.Flags().GetString("format")
+			outputPath, _ := cmd.Flags().GetString("output")
+
+			if documentID == "" {
+				return fmt.Errorf("--document flag is required")
+			}
+
+			lib, err := library.Open(libraryPath)
+			if err != nil {
+				return fmt.Errorf("library not found at %s: %w", libraryPath, err)
+			}
+
+			tripleStore, err := lib.LoadTripleStore(documentID)
+			if err != nil {
+				return fmt.Errorf("failed to load document: %w", err)
+			}
+
+			var output string
+
+			switch formatStr {
+			case "json":
+				data, marshalErr := library.SerializeTripleStore(tripleStore)
+				if marshalErr != nil {
+					return fmt.Errorf("failed to serialize: %w", marshalErr)
+				}
+				output = string(data)
+			case "summary":
+				exportStats := tripleStore.Stats()
+				output = fmt.Sprintf("Document: %s\n", documentID)
+				output += fmt.Sprintf("Total triples: %d\n", exportStats.TotalTriples)
+				output += fmt.Sprintf("Unique subjects: %d\n", exportStats.UniqueSubjects)
+				output += fmt.Sprintf("Unique predicates: %d\n", exportStats.UniquePredicates)
+				output += fmt.Sprintf("Unique objects: %d\n", exportStats.UniqueObjects)
+				if len(exportStats.PredicateCounts) > 0 {
+					output += "\nPredicate Counts:\n"
+					for predicateKey, predicateCount := range exportStats.PredicateCounts {
+						output += fmt.Sprintf("  %-40s %d\n", predicateKey, predicateCount)
+					}
+				}
+			default:
+				// N-Triples format
+				allTriples := tripleStore.All()
+				var tripleLines []string
+				for _, triple := range allTriples {
+					tripleLines = append(tripleLines, triple.NTriples())
+				}
+				output = strings.Join(tripleLines, "\n")
+			}
+
+			if outputPath != "" {
+				if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+					return fmt.Errorf("failed to write output: %w", err)
+				}
+				fmt.Printf("Exported %s to %s\n", documentID, outputPath)
+			} else {
+				fmt.Print(output)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+	cmd.Flags().String("document", "", "Document ID to export")
+	cmd.Flags().StringP("format", "f", "ntriples", "Output format (json, summary, ntriples)")
+	cmd.Flags().StringP("output", "o", "", "Output file path")
+
+	return cmd
+}
+
+func librarySourceCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "source <document-id>",
+		Short: "Display the original source text of a document",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			libraryPath, _ := cmd.Flags().GetString("path")
+			documentID := args[0]
+
+			lib, err := library.Open(libraryPath)
+			if err != nil {
+				return fmt.Errorf("library not found at %s: %w", libraryPath, err)
+			}
+
+			sourceText, err := lib.LoadSourceText(documentID)
+			if err != nil {
+				return fmt.Errorf("failed to load source: %w", err)
+			}
+
+			fmt.Print(string(sourceText))
+			return nil
+		},
+	}
+
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+
+	return cmd
+}
+
+func truncateString(inputStr string, maxLength int) string {
+	if len(inputStr) <= maxLength {
+		return inputStr
+	}
+	return inputStr[:maxLength-3] + "..."
 }

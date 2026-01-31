@@ -1105,6 +1105,63 @@ go run cmd/regula/main.go export --source testdata/gdpr.txt --format summary
 | `testdata/eu-dsa.txt` | EU Regulation | 11 | 15 | 46 |
 | `testdata/us-coppa.txt` | US Federal Law | 10 | 7 | 4 |
 
+## Legislation Library Tests
+
+The `pkg/library` package has tests covering the persistent legislation library engine:
+
+```bash
+# Run all library tests
+go test ./pkg/library/... -v -count=1
+
+# Run specific test suites
+go test ./pkg/library/... -run TestSerialize -v      # Serialization round-trip
+go test ./pkg/library/... -run TestIngest -v          # Ingestion pipeline
+go test ./pkg/library/... -run TestAdd -v             # Document add/idempotency
+go test ./pkg/library/... -run TestLoad -v            # Triple store loading
+go test ./pkg/library/... -run TestSeed -v            # Corpus seeding
+go test ./pkg/library/... -run TestPersistence -v     # Open/close persistence
+```
+
+### Library CLI End-to-End Testing
+
+```bash
+# Build the binary
+go build -o regula ./cmd/regula
+
+# Initialize a library
+regula library init --path /tmp/test-lib
+
+# Seed with all testdata (18 documents)
+regula library seed --testdata-dir testdata --path /tmp/test-lib
+
+# List documents
+regula library list --path /tmp/test-lib
+
+# Filter by jurisdiction
+regula library list --jurisdiction EU --path /tmp/test-lib
+
+# Show library statistics
+regula library status --path /tmp/test-lib
+
+# Query across documents
+regula library query --template rights --documents eu-gdpr,us-ca-ccpa --path /tmp/test-lib
+
+# Add a single document
+regula library add --source testdata/gdpr.txt --id eu-gdpr --jurisdiction EU --path /tmp/test-lib
+
+# View source text
+regula library source eu-gdpr --path /tmp/test-lib | head -5
+
+# Export graph summary
+regula library export --document eu-gdpr --format summary --path /tmp/test-lib
+
+# Remove a document
+regula library remove eu-gdpr --path /tmp/test-lib
+
+# Clean up
+rm -rf /tmp/test-lib
+```
+
 ## Troubleshooting Tests
 
 ### Common Issues
