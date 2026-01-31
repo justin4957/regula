@@ -123,6 +123,9 @@ type Parser struct {
 	// Iowa alphanumeric style patterns (Section 715D.1)
 	ioAlphanumericSectionPattern *regexp.Regexp
 
+	// USC plain section pattern: "Section 26 heading" (integer with optional trailing text)
+	uscSectionPattern *regexp.Regexp
+
 	// UK-style patterns (Acts and Statutory Instruments)
 	ukPartPattern       *regexp.Regexp
 	ukSectionPattern    *regexp.Regexp
@@ -137,7 +140,13 @@ type Parser struct {
 	usDefinitionPattern *regexp.Regexp
 
 	// Detected format
-	format DocumentFormat
+	format     DocumentFormat
+	formatHint DocumentFormat
+
+	// enableUSCPlainSections enables matching of plain integer section numbers
+	// ("Section 26 heading") which is specific to federal USC documents.
+	// Disabled by default to avoid conflicting with state-specific patterns.
+	enableUSCPlainSections bool
 
 	// Pattern library integration (optional)
 	patternRegistry pattern.Registry
@@ -152,8 +161,8 @@ func NewParser() *Parser {
 		euSectionPattern: regexp.MustCompile(`^Section\s+(\d+)$`),
 		euArticlePattern: regexp.MustCompile(`^Article\s+(\d+)$`),
 
-		// US-style patterns (CCPA, California Civil Code, etc.)
-		usChapterPattern:    regexp.MustCompile(`^CHAPTER\s+(\d+)$`),
+		// US-style patterns (CCPA, California Civil Code, US Code, etc.)
+		usChapterPattern:    regexp.MustCompile(`^CHAPTER\s+(\d+\w*)$`),
 		usArticlePattern:    regexp.MustCompile(`^Article\s+(\d+)$`),
 		usSectionPattern:    regexp.MustCompile(`^Section\s+(\d+(?:\.\d+)*)$`),
 		usSectionNumPattern: regexp.MustCompile(`^Section\s+(\d+)\.(\d+)$`),
@@ -166,6 +175,9 @@ func NewParser() *Parser {
 
 		// Iowa alphanumeric: Section 715D.1
 		ioAlphanumericSectionPattern: regexp.MustCompile(`^(?:Section|§)\s*(\d+[A-Z])\.(\d+)$`),
+
+		// USC plain integer section: "Section 26 heading text" or "Section 26"
+		uscSectionPattern: regexp.MustCompile(`^Section\s+(\d+)\s*(.*)$`),
 
 		// UK-style patterns (Acts and Statutory Instruments)
 		ukPartPattern:       regexp.MustCompile(`^PART\s+(\d+)\s*$`),
@@ -181,6 +193,17 @@ func NewParser() *Parser {
 		usDefinitionPattern: regexp.MustCompile(`^\(([a-z])\)\s+['''"\x{2018}\x{2019}]([^'''"\x{2018}\x{2019}]+)['''"\x{2018}\x{2019}]\s+means`),
 
 		format: FormatUnknown,
+	}
+}
+
+// SetFormatHint sets a format hint that bypasses automatic format detection.
+// This is useful when the caller already knows the document format (e.g.,
+// from bulk ingestion metadata). For US format, this also enables plain
+// integer section matching used by federal USC documents.
+func (p *Parser) SetFormatHint(format DocumentFormat) {
+	p.formatHint = format
+	if format == FormatUS {
+		p.enableUSCPlainSections = true
 	}
 }
 
@@ -317,8 +340,12 @@ func (p *Parser) Parse(r io.Reader) (*Document, error) {
 		Chapters: make([]*Chapter, 0),
 	}
 
-	// Detect document format and type from content
-	p.format = p.detectFormat(lines)
+	// Use format hint if set, otherwise detect from content
+	if p.formatHint != "" && p.formatHint != FormatUnknown {
+		p.format = p.formatHint
+	} else {
+		p.format = p.detectFormat(lines)
+	}
 
 	// Parse title and type from first lines
 	if len(lines) > 0 {
@@ -415,6 +442,13 @@ func (p *Parser) detectFormatLegacy(lines []string) DocumentFormat {
 		}
 		if p.usSectionNumPattern.MatchString(line) {
 			usIndicators += 2
+		}
+		// USC Title header (e.g., "TITLE 42\nTHE PUBLIC HEALTH AND WELFARE")
+		if strings.HasPrefix(upper, "TITLE ") && strings.Contains(upper, "THE ") {
+			usIndicators += 3
+		}
+		if strings.Contains(upper, "SUBCHAPTER") {
+			usIndicators++
 		}
 		if strings.Contains(upper, "CALIFORNIA") {
 			usIndicators += 2
@@ -798,6 +832,33 @@ func (p *Parser) parseUSDocument(doc *Document, lines []string) {
 			pendingSection = currentSection
 			sectionText.Reset()
 			continue
+		}
+
+		// Try USC-style: "Section 26 heading text" or "Section 300aa-25 heading"
+		// Only active for federal USC documents (via format hint) to avoid
+		// conflicting with state-specific section patterns.
+		if p.enableUSCPlainSections {
+			if m := p.uscSectionPattern.FindStringSubmatch(trimmedLine); m != nil {
+				// Save previous section
+				if currentSection != nil {
+					currentSection.Text = strings.TrimSpace(sectionText.String())
+					p.addArticle(currentChapter, nil, currentSection)
+				}
+
+				sectionNum, _ := strconv.Atoi(m[1])
+				sectionTitle := strings.TrimSpace(m[2])
+
+				currentSection = &Article{
+					Number: sectionNum,
+					Title:  sectionTitle,
+				}
+				if sectionTitle == "" {
+					pendingSectionTitle = true
+					pendingSection = currentSection
+				}
+				sectionText.Reset()
+				continue
+			}
 		}
 
 		// Set section title from line after "Section X"

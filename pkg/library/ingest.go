@@ -13,8 +13,9 @@ import (
 const defaultBaseURI = "https://regula.dev/regulations/"
 
 // IngestFromText runs the full extraction pipeline on source text and returns a
-// populated TripleStore with extraction statistics.
-func IngestFromText(sourceText []byte, documentID string, baseURI string) (*IngestResult, error) {
+// populated TripleStore with extraction statistics. An optional formatHint
+// (e.g., "us", "eu", "uk") bypasses automatic format detection.
+func IngestFromText(sourceText []byte, documentID string, baseURI string, formatHint ...string) (*IngestResult, error) {
 	if len(sourceText) == 0 {
 		return nil, fmt.Errorf("source text is empty")
 	}
@@ -29,6 +30,10 @@ func IngestFromText(sourceText []byte, documentID string, baseURI string) (*Inge
 
 	// Step 1: Parse document structure
 	parser := extract.NewParser()
+	// Apply format hint if provided, bypassing auto-detection
+	if len(formatHint) > 0 && formatHint[0] != "" {
+		parser.SetFormatHint(extract.DocumentFormat(formatHint[0]))
+	}
 	reader := strings.NewReader(string(sourceText))
 	doc, err := parser.Parse(reader)
 	if err != nil {
