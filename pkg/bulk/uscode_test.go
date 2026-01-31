@@ -109,7 +109,7 @@ func TestUSCodeSourceDownloadDataset(t *testing.T) {
 		t.Error("expected non-zero bytes written")
 	}
 
-	expectedLocalPath := filepath.Join(temporaryDir, "uscode", "xml_usc04@119-73not60.zip")
+	expectedLocalPath := filepath.Join(temporaryDir, "uscode", "usc-title-04.zip")
 	if result.LocalPath != expectedLocalPath {
 		t.Errorf("expected local path %q, got %q", expectedLocalPath, result.LocalPath)
 	}

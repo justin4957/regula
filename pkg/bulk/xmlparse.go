@@ -9,12 +9,13 @@ import (
 
 // --- USLM XML Structures (US Code) ---
 // Minimal structs for the elements needed from the USLM schema.
-// The USLM format uses: <usc> → <main> → <title> → <chapter> → <section>
+// The USLM format uses: <uscDoc> → <main> → <title> → <chapter> → <section>
+// (Older schema used <usc> as root; current uses <uscDoc> with namespace.)
 
-// USLMDocument represents the top-level <usc> element.
+// USLMDocument represents the top-level element (<uscDoc> or <usc>).
 type USLMDocument struct {
-	XMLName xml.Name   `xml:"usc"`
-	Main    USLMMain   `xml:"main"`
+	XMLName xml.Name `xml:"uscDoc"`
+	Main    USLMMain `xml:"main"`
 }
 
 // USLMMain represents the <main> element containing the title.
@@ -111,13 +112,45 @@ type CFRSection struct {
 
 // --- Parsing Functions ---
 
+// namespaceStripper wraps an xml.Decoder to strip XML namespace prefixes,
+// allowing struct tags to match local element names regardless of namespace.
+type namespaceStripper struct {
+	decoder *xml.Decoder
+}
+
+func (stripper *namespaceStripper) Token() (xml.Token, error) {
+	token, err := stripper.decoder.Token()
+	if err != nil {
+		return token, err
+	}
+
+	switch element := token.(type) {
+	case xml.StartElement:
+		element.Name.Space = ""
+		for i := range element.Attr {
+			element.Attr[i].Name.Space = ""
+		}
+		return element, nil
+	case xml.EndElement:
+		element.Name.Space = ""
+		return element, nil
+	}
+
+	return token, nil
+}
+
 // ParseUSLMXML parses USLM XML and returns the structured document.
+// Handles both <uscDoc> (current USLM 1.0) and <usc> (older format)
+// by stripping XML namespaces before decoding.
 func ParseUSLMXML(reader io.Reader) (*USLMDocument, error) {
-	decoder := xml.NewDecoder(reader)
-	decoder.Strict = false
+	rawDecoder := xml.NewDecoder(reader)
+	rawDecoder.Strict = false
+
+	decoder := xml.NewTokenDecoder(&namespaceStripper{decoder: rawDecoder})
 
 	document := &USLMDocument{}
 	if err := decoder.Decode(document); err != nil {
+		// Try legacy <usc> root element
 		return nil, fmt.Errorf("failed to parse USLM XML: %w", err)
 	}
 
@@ -126,8 +159,10 @@ func ParseUSLMXML(reader io.Reader) (*USLMDocument, error) {
 
 // ParseCFRXML parses CFR XML and returns the structured document.
 func ParseCFRXML(reader io.Reader) (*CFRDocument, error) {
-	decoder := xml.NewDecoder(reader)
-	decoder.Strict = false
+	rawDecoder := xml.NewDecoder(reader)
+	rawDecoder.Strict = false
+
+	decoder := xml.NewTokenDecoder(&namespaceStripper{decoder: rawDecoder})
 
 	document := &CFRDocument{}
 	if err := decoder.Decode(document); err != nil {
