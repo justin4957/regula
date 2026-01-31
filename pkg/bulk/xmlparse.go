@@ -23,10 +23,26 @@ type USLMMain struct {
 	Title USLMTitle `xml:"title"`
 }
 
+// USLMNum represents a <num> element which may have both a value attribute
+// and display text (e.g., <num value="26">§ 26.</num>).
+type USLMNum struct {
+	Value string `xml:"value,attr"`
+	Text  string `xml:",chardata"`
+}
+
+// CleanValue returns the clean numeric value, preferring the value attribute
+// over the display text.
+func (n USLMNum) CleanValue() string {
+	if n.Value != "" {
+		return cleanXMLText(n.Value)
+	}
+	return cleanXMLText(n.Text)
+}
+
 // USLMTitle represents a <title> element in USLM XML.
 type USLMTitle struct {
 	Identifier string        `xml:"identifier,attr"`
-	Num        string        `xml:"num"`
+	Num        USLMNum       `xml:"num"`
 	Heading    string        `xml:"heading"`
 	Chapters   []USLMChapter `xml:"chapter"`
 	Sections   []USLMSection `xml:"section"`
@@ -34,17 +50,17 @@ type USLMTitle struct {
 
 // USLMChapter represents a <chapter> element.
 type USLMChapter struct {
-	Identifier string        `xml:"identifier,attr"`
-	Num        string        `xml:"num"`
-	Heading    string        `xml:"heading"`
-	Sections   []USLMSection `xml:"section"`
+	Identifier  string           `xml:"identifier,attr"`
+	Num         USLMNum          `xml:"num"`
+	Heading     string           `xml:"heading"`
+	Sections    []USLMSection    `xml:"section"`
 	Subchapters []USLMSubchapter `xml:"subchapter"`
 }
 
 // USLMSubchapter represents a <subchapter> element.
 type USLMSubchapter struct {
 	Identifier string        `xml:"identifier,attr"`
-	Num        string        `xml:"num"`
+	Num        USLMNum       `xml:"num"`
 	Heading    string        `xml:"heading"`
 	Sections   []USLMSection `xml:"section"`
 }
@@ -52,7 +68,7 @@ type USLMSubchapter struct {
 // USLMSection represents a <section> element in USLM XML.
 type USLMSection struct {
 	Identifier  string           `xml:"identifier,attr"`
-	Num         string           `xml:"num"`
+	Num         USLMNum          `xml:"num"`
 	Heading     string           `xml:"heading"`
 	Chapeau     string           `xml:"chapeau"`
 	Content     USLMContent      `xml:"content"`
@@ -67,7 +83,7 @@ type USLMContent struct {
 // USLMSubsection represents a <subsection> within a <section>.
 type USLMSubsection struct {
 	Identifier string      `xml:"identifier,attr"`
-	Num        string      `xml:"num"`
+	Num        USLMNum     `xml:"num"`
 	Heading    string      `xml:"heading"`
 	Content    USLMContent `xml:"content"`
 	Chapeau    string      `xml:"chapeau"`
@@ -175,13 +191,14 @@ func ParseCFRXML(reader io.Reader) (*CFRDocument, error) {
 // --- Plaintext Conversion ---
 
 // USLMToPlaintext converts a parsed USLM document to plaintext suitable
-// for the regula ingestion pipeline.
+// for the regula ingestion pipeline. Output uses clean numeric identifiers
+// from the XML value attributes to produce parser-compatible headers.
 func USLMToPlaintext(document *USLMDocument) string {
 	var builder strings.Builder
 	title := document.Main.Title
 
 	heading := cleanXMLText(title.Heading)
-	num := cleanXMLText(title.Num)
+	num := title.Num.CleanValue()
 	builder.WriteString(fmt.Sprintf("TITLE %s\n%s\n\n", num, heading))
 
 	// Direct sections under title
@@ -192,7 +209,11 @@ func USLMToPlaintext(document *USLMDocument) string {
 	// Chapters
 	for _, chapter := range title.Chapters {
 		chapterHeading := cleanXMLText(chapter.Heading)
-		chapterNum := cleanXMLText(chapter.Num)
+		chapterNum := chapter.Num.CleanValue()
+		// Extract clean chapter number from identifier if Num still has decorations
+		if chapterNum == "" {
+			chapterNum = extractIdentifierSuffix(chapter.Identifier)
+		}
 		builder.WriteString(fmt.Sprintf("CHAPTER %s\n%s\n\n", chapterNum, chapterHeading))
 
 		for _, section := range chapter.Sections {
@@ -201,7 +222,10 @@ func USLMToPlaintext(document *USLMDocument) string {
 
 		for _, subchapter := range chapter.Subchapters {
 			subHeading := cleanXMLText(subchapter.Heading)
-			subNum := cleanXMLText(subchapter.Num)
+			subNum := subchapter.Num.CleanValue()
+			if subNum == "" {
+				subNum = extractIdentifierSuffix(subchapter.Identifier)
+			}
 			builder.WriteString(fmt.Sprintf("SUBCHAPTER %s\n%s\n\n", subNum, subHeading))
 
 			for _, section := range subchapter.Sections {
@@ -244,8 +268,14 @@ func CFRToPlaintext(document *CFRDocument) string {
 }
 
 // writeSectionPlaintext writes a USLM section as plaintext.
+// Uses clean numeric values from XML value attributes, falling back to
+// identifier-derived section numbers for parser compatibility.
 func writeSectionPlaintext(builder *strings.Builder, section USLMSection) {
-	num := cleanXMLText(section.Num)
+	num := section.Num.CleanValue()
+	// Fall back to identifier suffix (e.g., "/us/usc/t42/s26" → "26")
+	if num == "" {
+		num = extractIdentifierSuffix(section.Identifier)
+	}
 	heading := cleanXMLText(section.Heading)
 
 	if num != "" || heading != "" {
@@ -261,7 +291,7 @@ func writeSectionPlaintext(builder *strings.Builder, section USLMSection) {
 	}
 
 	for _, subsection := range section.Subsections {
-		subNum := cleanXMLText(subsection.Num)
+		subNum := subsection.Num.CleanValue()
 		subContent := cleanXMLText(subsection.Content.Text)
 		subChapeau := cleanXMLText(subsection.Chapeau)
 
@@ -297,6 +327,27 @@ func writeCFRSectionPlaintext(builder *strings.Builder, section CFRSection) {
 	}
 
 	builder.WriteString("\n")
+}
+
+// extractIdentifierSuffix extracts the trailing segment from a USLM identifier
+// path. For example, "/us/usc/t42/s26" returns "26", "/us/usc/t42/ch1" returns "1".
+// The prefix letter (s for section, ch for chapter, etc.) is stripped.
+func extractIdentifierSuffix(identifier string) string {
+	if identifier == "" {
+		return ""
+	}
+	lastSlash := strings.LastIndex(identifier, "/")
+	if lastSlash < 0 || lastSlash >= len(identifier)-1 {
+		return ""
+	}
+	suffix := identifier[lastSlash+1:]
+	// Strip known prefixes: s (section), ch (chapter), sch (subchapter)
+	for _, prefix := range []string{"sch", "ch", "s"} {
+		if strings.HasPrefix(suffix, prefix) {
+			return suffix[len(prefix):]
+		}
+	}
+	return suffix
 }
 
 // cleanXMLText cleans up text extracted from XML, normalizing whitespace.

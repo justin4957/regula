@@ -9,34 +9,34 @@ const testUSLMXML = `<?xml version="1.0" encoding="UTF-8"?>
 <uscDoc xmlns="http://xml.house.gov/schemas/uslm/1.0">
   <main>
     <title identifier="/us/usc/t4">
-      <num>4</num>
+      <num value="4">Title 4—</num>
       <heading>Flag and Seal, Seat of Government, and the States</heading>
       <chapter identifier="/us/usc/t4/ch1">
-        <num>1</num>
+        <num value="1">CHAPTER 1—</num>
         <heading>The Flag</heading>
         <section identifier="/us/usc/t4/s1">
-          <num>1</num>
+          <num value="1">§ 1.</num>
           <heading>Flag; stripes and stars on</heading>
           <content>The flag of the United States shall be thirteen horizontal stripes.</content>
           <subsection identifier="/us/usc/t4/s1/a">
-            <num>(a)</num>
+            <num value="(a)">(a)</num>
             <content>Additional stars shall be added on admission of new States.</content>
           </subsection>
         </section>
         <section identifier="/us/usc/t4/s2">
-          <num>2</num>
+          <num value="2">§ 2.</num>
           <heading>Same; additional stars</heading>
           <content>On the admission of a new State, one star shall be added.</content>
         </section>
       </chapter>
       <chapter identifier="/us/usc/t4/ch2">
-        <num>2</num>
+        <num value="2">CHAPTER 2—</num>
         <heading>The Seal</heading>
         <subchapter identifier="/us/usc/t4/ch2/schI">
-          <num>I</num>
+          <num value="I">SUBCHAPTER I—</num>
           <heading>General Provisions</heading>
           <section identifier="/us/usc/t4/s41">
-            <num>41</num>
+            <num value="41">§ 41.</num>
             <heading>Seal of the United States</heading>
             <content>The seal heretofore used by the United States shall be the seal.</content>
           </section>
@@ -84,8 +84,11 @@ func TestParseUSLMXML(t *testing.T) {
 	}
 
 	title := document.Main.Title
-	if title.Num != "4" {
-		t.Errorf("expected title num '4', got %q", title.Num)
+	if title.Num.CleanValue() != "4" {
+		t.Errorf("expected title num '4', got %q", title.Num.CleanValue())
+	}
+	if title.Num.Value != "4" {
+		t.Errorf("expected title num value attr '4', got %q", title.Num.Value)
 	}
 	if !strings.Contains(title.Heading, "Flag and Seal") {
 		t.Errorf("expected heading to contain 'Flag and Seal', got %q", title.Heading)
@@ -95,16 +98,16 @@ func TestParseUSLMXML(t *testing.T) {
 	}
 
 	chapter1 := title.Chapters[0]
-	if chapter1.Num != "1" {
-		t.Errorf("expected chapter 1, got %q", chapter1.Num)
+	if chapter1.Num.CleanValue() != "1" {
+		t.Errorf("expected chapter 1, got %q", chapter1.Num.CleanValue())
 	}
 	if len(chapter1.Sections) != 2 {
 		t.Fatalf("expected 2 sections in chapter 1, got %d", len(chapter1.Sections))
 	}
 
 	section1 := chapter1.Sections[0]
-	if section1.Num != "1" {
-		t.Errorf("expected section num '1', got %q", section1.Num)
+	if section1.Num.CleanValue() != "1" {
+		t.Errorf("expected section num '1', got %q", section1.Num.CleanValue())
 	}
 	if !strings.Contains(section1.Content.Text, "thirteen horizontal stripes") {
 		t.Errorf("expected section content about stripes, got %q", section1.Content.Text)
@@ -112,16 +115,16 @@ func TestParseUSLMXML(t *testing.T) {
 	if len(section1.Subsections) != 1 {
 		t.Fatalf("expected 1 subsection, got %d", len(section1.Subsections))
 	}
-	if section1.Subsections[0].Num != "(a)" {
-		t.Errorf("expected subsection num '(a)', got %q", section1.Subsections[0].Num)
+	if section1.Subsections[0].Num.CleanValue() != "(a)" {
+		t.Errorf("expected subsection num '(a)', got %q", section1.Subsections[0].Num.CleanValue())
 	}
 
 	chapter2 := title.Chapters[1]
 	if len(chapter2.Subchapters) != 1 {
 		t.Fatalf("expected 1 subchapter, got %d", len(chapter2.Subchapters))
 	}
-	if chapter2.Subchapters[0].Num != "I" {
-		t.Errorf("expected subchapter num 'I', got %q", chapter2.Subchapters[0].Num)
+	if chapter2.Subchapters[0].Num.CleanValue() != "I" {
+		t.Errorf("expected subchapter num 'I', got %q", chapter2.Subchapters[0].Num.CleanValue())
 	}
 }
 

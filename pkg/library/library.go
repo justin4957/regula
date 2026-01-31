@@ -100,8 +100,8 @@ func (lib *Library) AddDocument(documentID string, sourceText []byte, opts AddOp
 		baseURI = lib.manifest.BaseURI
 	}
 
-	// Run ingestion pipeline
-	result, err := IngestFromText(sourceText, documentID, baseURI)
+	// Run ingestion pipeline with format hint from options
+	result, err := IngestFromText(sourceText, documentID, baseURI, opts.Format)
 	if err != nil {
 		// Record failure
 		entry := &DocumentEntry{
