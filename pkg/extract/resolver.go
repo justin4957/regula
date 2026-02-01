@@ -684,9 +684,16 @@ func (r *ReferenceResolver) buildExternalURI(ref *Reference) string {
 	case TargetDecision:
 		return fmt.Sprintf("urn:eu:decision:%s/%s", ref.DocYear, ref.DocNumber)
 	case TargetSection:
-		// Handle external US-style section references (e.g., Section 17014 of Title 18)
+		// Handle external US-style section references
 		if ref.ExternalDoc == "CalTitle" {
 			return fmt.Sprintf("urn:us:ca:title%s/sec%d", ref.DocNumber, ref.SectionNum)
+		}
+		if ref.ExternalDoc == "USC" {
+			return fmt.Sprintf("urn:us:usc:%s/%d", ref.DocNumber, ref.SectionNum)
+		}
+		if ref.ExternalDoc == "USAct" {
+			actSlug := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(ref.DocNumber), " ", "-"))
+			return fmt.Sprintf("urn:us:act:%s/sec%d", actSlug, ref.SectionNum)
 		}
 		return "urn:external:" + ref.Identifier
 	default:
