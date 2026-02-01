@@ -65,6 +65,11 @@ type ReferenceResolver struct {
 
 	// Article to chapter mapping for context resolution
 	articleChapter map[int]string
+
+	// String-keyed indexes for alphanumeric section IDs (e.g., "1396a", "300aa-25")
+	articlesByID       map[string]bool
+	articleChapterByID map[string]string
+	sectionsByID       map[string]bool // key: "chapterNum:sectionID"
 }
 
 // NewReferenceResolver creates a new resolver.
@@ -73,14 +78,17 @@ func NewReferenceResolver(baseURI, regID string) *ReferenceResolver {
 		baseURI += "#"
 	}
 	return &ReferenceResolver{
-		baseURI:        baseURI,
-		regID:          regID,
-		articles:       make(map[int]bool),
-		chapters:       make(map[string]bool),
-		sections:       make(map[string]bool),
-		paragraphs:     make(map[string]bool),
-		points:         make(map[string]bool),
-		articleChapter: make(map[int]string),
+		baseURI:            baseURI,
+		regID:              regID,
+		articles:           make(map[int]bool),
+		chapters:           make(map[string]bool),
+		sections:           make(map[string]bool),
+		paragraphs:         make(map[string]bool),
+		points:             make(map[string]bool),
+		articleChapter:     make(map[int]string),
+		articlesByID:       make(map[string]bool),
+		articleChapterByID: make(map[string]string),
+		sectionsByID:       make(map[string]bool),
 	}
 }
 
@@ -97,6 +105,10 @@ func (r *ReferenceResolver) IndexDocument(doc *Document) {
 		for _, section := range chapter.Sections {
 			sectionKey := chapter.Number + ":" + itoa(section.Number)
 			r.sections[sectionKey] = true
+			if section.SectionID != "" {
+				sectionIDKey := chapter.Number + ":" + section.SectionID
+				r.sectionsByID[sectionIDKey] = true
+			}
 
 			// Index articles in sections
 			for _, article := range section.Articles {
@@ -115,6 +127,10 @@ func (r *ReferenceResolver) IndexDocument(doc *Document) {
 func (r *ReferenceResolver) indexArticle(article *Article, chapterNum string) {
 	r.articles[article.Number] = true
 	r.articleChapter[article.Number] = chapterNum
+	if article.SectionID != "" {
+		r.articlesByID[article.SectionID] = true
+		r.articleChapterByID[article.SectionID] = chapterNum
+	}
 
 	// Index paragraphs
 	for _, para := range article.Paragraphs {
@@ -438,9 +454,8 @@ func (r *ReferenceResolver) resolveChapterReference(ref *Reference, result *Reso
 
 // resolveSectionReference resolves a section reference.
 func (r *ReferenceResolver) resolveSectionReference(ref *Reference, result *ResolvedReference) *ResolvedReference {
-	// US-style section references (e.g., Section 1798.100) map to articles
-	// The ArticleNum field contains the normalized article number (e.g., 100 for Section 1798.100)
-	if ref.ArticleNum > 0 && r.isUSStyleSectionRef(ref) {
+	// US-style section references (e.g., Section 1798.100) or USC-style (e.g., section 1396a)
+	if (ref.ArticleNum > 0 || ref.SectionStr != "") && r.isUSStyleSectionRef(ref) {
 		return r.resolveUSStyleSectionReference(ref, result)
 	}
 
@@ -491,15 +506,16 @@ func (r *ReferenceResolver) resolveSectionReference(ref *Reference, result *Reso
 	return result
 }
 
-// isUSStyleSectionRef checks if this is a US-style section reference (Section 1798.xxx).
+// isUSStyleSectionRef checks if this is a US-style section reference (Section 1798.xxx or USC section 1396a).
 func (r *ReferenceResolver) isUSStyleSectionRef(ref *Reference) bool {
-	// US-style section refs have SectionNum > 1000000 (codePrefix*1000 + sectionNum pattern)
-	// or contain subdivision references
-	return ref.SectionNum >= 1000000 || ref.SubRef == "subdivision" || ref.SubRef == "paragraph" || ref.SubRef == "range"
+	// US-style section refs have SectionNum > 1000000 (codePrefix*1000 + sectionNum pattern),
+	// contain subdivision references, or have a SectionStr (USC-style alphanumeric)
+	return ref.SectionNum >= 1000000 || ref.SectionStr != "" || ref.SubRef == "subdivision" || ref.SubRef == "paragraph" || ref.SubRef == "range"
 }
 
 // resolveUSStyleSectionReference resolves US-style California Code section references.
 // Section 1798.100 maps to Article 100, Section 1798.185(a) maps to Article 185 paragraph a.
+// Also resolves USC-style references using SectionStr for alphanumeric section IDs.
 func (r *ReferenceResolver) resolveUSStyleSectionReference(ref *Reference, result *ResolvedReference) *ResolvedReference {
 	// For US-style sections, ArticleNum contains the normalized article number
 	articleNum := ref.ArticleNum
@@ -509,7 +525,17 @@ func (r *ReferenceResolver) resolveUSStyleSectionReference(ref *Reference, resul
 		return r.resolveUSStyleSectionRange(ref, result)
 	}
 
-	// Check if article exists
+	// Try SectionStr first for alphanumeric section IDs (e.g., "1396a", "300aa-25")
+	if ref.SectionStr != "" && r.articlesByID[ref.SectionStr] {
+		targetURI := r.articleURIStr(ref.SectionStr)
+		result.Status = ResolutionResolved
+		result.Confidence = ConfidenceHigh
+		result.TargetURI = targetURI
+		result.Reason = fmt.Sprintf("Section %s resolved to Article %s", ref.Identifier, ref.SectionStr)
+		return result
+	}
+
+	// Check if article exists by numeric ID
 	if !r.articles[articleNum] {
 		result.Status = ResolutionNotFound
 		result.Confidence = ConfidenceNone
@@ -663,6 +689,14 @@ func (r *ReferenceResolver) chapterURI(number string) string {
 
 func (r *ReferenceResolver) sectionURI(chapterNum string, sectionNum int) string {
 	return r.baseURI + r.regID + ":Chapter" + chapterNum + ":Section" + itoa(sectionNum)
+}
+
+func (r *ReferenceResolver) articleURIStr(sectionID string) string {
+	return r.baseURI + r.regID + ":Art" + sectionID
+}
+
+func (r *ReferenceResolver) sectionURIStr(chapterNum string, sectionID string) string {
+	return r.baseURI + r.regID + ":Chapter" + chapterNum + ":Section" + sectionID
 }
 
 func (r *ReferenceResolver) buildExternalURI(ref *Reference) string {

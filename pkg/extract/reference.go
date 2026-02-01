@@ -51,6 +51,7 @@ type Reference struct {
 	PointLetter  string `json:"point_letter,omitempty"`
 	ChapterNum   string `json:"chapter_num,omitempty"`
 	SectionNum   int    `json:"section_num,omitempty"`
+	SectionStr   string `json:"section_str,omitempty"` // Full alphanumeric section ID (e.g., "1396a", "300aa-25")
 
 	// For external references
 	ExternalDoc string `json:"external_doc,omitempty"`
@@ -154,14 +155,14 @@ func NewReferenceExtractor() *ReferenceExtractor {
 		usSectionsRangePattern: regexp.MustCompile(`Sections\s+(\d+)\.(\d+)\s+(?:to|through)\s+(\d+)\.(\d+)`),
 
 		// Internal references (USC-style)
-		// "section 1396a of this title" or "section 1396a(a)(10) of this title"
-		uscSectionOfTitlePattern: regexp.MustCompile(`(?i)section\s+(\d+[a-z]?(?:-\d+[a-z]?)?)\s*(\([^)]*\)(?:\(\d+\))?)?\s+of\s+this\s+title`),
+		// "section 1396a of this title" or "section 300aa-25(a)(10) of this title"
+		uscSectionOfTitlePattern: regexp.MustCompile(`(?i)section\s+(\d+[a-z]*(?:-\d+[a-z]*)?)\s*(\([^)]*\)(?:\(\d+\))?)?\s+of\s+this\s+title`),
 		// "section 552a of title 5"
-		uscSectionOfOtherTitlePattern: regexp.MustCompile(`(?i)section\s+(\d+[a-z]?(?:-\d+[a-z]?)?)\s*(\([^)]*\)(?:\(\d+\))?)?\s+of\s+title\s+(\d+)`),
-		// "section 1396a(a)" or "section 1396a(a)(10)" (with parentheticals, no "of" context)
-		uscSectionSubsecPattern: regexp.MustCompile(`(?i)\bsection\s+(\d+[a-z]?(?:-\d+[a-z]?)?)\(([a-z])\)(?:\((\d+)\))?`),
-		// "section 1396a" or "section 1320d-1" (bare section with letter suffix, avoids matching "Section 1")
-		uscSectionBarePattern: regexp.MustCompile(`(?i)\bsection\s+(\d+[a-z](?:-\d+[a-z]?)?)\b`),
+		uscSectionOfOtherTitlePattern: regexp.MustCompile(`(?i)section\s+(\d+[a-z]*(?:-\d+[a-z]*)?)\s*(\([^)]*\)(?:\(\d+\))?)?\s+of\s+title\s+(\d+)`),
+		// "section 1396a(a)" or "section 300aa-25(a)(10)" (with parentheticals, no "of" context)
+		uscSectionSubsecPattern: regexp.MustCompile(`(?i)\bsection\s+(\d+[a-z]*(?:-\d+[a-z]*)?)\(([a-z])\)(?:\((\d+)\))?`),
+		// "section 1396a" or "section 300aa-25" (bare section with letter suffix, avoids matching "Section 1")
+		uscSectionBarePattern: regexp.MustCompile(`(?i)\bsection\s+(\d+[a-z]+(?:-\d+[a-z]*)?)\b`),
 		// "subsection (a)" or "subsection (b)(1)"
 		uscSubsectionPattern: regexp.MustCompile(`(?i)subsection\s+\(([a-z])\)(?:\((\d+)\))?`),
 		// "paragraph (2) of subsection (a)"
@@ -171,7 +172,7 @@ func NewReferenceExtractor() *ReferenceExtractor {
 		// "chapter 7" (Arabic numerals, not Roman — avoids overlap with EU chapterPattern)
 		uscChapterArabicPattern: regexp.MustCompile(`(?i)\bchapter\s+(\d+)\b`),
 		// "section 306 of the Public Health Service Act"
-		uscSectionOfActPattern: regexp.MustCompile(`(?i)section\s+(\d+[a-z]?(?:-\d+[a-z]?)?)\s*(\([^)]*\)(?:\(\d+\))?)?\s+of\s+the\s+([A-Z][^,;.]+?)\s+Act`),
+		uscSectionOfActPattern: regexp.MustCompile(`(?i)section\s+(\d+[a-z]*(?:-\d+[a-z]*)?)\s*(\([^)]*\)(?:\(\d+\))?)?\s+of\s+the\s+([A-Z][^,;.]+?)\s+Act`),
 
 		// External references (EU-style)
 		// "Directive 95/46/EC" or "Directive (EU) 2016/680"
@@ -789,6 +790,7 @@ func (e *ReferenceExtractor) extractUSCSectionRefs(text string, sourceArticle in
 			ExternalDoc:   "USC",
 			DocNumber:     titleNum,
 			SectionNum:    parseUSCSectionNum(sectionStr),
+			SectionStr:    sectionStr,
 		})
 	}
 
@@ -819,6 +821,7 @@ func (e *ReferenceExtractor) extractUSCSectionRefs(text string, sourceArticle in
 			TextLength:    match[1] - match[0],
 			ArticleNum:    sectionNum,
 			SectionNum:    sectionNum,
+			SectionStr:    sectionStr,
 		})
 	}
 
@@ -848,6 +851,7 @@ func (e *ReferenceExtractor) extractUSCSectionRefs(text string, sourceArticle in
 			ExternalDoc:   "USAct",
 			DocNumber:     actName + " Act",
 			SectionNum:    parseUSCSectionNum(sectionStr),
+			SectionStr:    sectionStr,
 		})
 	}
 
@@ -905,6 +909,7 @@ func (e *ReferenceExtractor) extractUSCSectionRefs(text string, sourceArticle in
 			TextLength:    match[1] - match[0],
 			ArticleNum:    sectionNum,
 			SectionNum:    sectionNum,
+			SectionStr:    sectionStr,
 			PointLetter:   subsecLetter,
 		}
 		if paragraphNum != "" {
@@ -1017,6 +1022,7 @@ func (e *ReferenceExtractor) extractUSCSectionRefs(text string, sourceArticle in
 			TextLength:    match[1] - match[0],
 			ArticleNum:    sectionNum,
 			SectionNum:    sectionNum,
+			SectionStr:    sectionStr,
 		})
 	}
 
