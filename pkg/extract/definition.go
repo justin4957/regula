@@ -24,39 +24,53 @@ type DefinitionSubPoint struct {
 	Text   string `json:"text"`
 }
 
+// allQuoteChars is the character class matching all supported quote characters:
+// ASCII quotes (', "), typographic quotes (', ', ", "), and Unicode quotes (U+2018, U+2019, U+201C, U+201D).
+const allQuoteChars = `'''"\x{2018}\x{2019}\x{201C}\x{201D}`
+
 // DefinitionExtractor extracts defined terms from regulatory text.
 type DefinitionExtractor struct {
 	definitionStartPattern *regexp.Regexp
 	subPointPattern        *regexp.Regexp
 	referencePattern       *regexp.Regexp
+	uscDefinitionPattern   *regexp.Regexp
 }
 
 // NewDefinitionExtractor creates a new DefinitionExtractor.
 func NewDefinitionExtractor() *DefinitionExtractor {
 	return &DefinitionExtractor{
 		// Matches "(1) 'term' means" or "(1) 'term' of the data subject means"
-		definitionStartPattern: regexp.MustCompile(`^\((\d+)\)\s+['''"\x{2018}\x{2019}]([^'''"\x{2018}\x{2019}]+)['''"\x{2018}\x{2019}](?:\s+of[^m]*?)?\s*means[:\s]`),
+		definitionStartPattern: regexp.MustCompile(`^\((\d+)\)\s+[` + allQuoteChars + `]([^` + allQuoteChars + `]+)[` + allQuoteChars + `](?:\s+of[^m]*?)?\s*means[:\s]`),
 		// Matches "(a) " sub-points within definitions
 		subPointPattern: regexp.MustCompile(`^\(([a-z])\)\s+(.*)$`),
-		// Matches references to other defined terms in quotes
-		referencePattern: regexp.MustCompile(`['''"\x{2018}\x{2019}]([^'''"\x{2018}\x{2019}]+)['''"\x{2018}\x{2019}]`),
+		// Matches references to other defined terms in quotes (all quote styles)
+		referencePattern: regexp.MustCompile(`[` + allQuoteChars + `]([^` + allQuoteChars + `]+)[` + allQuoteChars + `]`),
+		// Matches USC-style definitions: "  a The term \u201c...\u201d means/includes ..."
+		// Format: optional leading whitespace, letter, space, "The term" + quoted term + means/includes
+		uscDefinitionPattern: regexp.MustCompile(`^\s+([a-zA-Z])\s+[Tt]he\s+term\s+[` + allQuoteChars + `]([^` + allQuoteChars + `]+)[` + allQuoteChars + `]\s+(?:means|includes)[:\s,]`),
 	}
 }
 
 // ExtractDefinitions extracts all definitions from a document.
 // Automatically detects definition sections by title matching and
 // definition pattern density, supporting multiple definition sections.
+// Tries EU-style, then US state-style, then USC-style extraction.
 func (e *DefinitionExtractor) ExtractDefinitions(doc *Document) []*DefinedTerm {
 	definitions := make([]*DefinedTerm, 0)
 
 	defArticles := e.findDefinitionsArticles(doc)
 	for _, defArticle := range defArticles {
-		// Try EU-style extraction first (numbered definitions)
+		// Try EU-style extraction first (numbered definitions: (1) 'term' means)
 		articleDefs := e.extractEUDefinitions(defArticle)
 
-		// If no definitions found, try US-style extraction (lettered definitions)
+		// If no definitions found, try US state-style (lettered: (a) 'term' means)
 		if len(articleDefs) == 0 {
 			articleDefs = e.extractUSDefinitions(defArticle)
+		}
+
+		// If still none, try USC-style (indented letter: a The term "..." means)
+		if len(articleDefs) == 0 {
+			articleDefs = e.extractUSCDefinitions(defArticle)
 		}
 
 		definitions = append(definitions, articleDefs...)
@@ -82,7 +96,8 @@ func (e *DefinitionExtractor) findDefinitionsArticles(doc *Document) []*Article 
 		}
 	}
 
-	// Density detection: scan remaining articles for high definition pattern density
+	// Density detection: scan remaining articles for high definition pattern density.
+	// Checks all definition patterns (EU, US state, and USC) to find definition sections.
 	if len(matchedArticles) == 0 {
 		const definitionDensityThreshold = 3
 		for _, article := range allArticles {
@@ -92,7 +107,7 @@ func (e *DefinitionExtractor) findDefinitionsArticles(doc *Document) []*Article 
 			lines := strings.Split(article.Text, "\n")
 			definitionMatchCount := 0
 			for _, line := range lines {
-				if e.definitionStartPattern.MatchString(line) {
+				if e.definitionStartPattern.MatchString(line) || e.uscDefinitionPattern.MatchString(line) {
 					definitionMatchCount++
 				}
 			}
@@ -279,10 +294,93 @@ func (e *DefinitionExtractor) extractUSDefinitions(defArticle *Article) []*Defin
 	return definitions
 }
 
-// extractAfterMeans extracts the text after "means" or "means:" in a line.
+// extractUSCDefinitions extracts USC-style definitions (indented letter: a The term "..." means/includes...).
+// USC format uses leading whitespace + letter + "The term" + curly-quoted term + means/includes.
+func (e *DefinitionExtractor) extractUSCDefinitions(defArticle *Article) []*DefinedTerm {
+	definitions := make([]*DefinedTerm, 0)
+
+	lines := strings.Split(defArticle.Text, "\n")
+
+	var currentDef *DefinedTerm
+	var textBuffer strings.Builder
+	defNum := 0
+
+	flushDefinition := func() {
+		if currentDef != nil {
+			currentDef.Definition = strings.TrimSpace(textBuffer.String())
+			currentDef.References = e.extractReferences(currentDef.Definition, nil)
+			definitions = append(definitions, currentDef)
+			currentDef = nil
+			textBuffer.Reset()
+		}
+	}
+
+	for _, line := range lines {
+		// Check for new USC-style definition
+		if m := e.uscDefinitionPattern.FindStringSubmatch(line); m != nil {
+			flushDefinition()
+
+			defNum++
+			term := strings.TrimSpace(m[2])
+
+			currentDef = &DefinedTerm{
+				Number:         defNum,
+				Term:           term,
+				NormalizedTerm: normalizeTerm(term),
+				Scope:          fmt.Sprintf("Section %s", defArticle.Title),
+				ArticleRef:     defArticle.Number,
+				SubPoints:      make([]*DefinitionSubPoint, 0),
+			}
+
+			// Extract the rest of the line after "means" or "includes"
+			rest := e.extractAfterDefinitionVerb(line)
+			if rest != "" {
+				textBuffer.WriteString(rest)
+			}
+			continue
+		}
+
+		// Continuation line for current definition
+		if currentDef != nil && line != "" {
+			trimmedLine := strings.TrimSpace(line)
+			if trimmedLine == "" {
+				continue
+			}
+
+			// Stop if we encounter another lettered definition start (without matching the full pattern)
+			// USC continuation lines are typically indented; a new unindented section header ends the definition
+			if textBuffer.Len() > 0 {
+				textBuffer.WriteString(" ")
+			}
+			textBuffer.WriteString(trimmedLine)
+		}
+	}
+
+	// Flush final definition
+	flushDefinition()
+
+	return definitions
+}
+
+// extractAfterDefinitionVerb extracts text after "means", "means:", "includes", or "includes:" in a line.
+func (e *DefinitionExtractor) extractAfterDefinitionVerb(line string) string {
+	lineLower := strings.ToLower(line)
+	verbPatterns := []string{"means: ", "means ", "means:", "includes: ", "includes ", "includes,", "includes:"}
+
+	for _, verbPattern := range verbPatterns {
+		idx := strings.Index(lineLower, verbPattern)
+		if idx != -1 {
+			rest := line[idx+len(verbPattern):]
+			return strings.TrimSpace(rest)
+		}
+	}
+	return ""
+}
+
+// extractAfterMeans extracts the text after "means", "means:", "includes", or "includes:" in a line.
 func (e *DefinitionExtractor) extractAfterMeans(line string) string {
-	// Find "means" followed by optional ":" and space
-	patterns := []string{"means: ", "means ", "means:"}
+	// Find "means" or "includes" followed by optional ":" and space
+	patterns := []string{"means: ", "means ", "means:", "includes: ", "includes ", "includes,", "includes:"}
 	lineLower := strings.ToLower(line)
 
 	for _, pattern := range patterns {

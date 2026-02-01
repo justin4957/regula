@@ -415,6 +415,292 @@ func TestDefinitionStats(t *testing.T) {
 	}
 }
 
+// buildUSCTestDocument creates a Document with a single article containing the given text.
+func buildUSCTestDocument(articleNumber int, articleTitle string, articleText string) *Document {
+	return &Document{
+		Title: "Test USC Title",
+		Chapters: []*Chapter{
+			{
+				Number: "1",
+				Title:  "Test Chapter",
+				Articles: []*Article{
+					{
+						Number: articleNumber,
+						Title:  articleTitle,
+						Text:   articleText,
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestUSCDefinitionExtraction_BasicMeans(t *testing.T) {
+	articleText := "When used in this chapter\u2014\n" +
+		"  a The term \u201cService\u201d means the Public Health Service;\n" +
+		"  b The term \u201cSurgeon General\u201d means the Surgeon General of the Public Health Service;\n"
+
+	doc := buildUSCTestDocument(201, "Definitions", articleText)
+
+	extractor := NewDefinitionExtractor()
+	definitions := extractor.ExtractDefinitions(doc)
+
+	if len(definitions) != 2 {
+		t.Fatalf("Expected 2 definitions, got %d", len(definitions))
+		for _, def := range definitions {
+			t.Logf("  %d: %s = %s", def.Number, def.Term, def.Definition)
+		}
+	}
+
+	if definitions[0].Term != "Service" {
+		t.Errorf("First definition term: got %q, want %q", definitions[0].Term, "Service")
+	}
+	if definitions[1].Term != "Surgeon General" {
+		t.Errorf("Second definition term: got %q, want %q", definitions[1].Term, "Surgeon General")
+	}
+
+	if !containsSubstring(definitions[0].Definition, "Public Health Service") {
+		t.Errorf("First definition should contain 'Public Health Service', got %q", definitions[0].Definition)
+	}
+	if !containsSubstring(definitions[1].Definition, "Surgeon General of the Public Health Service") {
+		t.Errorf("Second definition should contain 'Surgeon General of the Public Health Service', got %q", definitions[1].Definition)
+	}
+}
+
+func TestUSCDefinitionExtraction_IncludesVerb(t *testing.T) {
+	articleText := "For purposes of this section\u2014\n" +
+		"  a The term \u201cperson\u201d includes an individual, corporation, company, association,\n" +
+		"firm, partnership, society, and joint stock company;\n" +
+		"  b The term \u201cState\u201d includes any State, territory, or possession of the United States;\n"
+
+	doc := buildUSCTestDocument(100, "Definitions", articleText)
+
+	extractor := NewDefinitionExtractor()
+	definitions := extractor.ExtractDefinitions(doc)
+
+	if len(definitions) != 2 {
+		t.Fatalf("Expected 2 definitions, got %d", len(definitions))
+	}
+
+	if definitions[0].Term != "person" {
+		t.Errorf("First definition term: got %q, want %q", definitions[0].Term, "person")
+	}
+	if !containsSubstring(definitions[0].Definition, "individual, corporation") {
+		t.Errorf("First definition should contain 'individual, corporation', got %q", definitions[0].Definition)
+	}
+
+	if definitions[1].Term != "State" {
+		t.Errorf("Second definition term: got %q, want %q", definitions[1].Term, "State")
+	}
+}
+
+func TestUSCDefinitionExtraction_ContinuationLines(t *testing.T) {
+	articleText := "Definitions\n" +
+		"  a The term \u201ccontrolled substance\u201d means a drug or other substance, or immediate\n" +
+		"precursor, included in schedule I, schedule II, schedule III, schedule IV, or\n" +
+		"schedule V of part B of this subchapter.\n"
+
+	doc := buildUSCTestDocument(802, "Definitions", articleText)
+
+	extractor := NewDefinitionExtractor()
+	definitions := extractor.ExtractDefinitions(doc)
+
+	if len(definitions) != 1 {
+		t.Fatalf("Expected 1 definition, got %d", len(definitions))
+	}
+
+	if definitions[0].Term != "controlled substance" {
+		t.Errorf("Term: got %q, want %q", definitions[0].Term, "controlled substance")
+	}
+
+	// Should contain text from continuation lines
+	if !containsSubstring(definitions[0].Definition, "schedule V of part B") {
+		t.Errorf("Definition should include continuation text, got %q", definitions[0].Definition)
+	}
+}
+
+func TestUSCDefinitionExtraction_MixedQuoteStyles(t *testing.T) {
+	// Test with ASCII double quotes instead of curly quotes
+	articleText := "Definitions\n" +
+		"  a The term \"agency\" means any executive department;\n"
+
+	doc := buildUSCTestDocument(551, "Definitions", articleText)
+
+	extractor := NewDefinitionExtractor()
+	definitions := extractor.ExtractDefinitions(doc)
+
+	if len(definitions) != 1 {
+		t.Fatalf("Expected 1 definition with ASCII quotes, got %d", len(definitions))
+	}
+
+	if definitions[0].Term != "agency" {
+		t.Errorf("Term: got %q, want %q", definitions[0].Term, "agency")
+	}
+}
+
+func TestUSCDefinitionExtraction_Scope(t *testing.T) {
+	articleText := "Definitions\n" +
+		"  a The term \u201cSecretary\u201d means the Secretary of Health and Human Services;\n"
+
+	doc := buildUSCTestDocument(201, "Definitions", articleText)
+
+	extractor := NewDefinitionExtractor()
+	definitions := extractor.ExtractDefinitions(doc)
+
+	if len(definitions) != 1 {
+		t.Fatalf("Expected 1 definition, got %d", len(definitions))
+	}
+
+	if definitions[0].Scope != "Section Definitions" {
+		t.Errorf("Scope: got %q, want %q", definitions[0].Scope, "Section Definitions")
+	}
+	if definitions[0].ArticleRef != 201 {
+		t.Errorf("ArticleRef: got %d, want %d", definitions[0].ArticleRef, 201)
+	}
+}
+
+func TestUSCDefinitionExtraction_References(t *testing.T) {
+	articleText := "Definitions\n" +
+		"  a The term \u201cadminister\u201d means the direct application of a \u201ccontrolled substance\u201d to the body of a \u201cpatient\u201d;\n"
+
+	doc := buildUSCTestDocument(802, "Definitions", articleText)
+
+	extractor := NewDefinitionExtractor()
+	definitions := extractor.ExtractDefinitions(doc)
+
+	if len(definitions) != 1 {
+		t.Fatalf("Expected 1 definition, got %d", len(definitions))
+	}
+
+	// Should extract references to "controlled substance" and "patient"
+	if len(definitions[0].References) < 2 {
+		t.Errorf("Expected at least 2 references, got %d: %v", len(definitions[0].References), definitions[0].References)
+	}
+
+	foundControlledSubstance := false
+	foundPatient := false
+	for _, ref := range definitions[0].References {
+		if ref == "controlled substance" {
+			foundControlledSubstance = true
+		}
+		if ref == "patient" {
+			foundPatient = true
+		}
+	}
+	if !foundControlledSubstance {
+		t.Errorf("Expected reference to 'controlled substance', got: %v", definitions[0].References)
+	}
+	if !foundPatient {
+		t.Errorf("Expected reference to 'patient', got: %v", definitions[0].References)
+	}
+}
+
+func TestUSCDefinitionExtraction_DensityDetection(t *testing.T) {
+	// Article without "Definitions" in title but with enough USC-style definitions
+	// to trigger density detection
+	articleText := "When used in this chapter\u2014\n" +
+		"  a The term \u201cApplicant\u201d means any person who applies for a grant;\n" +
+		"  b The term \u201cBoard\u201d means the Advisory Board for Medical Research;\n" +
+		"  c The term \u201cDirector\u201d means the Director of the National Institutes of Health;\n" +
+		"  d The term \u201cFund\u201d means the Establishment Fund;\n"
+
+	doc := buildUSCTestDocument(1, "General provisions", articleText)
+
+	extractor := NewDefinitionExtractor()
+	definitions := extractor.ExtractDefinitions(doc)
+
+	// Should find definitions via density detection even without "Definitions" in title
+	if len(definitions) < 3 {
+		t.Errorf("Expected at least 3 definitions from density detection, got %d", len(definitions))
+		for _, def := range definitions {
+			t.Logf("  %d: %s", def.Number, def.Term)
+		}
+	}
+}
+
+func TestUSCDefinitionExtraction_NoFalsePositivesOnEU(t *testing.T) {
+	// Verify that adding USC extraction doesn't break EU-style GDPR extraction
+	f := loadGDPRText(t)
+	defer f.Close()
+
+	parser := NewParser()
+	doc, err := parser.Parse(f)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	extractor := NewDefinitionExtractor()
+	definitions := extractor.ExtractDefinitions(doc)
+
+	// GDPR should still extract exactly 26 definitions via EU-style
+	if len(definitions) != 26 {
+		t.Errorf("GDPR backward compatibility: expected 26 definitions, got %d", len(definitions))
+		for _, def := range definitions {
+			t.Logf("  %d: %s", def.Number, def.Term)
+		}
+	}
+}
+
+func TestUSCDefinitionExtraction_EmptyArticle(t *testing.T) {
+	doc := buildUSCTestDocument(1, "Definitions", "")
+
+	extractor := NewDefinitionExtractor()
+	definitions := extractor.ExtractDefinitions(doc)
+
+	if len(definitions) != 0 {
+		t.Errorf("Expected 0 definitions from empty article, got %d", len(definitions))
+	}
+}
+
+func TestUSCDefinitionExtraction_NormalizedTerms(t *testing.T) {
+	articleText := "Definitions\n" +
+		"  a The term \u201cControlled Substance\u201d means a drug;\n" +
+		"  b The term \u201cDrug Enforcement Administration\u201d means the agency;\n"
+
+	doc := buildUSCTestDocument(802, "Definitions", articleText)
+
+	extractor := NewDefinitionExtractor()
+	definitions := extractor.ExtractDefinitions(doc)
+	lookup := NewDefinitionLookup(definitions)
+
+	// Should be findable by case-insensitive lookup
+	def := lookup.GetByNormalizedTerm("controlled substance")
+	if def == nil {
+		t.Error("Should find 'Controlled Substance' via normalized lookup")
+	}
+
+	def = lookup.GetByNormalizedTerm("DRUG ENFORCEMENT ADMINISTRATION")
+	if def == nil {
+		t.Error("Should find 'Drug Enforcement Administration' via normalized lookup")
+	}
+}
+
+func TestExtractAfterMeans_IncludesVerb(t *testing.T) {
+	extractor := NewDefinitionExtractor()
+
+	testCases := []struct {
+		name     string
+		line     string
+		expected string
+	}{
+		{"means with space", "The term \"foo\" means the bar", "the bar"},
+		{"means with colon", "The term \"foo\" means: the bar", "the bar"},
+		{"includes with space", "The term \"foo\" includes the bar", "the bar"},
+		{"includes with colon", "The term \"foo\" includes: the bar", "the bar"},
+		{"includes with comma", "The term \"foo\" includes, but is not limited to", "but is not limited to"},
+		{"no verb", "The term \"foo\" is the bar", ""},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := extractor.extractAfterMeans(testCase.line)
+			if result != testCase.expected {
+				t.Errorf("extractAfterMeans(%q) = %q, want %q", testCase.line, result, testCase.expected)
+			}
+		})
+	}
+}
+
 // Helper function
 func containsSubstring(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
