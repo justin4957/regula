@@ -21,17 +21,65 @@ const (
 	DescribeQueryType QueryType = "DESCRIBE"
 )
 
+// AggregateFunction represents a SPARQL aggregate function.
+type AggregateFunction string
+
+const (
+	AggregateCOUNT AggregateFunction = "COUNT"
+	AggregateSUM   AggregateFunction = "SUM"
+	AggregateAVG   AggregateFunction = "AVG"
+	AggregateMIN   AggregateFunction = "MIN"
+	AggregateMAX   AggregateFunction = "MAX"
+)
+
+// AggregateExpression represents a parsed aggregate expression like (COUNT(?x) AS ?count).
+type AggregateExpression struct {
+	Function AggregateFunction // COUNT, SUM, AVG, MIN, MAX
+	Variable string            // Source variable (e.g., "?x")
+	Alias    string            // Result alias (e.g., "?count")
+	Distinct bool              // COUNT(DISTINCT ?x)
+}
+
 // SelectQuery represents a parsed SELECT query.
 type SelectQuery struct {
-	Variables []string          // Variables to select (e.g., ["?subject", "?predicate"])
-	Distinct  bool              // DISTINCT modifier
-	Where     []TriplePattern   // WHERE clause triple patterns
-	Optional  [][]TriplePattern // OPTIONAL clause patterns
-	Filters   []Filter          // FILTER clauses
-	OrderBy   []OrderBy         // ORDER BY clauses
-	Limit     int               // LIMIT (0 = no limit)
-	Offset    int               // OFFSET (0 = no offset)
-	Prefixes  map[string]string // Prefix declarations
+	Variables  []string              // Variables to select (e.g., ["?subject", "?predicate"])
+	Aggregates []AggregateExpression // Aggregate expressions (e.g., COUNT(?x) AS ?count)
+	GroupBy    []string              // GROUP BY variables (e.g., ["?chapter"])
+	Having     []Filter              // HAVING clauses (post-aggregation filters)
+	Distinct   bool                  // DISTINCT modifier
+	Where      []TriplePattern       // WHERE clause triple patterns
+	Optional   [][]TriplePattern     // OPTIONAL clause patterns
+	Filters    []Filter              // FILTER clauses
+	OrderBy    []OrderBy             // ORDER BY clauses
+	Limit      int                   // LIMIT (0 = no limit)
+	Offset     int                   // OFFSET (0 = no offset)
+	Prefixes   map[string]string     // Prefix declarations
+}
+
+// HasAggregates returns true if the query uses aggregate functions.
+func (q *SelectQuery) HasAggregates() bool {
+	return len(q.Aggregates) > 0
+}
+
+// AllOutputVariables returns all variables that appear in the query output,
+// including both plain SELECT variables and aggregate aliases.
+func (q *SelectQuery) AllOutputVariables() []string {
+	var outputVars []string
+	outputVars = append(outputVars, q.Variables...)
+	for _, agg := range q.Aggregates {
+		outputVars = append(outputVars, agg.Alias)
+	}
+	return outputVars
+}
+
+// IsAggregateAlias checks if a variable is an alias for an aggregate expression.
+func (q *SelectQuery) IsAggregateAlias(variable string) bool {
+	for _, agg := range q.Aggregates {
+		if agg.Alias == variable {
+			return true
+		}
+	}
+	return false
 }
 
 // ConstructQuery represents a parsed CONSTRUCT query.

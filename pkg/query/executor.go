@@ -294,6 +294,11 @@ func (e *Executor) executeSelect(ctx context.Context, query *SelectQuery, metric
 		bindings = e.applyFilter(filter, bindings)
 	}
 
+	// Branch: aggregate queries take a separate execution path
+	if query.HasAggregates() {
+		return e.executeAggregateSelect(ctx, query, bindings, metrics, executeStart)
+	}
+
 	// Apply ORDER BY before DISTINCT (to get consistent ordering)
 	if len(query.OrderBy) > 0 {
 		bindings = e.applyOrderBy(query.OrderBy, bindings)
@@ -348,6 +353,363 @@ func (e *Executor) executeSelect(ctx context.Context, query *SelectQuery, metric
 	}
 
 	return result, nil
+}
+
+// executeAggregateSelect handles SELECT queries with aggregate functions (COUNT, SUM, etc.).
+func (e *Executor) executeAggregateSelect(ctx context.Context, query *SelectQuery, bindings []map[string]string, metrics *QueryMetrics, executeStart time.Time) (*QueryResult, error) {
+	// Step 1: Group bindings by GROUP BY variables
+	groups := e.groupBindings(query.GroupBy, bindings)
+
+	// Step 2: Compute aggregates for each group
+	aggregatedBindings := e.computeAggregates(query, groups)
+
+	// Step 3: Apply HAVING filters
+	for _, havingFilter := range query.Having {
+		aggregatedBindings = e.applyHavingFilter(query, havingFilter, aggregatedBindings)
+	}
+
+	// Step 4: Apply ORDER BY with numeric awareness for aggregate aliases
+	if len(query.OrderBy) > 0 {
+		aggregatedBindings = e.applyAggregateOrderBy(query, aggregatedBindings)
+	}
+
+	// Step 5: Apply OFFSET
+	if query.Offset > 0 {
+		if query.Offset < len(aggregatedBindings) {
+			aggregatedBindings = aggregatedBindings[query.Offset:]
+		} else {
+			aggregatedBindings = []map[string]string{}
+		}
+	}
+
+	// Step 6: Apply LIMIT
+	if query.Limit > 0 && query.Limit < len(aggregatedBindings) {
+		aggregatedBindings = aggregatedBindings[:query.Limit]
+	}
+
+	metrics.ExecuteTime = time.Since(executeStart)
+	metrics.ResultCount = len(aggregatedBindings)
+
+	// Build result with output variables (GROUP BY vars + aggregate aliases)
+	result := &QueryResult{
+		Bindings: aggregatedBindings,
+		Count:    len(aggregatedBindings),
+	}
+
+	// Output variables: GROUP BY variables first, then aggregate aliases
+	for _, v := range query.Variables {
+		result.Variables = append(result.Variables, StripVariable(v))
+	}
+	for _, agg := range query.Aggregates {
+		result.Variables = append(result.Variables, StripVariable(agg.Alias))
+	}
+
+	return result, nil
+}
+
+// groupBindings partitions bindings into groups based on GROUP BY variables.
+// Returns a map from group key to the bindings in that group.
+// If no GROUP BY variables, all bindings form a single group.
+func (e *Executor) groupBindings(groupByVars []string, bindings []map[string]string) map[string][]map[string]string {
+	groups := make(map[string][]map[string]string)
+
+	if len(groupByVars) == 0 {
+		// No GROUP BY — all bindings form a single group
+		groups[""] = bindings
+		return groups
+	}
+
+	for _, binding := range bindings {
+		// Build group key from GROUP BY variable values
+		var keyParts []string
+		for _, groupVar := range groupByVars {
+			varName := StripVariable(groupVar)
+			keyParts = append(keyParts, binding[varName])
+		}
+		groupKey := strings.Join(keyParts, "\x00")
+		groups[groupKey] = append(groups[groupKey], binding)
+	}
+
+	return groups
+}
+
+// computeAggregates computes aggregate values for each group and produces output bindings.
+func (e *Executor) computeAggregates(query *SelectQuery, groups map[string][]map[string]string) []map[string]string {
+	var resultBindings []map[string]string
+
+	for _, groupBindings := range groups {
+		if len(groupBindings) == 0 {
+			continue
+		}
+
+		outputBinding := make(map[string]string)
+
+		// Copy GROUP BY variable values from the first binding in the group
+		for _, groupVar := range query.GroupBy {
+			varName := StripVariable(groupVar)
+			outputBinding[varName] = groupBindings[0][varName]
+		}
+
+		// Compute each aggregate function
+		for _, agg := range query.Aggregates {
+			aliasName := StripVariable(agg.Alias)
+			sourceVarName := StripVariable(agg.Variable)
+
+			switch agg.Function {
+			case AggregateCOUNT:
+				outputBinding[aliasName] = computeCount(groupBindings, sourceVarName, agg.Distinct)
+			case AggregateSUM:
+				outputBinding[aliasName] = computeSum(groupBindings, sourceVarName)
+			case AggregateAVG:
+				outputBinding[aliasName] = computeAvg(groupBindings, sourceVarName)
+			case AggregateMIN:
+				outputBinding[aliasName] = computeMin(groupBindings, sourceVarName)
+			case AggregateMAX:
+				outputBinding[aliasName] = computeMax(groupBindings, sourceVarName)
+			}
+		}
+
+		resultBindings = append(resultBindings, outputBinding)
+	}
+
+	return resultBindings
+}
+
+// computeCount counts non-empty values; with distinct, counts unique values.
+func computeCount(bindings []map[string]string, varName string, distinct bool) string {
+	if distinct {
+		uniqueValues := make(map[string]bool)
+		for _, binding := range bindings {
+			if val, ok := binding[varName]; ok && val != "" {
+				uniqueValues[val] = true
+			}
+		}
+		return strconv.Itoa(len(uniqueValues))
+	}
+
+	count := 0
+	for _, binding := range bindings {
+		if val, ok := binding[varName]; ok && val != "" {
+			count++
+		}
+	}
+	return strconv.Itoa(count)
+}
+
+// computeSum sums numeric values, returning an integer string if no fraction.
+func computeSum(bindings []map[string]string, varName string) string {
+	sum := 0.0
+	hasDecimal := false
+	for _, binding := range bindings {
+		if val, ok := binding[varName]; ok && val != "" {
+			if f, err := strconv.ParseFloat(val, 64); err == nil {
+				sum += f
+				if strings.Contains(val, ".") {
+					hasDecimal = true
+				}
+			}
+		}
+	}
+	if !hasDecimal && sum == float64(int64(sum)) {
+		return strconv.FormatInt(int64(sum), 10)
+	}
+	return strconv.FormatFloat(sum, 'f', -1, 64)
+}
+
+// computeAvg computes the average of numeric values.
+func computeAvg(bindings []map[string]string, varName string) string {
+	sum := 0.0
+	count := 0
+	for _, binding := range bindings {
+		if val, ok := binding[varName]; ok && val != "" {
+			if f, err := strconv.ParseFloat(val, 64); err == nil {
+				sum += f
+				count++
+			}
+		}
+	}
+	if count == 0 {
+		return "0"
+	}
+	avg := sum / float64(count)
+	if avg == float64(int64(avg)) {
+		return strconv.FormatInt(int64(avg), 10)
+	}
+	return strconv.FormatFloat(avg, 'f', -1, 64)
+}
+
+// computeMin finds the minimum value, using numeric comparison with string fallback.
+func computeMin(bindings []map[string]string, varName string) string {
+	var minVal string
+	first := true
+	for _, binding := range bindings {
+		if val, ok := binding[varName]; ok && val != "" {
+			if first {
+				minVal = val
+				first = false
+				continue
+			}
+			if compareValues(val, minVal) < 0 {
+				minVal = val
+			}
+		}
+	}
+	return minVal
+}
+
+// computeMax finds the maximum value, using numeric comparison with string fallback.
+func computeMax(bindings []map[string]string, varName string) string {
+	var maxVal string
+	first := true
+	for _, binding := range bindings {
+		if val, ok := binding[varName]; ok && val != "" {
+			if first {
+				maxVal = val
+				first = false
+				continue
+			}
+			if compareValues(val, maxVal) > 0 {
+				maxVal = val
+			}
+		}
+	}
+	return maxVal
+}
+
+// compareValues compares two values numerically if possible, falling back to string comparison.
+func compareValues(a, b string) int {
+	aFloat, aErr := strconv.ParseFloat(a, 64)
+	bFloat, bErr := strconv.ParseFloat(b, 64)
+	if aErr == nil && bErr == nil {
+		if aFloat < bFloat {
+			return -1
+		}
+		if aFloat > bFloat {
+			return 1
+		}
+		return 0
+	}
+	if a < b {
+		return -1
+	}
+	if a > b {
+		return 1
+	}
+	return 0
+}
+
+// applyHavingFilter evaluates a HAVING clause by substituting aggregate function calls
+// with computed values and evaluating the resulting numeric comparison.
+func (e *Executor) applyHavingFilter(query *SelectQuery, havingFilter Filter, bindings []map[string]string) []map[string]string {
+	var filtered []map[string]string
+
+	// Build a map from aggregate function call to alias for substitution
+	// e.g., "COUNT(?article)" -> alias name from the aggregate
+	aggAliasMap := make(map[string]string)
+	for _, agg := range query.Aggregates {
+		callStr := strings.ToUpper(string(agg.Function)) + "(" + agg.Variable + ")"
+		aggAliasMap[callStr] = StripVariable(agg.Alias)
+	}
+
+	for _, binding := range bindings {
+		expr := havingFilter.Expression
+
+		// Substitute aggregate function calls with their computed values
+		for callStr, aliasName := range aggAliasMap {
+			if val, ok := binding[aliasName]; ok {
+				expr = strings.ReplaceAll(expr, callStr, val)
+				// Also try case-insensitive match
+				expr = regexp.MustCompile(`(?i)`+regexp.QuoteMeta(callStr)).ReplaceAllString(expr, val)
+			}
+		}
+
+		// Evaluate as numeric comparison
+		if evaluateHavingExpression(expr) {
+			filtered = append(filtered, binding)
+		}
+	}
+
+	return filtered
+}
+
+// evaluateHavingExpression evaluates a simple numeric comparison expression
+// like "3 > 1" or "10 >= 5".
+func evaluateHavingExpression(expr string) bool {
+	expr = strings.TrimSpace(expr)
+
+	comparisonRegex := regexp.MustCompile(`^(\d+(?:\.\d+)?)\s*(>|<|>=|<=|=|!=)\s*(\d+(?:\.\d+)?)$`)
+	match := comparisonRegex.FindStringSubmatch(expr)
+	if match == nil {
+		return true // Can't parse — default to true
+	}
+
+	leftVal, _ := strconv.ParseFloat(match[1], 64)
+	operator := match[2]
+	rightVal, _ := strconv.ParseFloat(match[3], 64)
+
+	switch operator {
+	case ">":
+		return leftVal > rightVal
+	case "<":
+		return leftVal < rightVal
+	case ">=":
+		return leftVal >= rightVal
+	case "<=":
+		return leftVal <= rightVal
+	case "=":
+		return leftVal == rightVal
+	case "!=":
+		return leftVal != rightVal
+	}
+
+	return true
+}
+
+// applyAggregateOrderBy sorts aggregate result bindings with numeric awareness
+// for aggregate alias columns.
+func (e *Executor) applyAggregateOrderBy(query *SelectQuery, bindings []map[string]string) []map[string]string {
+	if len(query.OrderBy) == 0 {
+		return bindings
+	}
+
+	// Build set of aggregate alias names for numeric sorting
+	aggregateAliases := make(map[string]bool)
+	for _, agg := range query.Aggregates {
+		aggregateAliases[StripVariable(agg.Alias)] = true
+	}
+
+	sort.SliceStable(bindings, func(i, j int) bool {
+		for _, ob := range query.OrderBy {
+			varName := StripVariable(ob.Variable)
+			valI := bindings[i][varName]
+			valJ := bindings[j][varName]
+
+			if valI == valJ {
+				continue
+			}
+
+			// Use numeric comparison for aggregate aliases
+			if aggregateAliases[varName] {
+				numI, errI := strconv.ParseFloat(valI, 64)
+				numJ, errJ := strconv.ParseFloat(valJ, 64)
+				if errI == nil && errJ == nil {
+					if ob.Descending {
+						return numI > numJ
+					}
+					return numI < numJ
+				}
+			}
+
+			// Fallback to lexicographic comparison
+			if ob.Descending {
+				return valI > valJ
+			}
+			return valI < valJ
+		}
+		return false
+	})
+
+	return bindings
 }
 
 // executeConstruct executes a CONSTRUCT query.
@@ -1157,15 +1519,18 @@ func (qp *QueryPlanner) OptimizeQuery(query *SelectQuery) *SelectQuery {
 
 	// Create a copy to avoid modifying original
 	optimized := &SelectQuery{
-		Variables: query.Variables,
-		Distinct:  query.Distinct,
-		Where:     make([]TriplePattern, len(query.Where)),
-		Optional:  query.Optional,
-		Filters:   query.Filters,
-		OrderBy:   query.OrderBy,
-		Limit:     query.Limit,
-		Offset:    query.Offset,
-		Prefixes:  query.Prefixes,
+		Variables:  query.Variables,
+		Aggregates: query.Aggregates,
+		GroupBy:    query.GroupBy,
+		Having:     query.Having,
+		Distinct:   query.Distinct,
+		Where:      make([]TriplePattern, len(query.Where)),
+		Optional:   query.Optional,
+		Filters:    query.Filters,
+		OrderBy:    query.OrderBy,
+		Limit:      query.Limit,
+		Offset:     query.Offset,
+		Prefixes:   query.Prefixes,
 	}
 	copy(optimized.Where, query.Where)
 
