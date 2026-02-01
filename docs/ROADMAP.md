@@ -56,8 +56,9 @@ regula audit --decision "simulation-001"
 | M4 | Analysis Engine | 1 week | Impact analysis matches manual review |
 | M5 | Simulation MVP | 1 week | Scenario evaluation produces valid report |
 | M6 | Integration & Polish | 1 week | Full demo script passes |
+| M7 | USC Bulk Analysis | 3 weeks | Bulk pipeline, aggregate queries, playground (Epic #136) |
 
-**Total: 9 weeks to MVP**
+**Total: 9 weeks to MVP + 3 weeks post-MVP analysis**
 
 ---
 
@@ -574,6 +575,83 @@ Each milestone includes manual validation:
 | Cross-reference patterns complex | Iterative pattern library, manual override |
 | Performance issues at scale | Early profiling, index optimization |
 | Scope creep | Strict MVP criteria, defer enhancements |
+
+---
+
+## Milestone 7: Full USC Bulk Analysis (Epic #136)
+
+### Goal
+End-to-end pipeline for downloading, ingesting, and analyzing US Code titles with aggregate queries, statistics dashboards, and pre-built analysis templates.
+
+### Epic Summary
+
+Epic #136 tracked 7 child issues covering the full USC bulk analysis workflow:
+
+| Issue | Title | Status |
+|-------|-------|--------|
+| #129 | Bulk download pipeline for USC/CFR/California/Internet Archive | Closed |
+| #130 | Bulk ingestion pipeline with XML parsing and RDF conversion | Closed |
+| #131 | Bulk status and download management | Closed |
+| #132 | Web crawler for legislative source discovery | Closed |
+| #133 | SPARQL aggregate query support (COUNT, SUM, AVG, GROUP BY, HAVING) | Closed |
+| #134 | Bulk statistics dashboard with table/JSON/CSV export | Closed |
+| #135 | Query analysis playground with 10 pre-built SPARQL templates | Closed |
+
+### Capabilities Delivered
+
+**Bulk Data Pipeline** (Issues #129–#131)
+- Multi-source download engine with rate limiting, retry, and resume support
+- Sources: US Code (54 titles), CFR (50 titles), California codes (30 codes), Internet Archive
+- XML parsing for USLM and CFR formats with plaintext extraction
+- Manifest-based download tracking with JSON persistence
+- Bulk ingestion with document ID derivation and title filtering
+- Status reporting across download and ingest phases
+
+**Web Crawler** (Issue #132)
+- BFS-based crawler with depth and document limits
+- Citation resolver for USC, CFR, Public Law, California, and Virginia codes
+- Content fetcher with HTML extraction and per-domain rate limiting
+- Crawl state persistence with JSON save/load
+- Provenance tracking via RDF triples
+
+**Aggregate Queries** (Issue #133)
+- COUNT, SUM, AVG, MIN, MAX aggregate functions
+- GROUP BY with multi-variable grouping
+- HAVING clause for post-aggregation filtering
+- COUNT(DISTINCT) for unique value counting
+- ORDER BY DESC/ASC on aggregate results with LIMIT/OFFSET
+
+**Statistics Dashboard** (Issue #134)
+- `regula bulk stats` command with table, JSON, and CSV formats
+- Per-title breakdowns: triples, articles, chapters, definitions, references, rights, obligations
+- Aggregate totals row with comma-formatted numbers
+- Source filtering for focused analysis
+
+**Analysis Playground** (Issue #135)
+- `regula playground list/run/query` commands
+- 10 pre-built SPARQL templates across 5 categories (structure, semantics, cross-reference, definitions, temporal)
+- Template parameterization with `--title` filter support
+- Export formats: table, JSON, CSV
+- Pagination via `--limit`/`--offset` flags
+
+### Validation
+
+```bash
+# Verify all packages pass
+go test ./pkg/bulk/... ./pkg/query/... ./pkg/playground/... -v -count=1
+
+# Verify aggregate queries
+go test ./pkg/query/... -v -count=1 -run Aggregate
+
+# Verify stats dashboard
+go test ./pkg/bulk/... -v -count=1 -run "Stats|Format"
+
+# Verify playground templates
+go test ./pkg/playground/... -v -count=1
+
+# Full project test suite
+go test ./... -count=1 && go vet ./...
+```
 
 ---
 

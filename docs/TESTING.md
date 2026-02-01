@@ -1397,6 +1397,193 @@ regula bulk ingest --source uscode --titles 04 --dry-run
 regula bulk ingest --source uscode --titles 04
 ```
 
+## SPARQL Aggregate Query Tests
+
+### Unit Tests
+
+Run aggregate query tests:
+
+```bash
+go test ./pkg/query/... -v -count=1 -run Aggregate
+```
+
+The aggregate query system supports COUNT, SUM, AVG, MIN, MAX with GROUP BY, HAVING, and COUNT(DISTINCT). Tests are in `pkg/query/aggregate_test.go`.
+
+#### Parser Tests
+
+| Test | Purpose |
+|------|---------|
+| `TestParseQuery_AggregateCountGroupBy` | COUNT aggregate with GROUP BY clause |
+| `TestParseQuery_MultipleAggregates` | Multiple aggregates (COUNT + SUM) in one query |
+| `TestParseQuery_CountDistinct` | COUNT(DISTINCT) syntax parsing |
+| `TestParseQuery_AggregateWithHaving` | GROUP BY with HAVING filter clause |
+| `TestParseQuery_AggregateNoGroupBy` | Scalar aggregates without GROUP BY |
+| `TestParseQuery_NonAggregateUnchanged` | Non-aggregate queries unaffected |
+| `TestParseQuery_AggregateString` | String representation of aggregate queries |
+| `TestParseQuery_AggregateValidation` | Validation errors for invalid aggregates |
+
+#### Executor Tests
+
+| Test | Purpose |
+|------|---------|
+| `TestExecutor_CountGroupBy` | COUNT with GROUP BY, verifies DESC ordering |
+| `TestExecutor_CountNoGroupBy` | Scalar COUNT returning single result |
+| `TestExecutor_AggregateOrderByDesc` | Descending order for aggregate results |
+| `TestExecutor_SumAggregate` | SUM aggregate total calculations |
+| `TestExecutor_AvgAggregate` | AVG aggregate average calculations |
+| `TestExecutor_MinMaxAggregate` | MIN and MAX in one query |
+| `TestExecutor_CountDistinct` | COUNT(DISTINCT) unique counting |
+| `TestExecutor_Having` | GROUP BY with HAVING filter |
+| `TestExecutor_AggregateBackwardCompat` | Non-aggregate queries still work |
+| `TestExecutor_AggregateWithLimit` | LIMIT applied to aggregate results |
+| `TestExecutor_AggregateWithOffset` | OFFSET applied to aggregate results |
+
+#### Integration and Benchmark Tests
+
+| Test | Purpose |
+|------|---------|
+| `TestGDPRQuery_ArticlesPerChapter` | Articles per chapter with real GDPR data |
+| `TestGDPRQuery_TotalArticleCount` | Total article count across GDPR dataset |
+| `TestCompareValues` | Numeric and string comparison for ordering |
+| `TestEvaluateHavingExpression` | HAVING clause expression evaluation |
+| `BenchmarkExecutor_AggregateCountGroupBy` | Performance: COUNT with GROUP BY |
+| `BenchmarkExecutor_ScalarCount` | Performance: scalar COUNT |
+
+### CLI Manual Testing
+
+```bash
+# Count articles per chapter (GROUP BY + ORDER BY DESC)
+regula query "SELECT ?chapter (COUNT(?article) AS ?articleCount) WHERE { ?article reg:partOf ?chapter } GROUP BY ?chapter ORDER BY DESC(?articleCount)"
+
+# Total provision count (scalar aggregate)
+regula query "SELECT (COUNT(?p) AS ?count) WHERE { ?p rdf:type reg:Provision }"
+
+# Definitions per title with minimum threshold (HAVING)
+regula query "SELECT ?reg (COUNT(?def) AS ?defCount) WHERE { ?def reg:belongsTo ?reg } GROUP BY ?reg HAVING(COUNT(?def) > 5) ORDER BY DESC(?defCount)"
+
+# Count distinct referenced targets
+regula query "SELECT (COUNT(DISTINCT ?target) AS ?uniqueRefs) WHERE { ?article reg:references ?target }"
+```
+
+## Bulk Statistics Dashboard Tests
+
+### Unit Tests
+
+Run stats dashboard tests:
+
+```bash
+go test ./pkg/bulk/... -v -count=1 -run "Stats|Format"
+```
+
+Tests are in `pkg/bulk/report_test.go`. The dashboard supports table, JSON, and CSV output formats.
+
+| Test | Purpose |
+|------|---------|
+| `TestFormatBytes` | Human-readable byte formatting (B, KB, MB, GB) |
+| `TestFormatDatasetTable` | Dataset table output formatting |
+| `TestFormatDatasetTableLongName` | Long display names truncated with ellipsis |
+| `TestFormatDatasetTableEmpty` | Empty dataset list formatting |
+| `TestFormatIngestReport` | Ingest report text with status markers |
+| `TestFormatIngestReportJSON` | Ingest report JSON serialization |
+| `TestFormatIngestReportWithAggregates` | Ingest report with aggregate totals |
+| `TestFormatStatusReport` | Download status report formatting |
+| `TestFormatStatusReportFiltered` | Status report filtered by source |
+| `TestFormatStatusReportWithIngestStats` | Status report with ingestion statistics |
+| `TestFormatDuration` | Duration formatting (ms, s, m) |
+| `TestCollectStats` | Stats collection from manifest + document stats |
+| `TestCollectStatsEmpty` | Stats collection with empty data |
+| `TestFormatStatsTable` | Bulk ingestion statistics table output |
+| `TestFormatStatsJSON` | Stats report JSON serialization |
+| `TestFormatStatsCSV` | Stats report CSV with headers |
+| `TestFormatNumber` | Comma-formatted number output (e.g., 25,100) |
+
+### CLI Manual Testing
+
+```bash
+# View statistics table (default format)
+regula bulk stats
+
+# JSON output for programmatic consumption
+regula bulk stats --export json
+
+# CSV export for spreadsheet analysis
+regula bulk stats --export csv > bulk-stats.csv
+
+# Filter by source
+regula bulk stats --source uscode
+```
+
+## Analysis Playground Tests
+
+### Unit Tests
+
+Run playground template tests:
+
+```bash
+go test ./pkg/playground/... -v -count=1
+```
+
+Tests are in `pkg/playground/templates_test.go`. The playground provides 10 pre-built SPARQL analysis templates spanning 5 categories: structure, semantics, cross-reference, definitions, and temporal.
+
+| Test | Purpose |
+|------|---------|
+| `TestRegistryContainsAllTemplates` | All 10 required templates present in registry |
+| `TestTemplateNamesAreSorted` | Template names returned in alphabetical order |
+| `TestGetExistingTemplate` | Retrieve template by name with correct fields |
+| `TestGetMissingTemplate` | Non-existent template returns false |
+| `TestRenderQueryNoParameters` | Template without parameters renders unchanged |
+| `TestRenderQueryWithTitleFilter` | Title parameter injects FILTER clause |
+| `TestRenderQueryWithEmptyTitleFilter` | Empty title produces no FILTER |
+| `TestRenderQueryNoParamsForParameterized` | Placeholder removed when no params supplied |
+| `TestRenderQueryMissingRequired` | Error for missing required parameters |
+| `TestAllTemplatesHaveRequiredFields` | All templates have Name, Description, Category, Query |
+| `TestAllTemplatesParseSuccessfully` | All 10 templates parse as valid SPARQL |
+| `TestAllTemplatesWithTitleParam` | Parameterized templates parse with title value |
+| `TestTemplateCategoriesAreValid` | Categories match allowed set |
+
+### Template Coverage
+
+| Template | Category | Parameters | SPARQL Features |
+|----------|----------|------------|-----------------|
+| `top-chapters-by-sections` | structure | none | COUNT, GROUP BY, ORDER BY DESC, LIMIT |
+| `sections-with-obligations` | semantics | none | Multi-hop join (section → article → obligation) |
+| `definition-coverage` | definitions | none | COUNT, GROUP BY, ORDER BY DESC |
+| `cross-ref-density` | cross-reference | `--title` | COUNT, GROUP BY, FILTER with parameter |
+| `rights-enumeration` | semantics | none | Multi-join with type classification |
+| `title-size-comparison` | structure | none | COUNT, GROUP BY, ORDER BY DESC |
+| `orphan-sections` | cross-reference | none | OPTIONAL, FILTER(!BOUND()) |
+| `definition-reuse` | definitions | none | COUNT(DISTINCT), HAVING > 1 |
+| `chapter-structure` | structure | `--title` | OPTIONAL join, FILTER with parameter |
+| `temporal-analysis` | temporal | none | OPTIONAL, temporal predicate joins |
+
+### CLI Manual Testing
+
+```bash
+# List all available analysis templates
+regula playground list
+
+# Run a specific template
+regula playground run top-chapters-by-sections --path .regula
+
+# Run with title filter parameter
+regula playground run cross-ref-density --path .regula --title 42
+
+# Export results as JSON
+regula playground run definition-coverage --path .regula --export json
+
+# Export results as CSV
+regula playground run title-size-comparison --path .regula --export csv
+
+# Run a custom SPARQL query through the playground
+regula playground query "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10" --path .regula
+
+# Paginate results
+regula playground run top-chapters-by-sections --path .regula --limit 10 --offset 20
+
+# Show execution timing
+regula playground run definition-reuse --path .regula --timing
+```
+
 ## Troubleshooting Tests
 
 ### Common Issues
