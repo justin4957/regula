@@ -16,6 +16,7 @@ import (
 	"github.com/coolbeans/regula/pkg/fetch"
 	"github.com/coolbeans/regula/pkg/library"
 	"github.com/coolbeans/regula/pkg/linkcheck"
+	"github.com/coolbeans/regula/pkg/playground"
 	"github.com/coolbeans/regula/pkg/query"
 	"github.com/coolbeans/regula/pkg/simulate"
 	"github.com/coolbeans/regula/pkg/store"
@@ -64,6 +65,7 @@ It ingests regulatory documents and produces:
 	rootCmd.AddCommand(refsCmd())
 	rootCmd.AddCommand(libraryCmd())
 	rootCmd.AddCommand(crawlCmd())
+	rootCmd.AddCommand(playgroundCmd())
 	rootCmd.AddCommand(bulkCmd())
 
 	if err := rootCmd.Execute(); err != nil {
@@ -2843,6 +2845,311 @@ or exhausts all discoverable references.`,
 	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
 
 	return cmd
+}
+
+func playgroundCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "playground",
+		Short: "USC triple store analysis playground",
+		Long: `Analysis playground with pre-built query templates for exploring
+ingested legislation data in the library.
+
+Provides 10+ analysis query templates runnable via CLI, plus custom
+SPARQL query support with CSV/JSON export and timing/pagination.
+
+Commands:
+  list     List available analysis query templates
+  run      Run a template by name
+  query    Run a custom SPARQL query
+
+Examples:
+  regula playground list
+  regula playground run top-chapters-by-sections
+  regula playground run cross-ref-density --title 42
+  regula playground run definition-coverage --export json
+  regula playground run rights-enumeration --limit 50 --offset 10
+  regula playground query "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10"`,
+	}
+
+	cmd.AddCommand(playgroundListCmd())
+	cmd.AddCommand(playgroundRunCmd())
+	cmd.AddCommand(playgroundQueryCmd())
+
+	return cmd
+}
+
+func playgroundListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List available analysis query templates",
+		Long: `List all pre-built analysis query templates with their categories
+and supported parameters.
+
+Examples:
+  regula playground list`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			templateNames := playground.TemplateNames()
+
+			fmt.Println("Available playground analysis templates:")
+			fmt.Println()
+
+			for _, templateName := range templateNames {
+				template, _ := playground.Get(templateName)
+				fmt.Printf("  %-28s [%-15s] %s\n", templateName, template.Category, template.Description)
+				for _, parameter := range template.Parameters {
+					requiredLabel := "optional"
+					if parameter.Required {
+						requiredLabel = "required"
+					}
+					fmt.Printf("    --%s (%s): %s\n", parameter.Name, requiredLabel, parameter.Description)
+				}
+			}
+
+			fmt.Println()
+			fmt.Println("Usage:")
+			fmt.Println("  regula playground run <template-name>")
+			fmt.Println("  regula playground run <template-name> --title 42")
+			fmt.Println("  regula playground run <template-name> --export csv")
+			return nil
+		},
+	}
+}
+
+func playgroundRunCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "run <template-name>",
+		Short: "Run a playground analysis template",
+		Long: `Run a pre-built analysis query template against the library.
+
+Templates are parameterizable (e.g., --title 42) and support export
+to table, JSON, or CSV formats.
+
+Examples:
+  regula playground run top-chapters-by-sections
+  regula playground run cross-ref-density --title 42
+  regula playground run definition-coverage --export json
+  regula playground run rights-enumeration --limit 50 --offset 10
+  regula playground run chapter-structure --title 42 --export csv > structure.csv`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			templateName := args[0]
+			titleFilter, _ := cmd.Flags().GetString("title")
+			exportFormat, _ := cmd.Flags().GetString("export")
+			limitValue, _ := cmd.Flags().GetInt("limit")
+			offsetValue, _ := cmd.Flags().GetInt("offset")
+			showTiming, _ := cmd.Flags().GetBool("timing")
+			libraryPath, _ := cmd.Flags().GetString("path")
+			documentIDs, _ := cmd.Flags().GetStringSlice("documents")
+
+			// Look up template
+			template, exists := playground.Get(templateName)
+			if !exists {
+				return fmt.Errorf("unknown template: %s\nUse 'regula playground list' to see available templates", templateName)
+			}
+
+			// Build parameter map
+			parameterValues := make(map[string]string)
+			if titleFilter != "" {
+				parameterValues["title"] = titleFilter
+			}
+
+			// Render query with parameters
+			renderedQuery, renderErr := playground.RenderQuery(template, parameterValues)
+			if renderErr != nil {
+				return fmt.Errorf("template parameter error: %w", renderErr)
+			}
+
+			// Append LIMIT/OFFSET if not already in query
+			if limitValue > 0 && !strings.Contains(strings.ToUpper(renderedQuery), "LIMIT") {
+				renderedQuery += fmt.Sprintf(" LIMIT %d", limitValue)
+			}
+			if offsetValue > 0 && !strings.Contains(strings.ToUpper(renderedQuery), "OFFSET") {
+				renderedQuery += fmt.Sprintf(" OFFSET %d", offsetValue)
+			}
+
+			// Open library
+			lib, err := library.Open(libraryPath)
+			if err != nil {
+				return fmt.Errorf("library not found at %s: %w", libraryPath, err)
+			}
+
+			// Load triple stores
+			var mergedStore *store.TripleStore
+			if len(documentIDs) > 0 {
+				mergedStore, err = lib.LoadMergedTripleStore(documentIDs...)
+			} else {
+				mergedStore, err = lib.LoadAllTripleStores()
+			}
+			if err != nil {
+				return fmt.Errorf("failed to load triple stores: %w", err)
+			}
+
+			fmt.Fprintf(os.Stderr, "Template: %s\n", template.Name)
+			fmt.Fprintf(os.Stderr, "Description: %s\n", template.Description)
+			if titleFilter != "" {
+				fmt.Fprintf(os.Stderr, "Title filter: %s\n", titleFilter)
+			}
+			fmt.Fprintln(os.Stderr)
+
+			// Execute query
+			return executePlaygroundQuery(mergedStore, renderedQuery, exportFormat, showTiming)
+		},
+	}
+
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+	cmd.Flags().StringSlice("documents", []string{}, "Document IDs to query (comma-separated, default: all)")
+	cmd.Flags().String("title", "", "Title number filter for templates that support it")
+	cmd.Flags().String("export", "table", "Output format (table, json, csv)")
+	cmd.Flags().Int("limit", 0, "Limit number of results")
+	cmd.Flags().Int("offset", 0, "Skip first N results")
+	cmd.Flags().Bool("timing", false, "Show query execution time")
+
+	return cmd
+}
+
+func playgroundQueryCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "query [sparql-query]",
+		Short: "Run a custom SPARQL query against the library",
+		Long: `Run an arbitrary SPARQL query against all ingested library documents.
+
+Supports SELECT, CONSTRUCT, and DESCRIBE queries.
+
+Examples:
+  regula playground query "SELECT ?article ?title WHERE { ?article rdf:type reg:Article . ?article reg:title ?title } LIMIT 10"
+  regula playground query --export json "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 5"
+  regula playground query --export csv "SELECT ?term WHERE { ?term rdf:type reg:DefinedTerm }" > terms.csv`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			queryStr := args[0]
+			exportFormat, _ := cmd.Flags().GetString("export")
+			limitValue, _ := cmd.Flags().GetInt("limit")
+			offsetValue, _ := cmd.Flags().GetInt("offset")
+			showTiming, _ := cmd.Flags().GetBool("timing")
+			libraryPath, _ := cmd.Flags().GetString("path")
+			documentIDs, _ := cmd.Flags().GetStringSlice("documents")
+
+			// Append LIMIT/OFFSET if not already in query
+			if limitValue > 0 && !strings.Contains(strings.ToUpper(queryStr), "LIMIT") {
+				queryStr += fmt.Sprintf(" LIMIT %d", limitValue)
+			}
+			if offsetValue > 0 && !strings.Contains(strings.ToUpper(queryStr), "OFFSET") {
+				queryStr += fmt.Sprintf(" OFFSET %d", offsetValue)
+			}
+
+			// Open library
+			lib, err := library.Open(libraryPath)
+			if err != nil {
+				return fmt.Errorf("library not found at %s: %w", libraryPath, err)
+			}
+
+			// Load triple stores
+			var mergedStore *store.TripleStore
+			if len(documentIDs) > 0 {
+				mergedStore, err = lib.LoadMergedTripleStore(documentIDs...)
+			} else {
+				mergedStore, err = lib.LoadAllTripleStores()
+			}
+			if err != nil {
+				return fmt.Errorf("failed to load triple stores: %w", err)
+			}
+
+			return executePlaygroundQuery(mergedStore, queryStr, exportFormat, showTiming)
+		},
+	}
+
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+	cmd.Flags().StringSlice("documents", []string{}, "Document IDs to query (comma-separated, default: all)")
+	cmd.Flags().String("export", "table", "Output format (table, json, csv)")
+	cmd.Flags().Int("limit", 0, "Limit number of results")
+	cmd.Flags().Int("offset", 0, "Skip first N results")
+	cmd.Flags().Bool("timing", false, "Show query execution time")
+
+	return cmd
+}
+
+// executePlaygroundQuery parses, executes, and formats a SPARQL query against the given store.
+func executePlaygroundQuery(tripleStore *store.TripleStore, queryStr string, exportFormat string, showTiming bool) error {
+	parsedQuery, parseErr := query.ParseQuery(queryStr)
+	if parseErr != nil {
+		return fmt.Errorf("query parse error: %w", parseErr)
+	}
+
+	queryExecutor := query.NewExecutor(tripleStore)
+	startTime := time.Now()
+
+	// Route by query type
+	switch parsedQuery.Type {
+	case query.ConstructQueryType:
+		result, err := queryExecutor.ExecuteConstruct(parsedQuery)
+		elapsed := time.Since(startTime)
+		if err != nil {
+			return fmt.Errorf("CONSTRUCT query error: %w", err)
+		}
+
+		outputFormat := query.OutputFormat(exportFormat)
+		if outputFormat == query.FormatTable || outputFormat == query.FormatCSV {
+			outputFormat = query.FormatTurtle
+		}
+		output, fmtErr := result.Format(outputFormat)
+		if fmtErr != nil {
+			return fmt.Errorf("format error: %w", fmtErr)
+		}
+		fmt.Print(output)
+		fmt.Fprintf(os.Stderr, "\n%d triples returned", result.Count)
+		if showTiming {
+			fmt.Fprintf(os.Stderr, " (%v)", elapsed)
+		}
+		fmt.Fprintln(os.Stderr)
+
+	case query.DescribeQueryType:
+		result, err := queryExecutor.ExecuteDescribe(parsedQuery)
+		elapsed := time.Since(startTime)
+		if err != nil {
+			return fmt.Errorf("DESCRIBE query error: %w", err)
+		}
+
+		outputFormat := query.OutputFormat(exportFormat)
+		if outputFormat == query.FormatTable || outputFormat == query.FormatCSV {
+			outputFormat = query.FormatTurtle
+		}
+		output, fmtErr := result.Format(outputFormat)
+		if fmtErr != nil {
+			return fmt.Errorf("format error: %w", fmtErr)
+		}
+		fmt.Print(output)
+		fmt.Fprintf(os.Stderr, "\n%d triples returned", result.Count)
+		if showTiming {
+			fmt.Fprintf(os.Stderr, " (%v)", elapsed)
+		}
+		fmt.Fprintln(os.Stderr)
+
+	default:
+		// SELECT query (default)
+		result, err := queryExecutor.Execute(parsedQuery)
+		elapsed := time.Since(startTime)
+		if err != nil {
+			return fmt.Errorf("query error: %w", err)
+		}
+
+		outputFormat := query.OutputFormat(exportFormat)
+		output, fmtErr := result.Format(outputFormat)
+		if fmtErr != nil {
+			return fmt.Errorf("format error: %w", fmtErr)
+		}
+		fmt.Print(output)
+		fmt.Fprintf(os.Stderr, "\n%d rows returned", result.Count)
+		if showTiming {
+			fmt.Fprintf(os.Stderr, " (%v)", elapsed)
+			fmt.Fprintf(os.Stderr, "\n  Parse:   %v", result.Metrics.ParseTime)
+			fmt.Fprintf(os.Stderr, "\n  Plan:    %v", result.Metrics.PlanTime)
+			fmt.Fprintf(os.Stderr, "\n  Execute: %v", result.Metrics.ExecuteTime)
+			fmt.Fprintf(os.Stderr, "\n  Triples: %d searched", tripleStore.Count())
+		}
+		fmt.Fprintln(os.Stderr)
+	}
+
+	return nil
 }
 
 func bulkCmd() *cobra.Command {
