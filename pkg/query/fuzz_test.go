@@ -60,6 +60,14 @@ SELECT ?article WHERE { ?article rdf:type reg:Article }`,
 			?article reg:title ?title
 		}`,
 
+		// Aggregate queries
+		`SELECT ?chapter (COUNT(?article) AS ?count) WHERE { ?article reg:partOf ?chapter } GROUP BY ?chapter`,
+		`SELECT (COUNT(?s) AS ?total) WHERE { ?s ?p ?o }`,
+		`SELECT ?p (COUNT(DISTINCT ?s) AS ?unique) WHERE { ?s ?p ?o } GROUP BY ?p`,
+		`SELECT ?chapter (SUM(?num) AS ?total) WHERE { ?article reg:number ?num . ?article reg:partOf ?chapter } GROUP BY ?chapter`,
+		`SELECT ?chapter (COUNT(?article) AS ?count) WHERE { ?article reg:partOf ?chapter } GROUP BY ?chapter HAVING(COUNT(?article) > 5)`,
+		`SELECT ?chapter (COUNT(?article) AS ?count) WHERE { ?article reg:partOf ?chapter } GROUP BY ?chapter ORDER BY DESC(?count) LIMIT 10`,
+
 		// Edge cases
 		"",
 		"SELECT",

@@ -100,16 +100,35 @@ func parseSelectQuery(queryStr string) (*SelectQuery, error) {
 	if varsStr == "*" {
 		query.Variables = []string{"*"}
 	} else {
-		// Extract variables (including those with ?)
+		// Extract aggregate expressions first: (COUNT(?x) AS ?count), (SUM(?y) AS ?total), etc.
+		aggregateRegex := regexp.MustCompile(`(?i)\(\s*(COUNT|SUM|AVG|MIN|MAX)\s*\(\s*(DISTINCT\s+)?\?(\w+)\s*\)\s+AS\s+\?(\w+)\s*\)`)
+		aggregateMatches := aggregateRegex.FindAllStringSubmatch(varsStr, -1)
+		for _, match := range aggregateMatches {
+			if len(match) == 5 {
+				aggExpr := AggregateExpression{
+					Function: AggregateFunction(strings.ToUpper(match[1])),
+					Variable: "?" + match[3],
+					Alias:    "?" + match[4],
+					Distinct: strings.TrimSpace(match[2]) != "",
+				}
+				query.Aggregates = append(query.Aggregates, aggExpr)
+			}
+		}
+
+		// Remove aggregate expressions from varsStr, then extract remaining plain variables
+		remainingVars := aggregateRegex.ReplaceAllString(varsStr, "")
 		varRegex := regexp.MustCompile(`\?(\w+)`)
-		varMatches := varRegex.FindAllString(varsStr, -1)
-		if len(varMatches) == 0 {
+		varMatches := varRegex.FindAllString(remainingVars, -1)
+		query.Variables = varMatches
+
+		// If no plain vars and no aggregates, it's an error
+		if len(varMatches) == 0 && len(query.Aggregates) == 0 {
 			return nil, fmt.Errorf("no variables found in SELECT clause")
 		}
-		query.Variables = varMatches
 	}
 
-	// Extract the main WHERE clause content
+	// Extract the main WHERE clause content — use the last closing brace that
+	// matches the WHERE opening brace to handle nested braces in OPTIONAL etc.
 	whereRegex := regexp.MustCompile(`(?i)WHERE\s*\{([\s\S]*)\}`)
 	whereMatch := whereRegex.FindStringSubmatch(queryStr)
 	if whereMatch == nil {
@@ -147,6 +166,18 @@ func parseSelectQuery(queryStr string) (*SelectQuery, error) {
 		return nil, err
 	}
 	query.Where = patterns
+
+	// Extract GROUP BY
+	groupByRegex := regexp.MustCompile(`(?i)GROUP\s+BY\s+((?:\?\w+\s*)+)`)
+	groupByMatch := groupByRegex.FindStringSubmatch(queryStr)
+	if groupByMatch != nil {
+		groupByVarRegex := regexp.MustCompile(`\?\w+`)
+		groupByVars := groupByVarRegex.FindAllString(groupByMatch[1], -1)
+		query.GroupBy = groupByVars
+	}
+
+	// Extract HAVING clauses (uses balanced parenthesis like FILTER)
+	query.Having = extractHaving(queryStr)
 
 	// Extract ORDER BY - handle both ASC/DESC(?var) and simple ?var forms
 	orderByRegex := regexp.MustCompile(`(?i)ORDER\s+BY\s+((?:(?:ASC|DESC)\s*\(\s*\?\w+\s*\)|\?\w+)(?:\s+(?:ASC|DESC)\s*\(\s*\?\w+\s*\)|\s+\?\w+)*)`)
@@ -445,6 +476,37 @@ func extractFilters(whereClause string) []Filter {
 	return filters
 }
 
+// extractHaving extracts HAVING clauses with balanced parentheses from the full query string.
+func extractHaving(queryStr string) []Filter {
+	var havingFilters []Filter
+
+	havingKeyword := regexp.MustCompile(`(?i)\bHAVING\s*\(`)
+	matches := havingKeyword.FindAllStringIndex(queryStr, -1)
+
+	for _, match := range matches {
+		startIdx := match[1] // Position after "HAVING("
+
+		// Find matching closing parenthesis
+		depth := 1
+		endIdx := startIdx
+		for endIdx < len(queryStr) && depth > 0 {
+			if queryStr[endIdx] == '(' {
+				depth++
+			} else if queryStr[endIdx] == ')' {
+				depth--
+			}
+			endIdx++
+		}
+
+		if depth == 0 {
+			expression := strings.TrimSpace(queryStr[startIdx : endIdx-1])
+			havingFilters = append(havingFilters, Filter{Expression: expression})
+		}
+	}
+
+	return havingFilters
+}
+
 // splitTriples splits a WHERE clause by periods, but not periods inside URIs or literals.
 func splitTriples(whereClause string) []string {
 	var triples []string
@@ -699,7 +761,7 @@ func (q *Query) Validate() []error {
 func (q *SelectQuery) Validate() []error {
 	var errors []error
 
-	if len(q.Variables) == 0 {
+	if len(q.Variables) == 0 && len(q.Aggregates) == 0 {
 		errors = append(errors, fmt.Errorf("SELECT clause has no variables"))
 	}
 
@@ -707,10 +769,21 @@ func (q *SelectQuery) Validate() []error {
 		errors = append(errors, fmt.Errorf("WHERE clause has no triple patterns"))
 	}
 
-	// Check that all selected variables (except *) appear in WHERE patterns
-	if len(q.Variables) > 0 && q.Variables[0] != "*" {
-		boundVars := make(map[string]bool)
-		for _, p := range q.Where {
+	// Collect all variables bound in WHERE and OPTIONAL patterns
+	boundVars := make(map[string]bool)
+	for _, p := range q.Where {
+		if IsVariable(p.Subject) {
+			boundVars[p.Subject] = true
+		}
+		if IsVariable(p.Predicate) {
+			boundVars[p.Predicate] = true
+		}
+		if IsVariable(p.Object) {
+			boundVars[p.Object] = true
+		}
+	}
+	for _, opt := range q.Optional {
+		for _, p := range opt {
 			if IsVariable(p.Subject) {
 				boundVars[p.Subject] = true
 			}
@@ -721,39 +794,66 @@ func (q *SelectQuery) Validate() []error {
 				boundVars[p.Object] = true
 			}
 		}
-		// Also check OPTIONAL patterns
-		for _, opt := range q.Optional {
-			for _, p := range opt {
-				if IsVariable(p.Subject) {
-					boundVars[p.Subject] = true
-				}
-				if IsVariable(p.Predicate) {
-					boundVars[p.Predicate] = true
-				}
-				if IsVariable(p.Object) {
-					boundVars[p.Object] = true
-				}
-			}
-		}
-
-		for _, v := range q.Variables {
-			if !boundVars[v] {
-				errors = append(errors, fmt.Errorf("variable %s in SELECT is not bound in WHERE clause", v))
-			}
-		}
 	}
 
-	// Check ORDER BY variables are bound
-	for _, ob := range q.OrderBy {
-		found := false
-		for _, v := range q.Variables {
-			if v == "*" || v == ob.Variable {
-				found = true
-				break
+	if q.HasAggregates() {
+		// Aggregate-specific validation
+		for _, agg := range q.Aggregates {
+			if !boundVars[agg.Variable] {
+				errors = append(errors, fmt.Errorf("aggregate source variable %s is not bound in WHERE clause", agg.Variable))
 			}
 		}
-		if !found {
-			errors = append(errors, fmt.Errorf("ORDER BY variable %s is not in SELECT clause", ob.Variable))
+
+		// GROUP BY variables must be bound in WHERE
+		for _, groupVar := range q.GroupBy {
+			if !boundVars[groupVar] {
+				errors = append(errors, fmt.Errorf("GROUP BY variable %s is not bound in WHERE clause", groupVar))
+			}
+		}
+
+		// Plain SELECT variables must appear in GROUP BY when aggregates are present
+		groupBySet := make(map[string]bool)
+		for _, groupVar := range q.GroupBy {
+			groupBySet[groupVar] = true
+		}
+		for _, v := range q.Variables {
+			if v != "*" && !groupBySet[v] {
+				errors = append(errors, fmt.Errorf("variable %s in SELECT must appear in GROUP BY when aggregates are used", v))
+			}
+		}
+
+		// ORDER BY can reference aggregate aliases or GROUP BY variables
+		aliasSet := make(map[string]bool)
+		for _, agg := range q.Aggregates {
+			aliasSet[agg.Alias] = true
+		}
+		for _, ob := range q.OrderBy {
+			if !groupBySet[ob.Variable] && !aliasSet[ob.Variable] {
+				errors = append(errors, fmt.Errorf("ORDER BY variable %s must be a GROUP BY variable or aggregate alias", ob.Variable))
+			}
+		}
+	} else {
+		// Non-aggregate validation (existing behavior)
+		if len(q.Variables) > 0 && q.Variables[0] != "*" {
+			for _, v := range q.Variables {
+				if !boundVars[v] {
+					errors = append(errors, fmt.Errorf("variable %s in SELECT is not bound in WHERE clause", v))
+				}
+			}
+		}
+
+		// Check ORDER BY variables are bound
+		for _, ob := range q.OrderBy {
+			found := false
+			for _, v := range q.Variables {
+				if v == "*" || v == ob.Variable {
+					found = true
+					break
+				}
+			}
+			if !found {
+				errors = append(errors, fmt.Errorf("ORDER BY variable %s is not in SELECT clause", ob.Variable))
+			}
 		}
 	}
 
@@ -796,11 +896,23 @@ func (q *SelectQuery) String() string {
 	if q.Distinct {
 		sb.WriteString("DISTINCT ")
 	}
+
+	var selectParts []string
 	if len(q.Variables) == 1 && q.Variables[0] == "*" {
-		sb.WriteString("*")
+		selectParts = append(selectParts, "*")
 	} else {
-		sb.WriteString(strings.Join(q.Variables, " "))
+		selectParts = append(selectParts, q.Variables...)
 	}
+	for _, agg := range q.Aggregates {
+		aggStr := "("
+		aggStr += string(agg.Function) + "("
+		if agg.Distinct {
+			aggStr += "DISTINCT "
+		}
+		aggStr += agg.Variable + ") AS " + agg.Alias + ")"
+		selectParts = append(selectParts, aggStr)
+	}
+	sb.WriteString(strings.Join(selectParts, " "))
 
 	// WHERE clause
 	sb.WriteString(" WHERE {\n")
@@ -818,6 +930,17 @@ func (q *SelectQuery) String() string {
 		sb.WriteString("  }\n")
 	}
 	sb.WriteString("}")
+
+	// GROUP BY
+	if len(q.GroupBy) > 0 {
+		sb.WriteString(" GROUP BY ")
+		sb.WriteString(strings.Join(q.GroupBy, " "))
+	}
+
+	// HAVING
+	for _, h := range q.Having {
+		sb.WriteString(fmt.Sprintf(" HAVING(%s)", h.Expression))
+	}
 
 	// ORDER BY
 	if len(q.OrderBy) > 0 {
