@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -273,6 +274,137 @@ func TestSourceDirectory(t *testing.T) {
 
 	if sourceDir != expectedPath {
 		t.Errorf("expected %q, got %q", expectedPath, sourceDir)
+	}
+}
+
+func TestDownloadFileRetriesOn500(t *testing.T) {
+	requestCount := 0
+	testServer := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		requestCount++
+		if requestCount <= 2 {
+			responseWriter.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		responseWriter.Write([]byte("success after retries"))
+	}))
+	defer testServer.Close()
+
+	temporaryDir := t.TempDir()
+	config := DownloadConfig{
+		DownloadDirectory: temporaryDir,
+		RateLimit:         1 * time.Millisecond,
+		Timeout:           10 * time.Second,
+		UserAgent:         "regula-test/1.0",
+		MaxRetries:        3,
+		RetryBaseDelay:    1 * time.Millisecond,
+	}
+
+	downloader, err := NewDownloader(config)
+	if err != nil {
+		t.Fatalf("failed to create downloader: %v", err)
+	}
+
+	localPath := filepath.Join(temporaryDir, "retry-test.txt")
+	bytesWritten, skipped, err := downloader.DownloadFile(testServer.URL+"/test", localPath, nil)
+	if err != nil {
+		t.Fatalf("expected download to succeed after retries, got: %v", err)
+	}
+	if skipped {
+		t.Error("expected download not to be skipped")
+	}
+	if bytesWritten != int64(len("success after retries")) {
+		t.Errorf("expected %d bytes, got %d", len("success after retries"), bytesWritten)
+	}
+	if requestCount != 3 {
+		t.Errorf("expected 3 requests (2 failures + 1 success), got %d", requestCount)
+	}
+}
+
+func TestDownloadFileDoesNotRetryOn404(t *testing.T) {
+	requestCount := 0
+	testServer := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		requestCount++
+		responseWriter.WriteHeader(http.StatusNotFound)
+	}))
+	defer testServer.Close()
+
+	temporaryDir := t.TempDir()
+	config := DownloadConfig{
+		DownloadDirectory: temporaryDir,
+		RateLimit:         1 * time.Millisecond,
+		Timeout:           10 * time.Second,
+		UserAgent:         "regula-test/1.0",
+		MaxRetries:        3,
+		RetryBaseDelay:    1 * time.Millisecond,
+	}
+
+	downloader, err := NewDownloader(config)
+	if err != nil {
+		t.Fatalf("failed to create downloader: %v", err)
+	}
+
+	localPath := filepath.Join(temporaryDir, "no-retry.txt")
+	_, _, err = downloader.DownloadFile(testServer.URL+"/missing", localPath, nil)
+	if err == nil {
+		t.Fatal("expected error for 404 response")
+	}
+	if requestCount != 1 {
+		t.Errorf("expected exactly 1 request (no retry for 404), got %d", requestCount)
+	}
+}
+
+func TestDownloadFileExhaustsRetries(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		responseWriter.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer testServer.Close()
+
+	temporaryDir := t.TempDir()
+	config := DownloadConfig{
+		DownloadDirectory: temporaryDir,
+		RateLimit:         1 * time.Millisecond,
+		Timeout:           10 * time.Second,
+		UserAgent:         "regula-test/1.0",
+		MaxRetries:        2,
+		RetryBaseDelay:    1 * time.Millisecond,
+	}
+
+	downloader, err := NewDownloader(config)
+	if err != nil {
+		t.Fatalf("failed to create downloader: %v", err)
+	}
+
+	localPath := filepath.Join(temporaryDir, "exhaust.txt")
+	_, _, err = downloader.DownloadFile(testServer.URL+"/failing", localPath, nil)
+	if err == nil {
+		t.Fatal("expected error after exhausting retries")
+	}
+	if !strings.Contains(err.Error(), "failed after 2 attempts") {
+		t.Errorf("expected 'failed after 2 attempts' in error, got: %v", err)
+	}
+}
+
+func TestIsRetryableError(t *testing.T) {
+	testCases := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{"nil error", nil, false},
+		{"retryable HTTP 500", &retryableHTTPError{StatusCode: 500, URL: "test"}, true},
+		{"retryable HTTP 503", &retryableHTTPError{StatusCode: 503, URL: "test"}, true},
+		{"non-retryable error", fmt.Errorf("HTTP 404 for test"), false},
+		{"timeout error", fmt.Errorf("connection timeout"), true},
+		{"connection reset", fmt.Errorf("connection reset by peer"), true},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := isRetryableError(testCase.err)
+			if result != testCase.expected {
+				t.Errorf("isRetryableError(%v) = %v, want %v", testCase.err, result, testCase.expected)
+			}
+		})
 	}
 }
 

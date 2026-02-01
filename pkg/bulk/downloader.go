@@ -64,6 +64,7 @@ func NewDownloader(config DownloadConfig) (*Downloader, error) {
 
 // DownloadFile fetches a URL to a local file path with progress reporting.
 // Skips the download if the file already exists with non-zero size.
+// Retries transient errors (5xx, timeouts) with exponential backoff.
 func (downloader *Downloader) DownloadFile(downloadURL string, localPath string, progressCallback ProgressCallback) (int64, bool, error) {
 	// Check if file already exists
 	existingInfo, err := os.Stat(localPath)
@@ -76,34 +77,74 @@ func (downloader *Downloader) DownloadFile(downloadURL string, localPath string,
 		return 0, false, fmt.Errorf("failed to create directory for %s: %w", localPath, err)
 	}
 
+	maxRetries := downloader.config.MaxRetries
+	if maxRetries <= 0 {
+		maxRetries = 1
+	}
+	retryDelay := downloader.config.RetryBaseDelay
+	if retryDelay <= 0 {
+		retryDelay = 5 * time.Second
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			currentDelay := retryDelay * time.Duration(1<<uint(attempt-1))
+			time.Sleep(currentDelay)
+		}
+
+		bytesWritten, err := downloader.downloadFileAttempt(downloadURL, localPath, progressCallback)
+		if err == nil {
+			return bytesWritten, false, nil
+		}
+
+		lastErr = err
+
+		// Only retry on transient errors (5xx, network errors)
+		if !isRetryableError(err) {
+			return 0, false, err
+		}
+
+		// Clean up partial file before retry
+		os.Remove(localPath)
+	}
+
+	return 0, false, fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
+}
+
+// downloadFileAttempt performs a single download attempt.
+func (downloader *Downloader) downloadFileAttempt(downloadURL string, localPath string, progressCallback ProgressCallback) (int64, error) {
 	// Rate limit per domain
 	parsedURL, err := url.Parse(downloadURL)
 	if err != nil {
-		return 0, false, fmt.Errorf("invalid URL %s: %w", downloadURL, err)
+		return 0, fmt.Errorf("invalid URL %s: %w", downloadURL, err)
 	}
 	downloader.waitForDomain(parsedURL.Host)
 
 	// Create HTTP request
 	request, err := http.NewRequest(http.MethodGet, downloadURL, nil)
 	if err != nil {
-		return 0, false, fmt.Errorf("failed to create request: %w", err)
+		return 0, fmt.Errorf("failed to create request: %w", err)
 	}
 	request.Header.Set("User-Agent", downloader.config.UserAgent)
 
 	response, err := downloader.httpClient.Do(request)
 	if err != nil {
-		return 0, false, fmt.Errorf("failed to fetch %s: %w", downloadURL, err)
+		return 0, fmt.Errorf("failed to fetch %s: %w", downloadURL, err)
 	}
 	defer response.Body.Close()
 
+	if response.StatusCode >= 500 {
+		return 0, &retryableHTTPError{StatusCode: response.StatusCode, URL: downloadURL}
+	}
 	if response.StatusCode >= 400 {
-		return 0, false, fmt.Errorf("HTTP %d for %s", response.StatusCode, downloadURL)
+		return 0, fmt.Errorf("HTTP %d for %s", response.StatusCode, downloadURL)
 	}
 
 	// Create output file
 	outputFile, err := os.Create(localPath)
 	if err != nil {
-		return 0, false, fmt.Errorf("failed to create file %s: %w", localPath, err)
+		return 0, fmt.Errorf("failed to create file %s: %w", localPath, err)
 	}
 	defer outputFile.Close()
 
@@ -117,7 +158,7 @@ func (downloader *Downloader) DownloadFile(downloadURL string, localPath string,
 		if bytesRead > 0 {
 			written, writeErr := outputFile.Write(buffer[:bytesRead])
 			if writeErr != nil {
-				return bytesWritten, false, fmt.Errorf("write error: %w", writeErr)
+				return bytesWritten, fmt.Errorf("write error: %w", writeErr)
 			}
 			bytesWritten += int64(written)
 
@@ -129,11 +170,48 @@ func (downloader *Downloader) DownloadFile(downloadURL string, localPath string,
 			if readErr == io.EOF {
 				break
 			}
-			return bytesWritten, false, fmt.Errorf("read error: %w", readErr)
+			return bytesWritten, fmt.Errorf("read error: %w", readErr)
 		}
 	}
 
-	return bytesWritten, false, nil
+	return bytesWritten, nil
+}
+
+// retryableHTTPError represents an HTTP error that should trigger a retry.
+type retryableHTTPError struct {
+	StatusCode int
+	URL        string
+}
+
+func (e *retryableHTTPError) Error() string {
+	return fmt.Sprintf("HTTP %d for %s", e.StatusCode, e.URL)
+}
+
+// isRetryableError returns true if the error warrants a retry attempt.
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Retry on 5xx HTTP errors
+	if _, ok := err.(*retryableHTTPError); ok {
+		return true
+	}
+	// Retry on network errors (connection reset, timeout, etc.)
+	errMsg := err.Error()
+	retryablePatterns := []string{
+		"connection reset",
+		"connection refused",
+		"timeout",
+		"EOF",
+		"broken pipe",
+		"temporary failure",
+	}
+	for _, pattern := range retryablePatterns {
+		if strings.Contains(errMsg, pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 // ExtractZIP extracts a ZIP archive to the target directory.

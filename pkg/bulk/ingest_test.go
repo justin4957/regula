@@ -282,3 +282,60 @@ func TestConcatenateTextFilesEmpty(t *testing.T) {
 		t.Errorf("expected empty result for nil input, got %q", result)
 	}
 }
+
+func TestAccumulateReportStats(t *testing.T) {
+	report := &IngestReport{}
+
+	// Ingested entry with stats
+	accumulateReportStats(report, IngestEntry{
+		Status:      "ingested",
+		Triples:     25000,
+		Articles:    4000,
+		Chapters:    195,
+		Definitions: 5,
+		References:  20,
+		Rights:      7,
+		Obligations: 30,
+	})
+
+	if report.Succeeded != 1 {
+		t.Errorf("expected 1 succeeded, got %d", report.Succeeded)
+	}
+	if report.TotalTriples != 25000 {
+		t.Errorf("expected 25000 total triples, got %d", report.TotalTriples)
+	}
+	if report.TotalArticles != 4000 {
+		t.Errorf("expected 4000 total articles, got %d", report.TotalArticles)
+	}
+
+	// Skipped entry with stats from previous run
+	accumulateReportStats(report, IngestEntry{
+		Status:   "skipped",
+		Triples:  5000,
+		Articles: 1000,
+		Chapters: 5,
+	})
+
+	if report.Skipped != 1 {
+		t.Errorf("expected 1 skipped, got %d", report.Skipped)
+	}
+	if report.TotalTriples != 30000 {
+		t.Errorf("expected 30000 total triples after skipped, got %d", report.TotalTriples)
+	}
+	if report.TotalArticles != 5000 {
+		t.Errorf("expected 5000 total articles after skipped, got %d", report.TotalArticles)
+	}
+
+	// Failed entry
+	accumulateReportStats(report, IngestEntry{
+		Status: "failed",
+	})
+
+	if report.Failed != 1 {
+		t.Errorf("expected 1 failed, got %d", report.Failed)
+	}
+	// Totals should not change from failed entry
+	if report.TotalTriples != 30000 {
+		t.Errorf("expected 30000 total triples after failed, got %d", report.TotalTriples)
+	}
+}
