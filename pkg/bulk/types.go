@@ -86,6 +86,12 @@ type DownloadConfig struct {
 
 	// CFRYear specifies the CFR edition year (default "2024").
 	CFRYear string
+
+	// MaxRetries is the maximum number of retry attempts for transient errors.
+	MaxRetries int
+
+	// RetryBaseDelay is the initial delay between retries (doubles each attempt).
+	RetryBaseDelay time.Duration
 }
 
 // DefaultDownloadConfig returns a DownloadConfig with sensible defaults.
@@ -96,6 +102,8 @@ func DefaultDownloadConfig() DownloadConfig {
 		Timeout:           5 * time.Minute,
 		UserAgent:         "regula-bulk/1.0 (+https://regula.dev)",
 		CFRYear:           "2024",
+		MaxRetries:        3,
+		RetryBaseDelay:    5 * time.Second,
 	}
 }
 
@@ -125,20 +133,36 @@ type IngestConfig struct {
 
 // IngestReport summarizes the results of a bulk ingest operation.
 type IngestReport struct {
-	TotalAttempted int           `json:"total_attempted"`
-	Succeeded      int           `json:"succeeded"`
-	Skipped        int           `json:"skipped"`
-	Failed         int           `json:"failed"`
-	Entries        []IngestEntry `json:"entries"`
+	TotalAttempted   int           `json:"total_attempted"`
+	Succeeded        int           `json:"succeeded"`
+	Skipped          int           `json:"skipped"`
+	Failed           int           `json:"failed"`
+	TotalTriples     int           `json:"total_triples"`
+	TotalArticles    int           `json:"total_articles"`
+	TotalChapters    int           `json:"total_chapters"`
+	TotalDefinitions int           `json:"total_definitions"`
+	TotalReferences  int           `json:"total_references"`
+	TotalRights      int           `json:"total_rights"`
+	TotalObligations int           `json:"total_obligations"`
+	Entries          []IngestEntry `json:"entries"`
 }
 
 // IngestEntry records the outcome of ingesting a single document.
 type IngestEntry struct {
-	Identifier string `json:"identifier"`
-	DocumentID string `json:"document_id"`
-	Status     string `json:"status"` // "ingested", "skipped", "failed"
-	Error      string `json:"error,omitempty"`
-	Triples    int    `json:"triples,omitempty"`
+	Identifier  string        `json:"identifier"`
+	DocumentID  string        `json:"document_id"`
+	Status      string        `json:"status"` // "ingested", "skipped", "failed"
+	Error       string        `json:"error,omitempty"`
+	Triples     int           `json:"triples,omitempty"`
+	Articles    int           `json:"articles,omitempty"`
+	Chapters    int           `json:"chapters,omitempty"`
+	Sections    int           `json:"sections,omitempty"`
+	Definitions int           `json:"definitions,omitempty"`
+	References  int           `json:"references,omitempty"`
+	Rights      int           `json:"rights,omitempty"`
+	Obligations int           `json:"obligations,omitempty"`
+	Duration    time.Duration `json:"duration,omitempty"`
+	SourceBytes int           `json:"source_bytes,omitempty"`
 }
 
 // ResolveSource creates a Source instance from a source name string.

@@ -3138,10 +3138,10 @@ func bulkStatusCmd() *cobra.Command {
 		Short: "Show bulk download and ingest status",
 		Long: `Display the current state of bulk downloads and ingestion.
 
-Shows per-source download counts, file sizes, and timestamps.
+Shows per-source download counts, file sizes, ingest status, and statistics.
 
 Examples:
-  regula bulk status                  Show all download status
+  regula bulk status                  Show all download/ingest status
   regula bulk status --source uscode  Show status for USC only`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sourceFilter, _ := cmd.Flags().GetString("source")
@@ -3155,7 +3155,25 @@ Examples:
 				return fmt.Errorf("failed to load download manifest: %w", err)
 			}
 
-			fmt.Print(bulk.FormatStatusReport(manifest, sourceFilter))
+			// Load library document stats if available
+			var documentStats map[string]*bulk.DocumentStatsSummary
+			lib, libErr := library.Open(libraryPath)
+			if libErr == nil {
+				documentStats = make(map[string]*bulk.DocumentStatsSummary)
+				for _, doc := range lib.ListDocuments() {
+					summary := &bulk.DocumentStatsSummary{
+						Status: string(doc.Status),
+					}
+					if doc.Stats != nil {
+						summary.Triples = doc.Stats.TotalTriples
+						summary.Articles = doc.Stats.Articles
+						summary.Chapters = doc.Stats.Chapters
+					}
+					documentStats[doc.ID] = summary
+				}
+			}
+
+			fmt.Print(bulk.FormatStatusReport(manifest, sourceFilter, documentStats))
 			return nil
 		},
 	}

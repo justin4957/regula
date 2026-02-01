@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/coolbeans/regula/pkg/library"
 )
@@ -49,14 +50,7 @@ func (ingester *BulkIngester) IngestSource(sourceName string, downloadDir string
 		entry := ingester.ingestDownloadedFile(record)
 		report.Entries = append(report.Entries, entry)
 
-		switch entry.Status {
-		case "ingested":
-			report.Succeeded++
-		case "skipped":
-			report.Skipped++
-		case "failed":
-			report.Failed++
-		}
+		accumulateReportStats(report, entry)
 	}
 
 	return report, nil
@@ -77,14 +71,7 @@ func (ingester *BulkIngester) IngestAll(downloadDir string) (*IngestReport, erro
 		entry := ingester.ingestDownloadedFile(record)
 		report.Entries = append(report.Entries, entry)
 
-		switch entry.Status {
-		case "ingested":
-			report.Succeeded++
-		case "skipped":
-			report.Skipped++
-		case "failed":
-			report.Failed++
-		}
+		accumulateReportStats(report, entry)
 	}
 
 	return report, nil
@@ -96,15 +83,19 @@ func (ingester *BulkIngester) ingestDownloadedFile(record *DownloadRecord) Inges
 
 	// Check if already ingested
 	if !ingester.config.Force {
-		existingDocs := ingester.lib.ListDocuments()
-		for _, doc := range existingDocs {
-			if doc.ID == documentID {
-				return IngestEntry{
-					Identifier: record.Identifier,
-					DocumentID: documentID,
-					Status:     "skipped",
-				}
+		existingDoc := ingester.lib.GetDocument(documentID)
+		if existingDoc != nil {
+			entry := IngestEntry{
+				Identifier: record.Identifier,
+				DocumentID: documentID,
+				Status:     "skipped",
 			}
+			if existingDoc.Stats != nil {
+				entry.Triples = existingDoc.Stats.TotalTriples
+				entry.Articles = existingDoc.Stats.Articles
+				entry.Chapters = existingDoc.Stats.Chapters
+			}
+			return entry
 		}
 	}
 
@@ -116,6 +107,8 @@ func (ingester *BulkIngester) ingestDownloadedFile(record *DownloadRecord) Inges
 			Error:      "dry run",
 		}
 	}
+
+	startTime := time.Now()
 
 	// Route to source-specific ingestion
 	var plaintext string
@@ -140,6 +133,7 @@ func (ingester *BulkIngester) ingestDownloadedFile(record *DownloadRecord) Inges
 			DocumentID: documentID,
 			Status:     "failed",
 			Error:      ingestErr.Error(),
+			Duration:   time.Since(startTime),
 		}
 	}
 
@@ -149,6 +143,7 @@ func (ingester *BulkIngester) ingestDownloadedFile(record *DownloadRecord) Inges
 			DocumentID: documentID,
 			Status:     "failed",
 			Error:      "no content extracted",
+			Duration:   time.Since(startTime),
 		}
 	}
 
@@ -161,20 +156,30 @@ func (ingester *BulkIngester) ingestDownloadedFile(record *DownloadRecord) Inges
 			DocumentID: documentID,
 			Status:     "failed",
 			Error:      err.Error(),
+			Duration:   time.Since(startTime),
 		}
 	}
 
-	triples := 0
-	if docEntry.Stats != nil {
-		triples = docEntry.Stats.TotalTriples
+	entry := IngestEntry{
+		Identifier:  record.Identifier,
+		DocumentID:  documentID,
+		Status:      "ingested",
+		Duration:    time.Since(startTime),
+		SourceBytes: len(plaintext),
 	}
 
-	return IngestEntry{
-		Identifier: record.Identifier,
-		DocumentID: documentID,
-		Status:     "ingested",
-		Triples:    triples,
+	if docEntry.Stats != nil {
+		entry.Triples = docEntry.Stats.TotalTriples
+		entry.Articles = docEntry.Stats.Articles
+		entry.Chapters = docEntry.Stats.Chapters
+		entry.Sections = docEntry.Stats.Sections
+		entry.Definitions = docEntry.Stats.Definitions
+		entry.References = docEntry.Stats.References
+		entry.Rights = docEntry.Stats.Rights
+		entry.Obligations = docEntry.Stats.Obligations
 	}
+
+	return entry
 }
 
 // ingestUSCode extracts plaintext from a downloaded USC ZIP.
@@ -390,6 +395,28 @@ func deriveAddOptions(record *DownloadRecord, documentID string) library.AddOpti
 		SourceInfo:   fmt.Sprintf("bulk download from %s: %s", record.SourceName, record.URL),
 		Force:        false,
 	}
+}
+
+// accumulateReportStats updates report counters and aggregates from a single entry.
+func accumulateReportStats(report *IngestReport, entry IngestEntry) {
+	switch entry.Status {
+	case "ingested":
+		report.Succeeded++
+	case "skipped":
+		report.Skipped++
+	case "failed":
+		report.Failed++
+	}
+
+	// Accumulate stats from both ingested and skipped entries (skipped entries
+	// may have stats from a previous ingestion)
+	report.TotalTriples += entry.Triples
+	report.TotalArticles += entry.Articles
+	report.TotalChapters += entry.Chapters
+	report.TotalDefinitions += entry.Definitions
+	report.TotalReferences += entry.References
+	report.TotalRights += entry.Rights
+	report.TotalObligations += entry.Obligations
 }
 
 // matchesTitleFilter checks if an identifier matches any title in the filter.

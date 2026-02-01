@@ -3,6 +3,7 @@ package bulk
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFormatBytes(t *testing.T) {
@@ -160,7 +161,7 @@ func TestFormatStatusReport(t *testing.T) {
 		SizeBytes:  1048576,
 	})
 
-	output := FormatStatusReport(manifest, "")
+	output := FormatStatusReport(manifest, "", nil)
 
 	if !strings.Contains(output, "uscode") {
 		t.Error("expected uscode source in status")
@@ -168,7 +169,7 @@ func TestFormatStatusReport(t *testing.T) {
 	if !strings.Contains(output, "california") {
 		t.Error("expected california source in status")
 	}
-	if !strings.Contains(output, "Total: 2 downloads") {
+	if !strings.Contains(output, "Downloads: 2") {
 		t.Error("expected total download count")
 	}
 }
@@ -186,7 +187,7 @@ func TestFormatStatusReportFiltered(t *testing.T) {
 		SizeBytes:  1048576,
 	})
 
-	output := FormatStatusReport(manifest, "uscode")
+	output := FormatStatusReport(manifest, "uscode", nil)
 
 	if !strings.Contains(output, "uscode") {
 		t.Error("expected uscode in filtered status")
@@ -201,5 +202,95 @@ func TestFormatStatusReportFiltered(t *testing.T) {
 	}
 	if hasCaliforniaHeader {
 		t.Error("expected california source to be excluded from filtered status")
+	}
+}
+
+func TestFormatStatusReportWithIngestStats(t *testing.T) {
+	manifest := NewDownloadManifest()
+	manifest.RecordDownload(&DownloadRecord{
+		Identifier: "usc-title-42",
+		SourceName: "uscode",
+		SizeBytes:  5242880,
+	})
+	manifest.RecordDownload(&DownloadRecord{
+		Identifier: "usc-title-04",
+		SourceName: "uscode",
+		SizeBytes:  102400,
+	})
+
+	documentStats := map[string]*DocumentStatsSummary{
+		"us-usc-title-42": {
+			Triples:  25100,
+			Articles: 4099,
+			Chapters: 195,
+			Status:   "ready",
+		},
+	}
+
+	output := FormatStatusReport(manifest, "uscode", documentStats)
+
+	if !strings.Contains(output, "ready") {
+		t.Error("expected 'ready' status for ingested title")
+	}
+	if !strings.Contains(output, "25100 triples") {
+		t.Error("expected triple count in status output")
+	}
+	if !strings.Contains(output, "pending") {
+		t.Error("expected 'pending' status for non-ingested title")
+	}
+	if !strings.Contains(output, "Ingested: 1") {
+		t.Error("expected ingested count in totals")
+	}
+}
+
+func TestFormatIngestReportWithAggregates(t *testing.T) {
+	report := &IngestReport{
+		TotalAttempted:   2,
+		Succeeded:        2,
+		TotalTriples:     30000,
+		TotalArticles:    5000,
+		TotalChapters:    200,
+		TotalDefinitions: 10,
+		TotalReferences:  50,
+		Entries: []IngestEntry{
+			{DocumentID: "us-usc-title-42", Status: "ingested", Triples: 25000, Articles: 4000, Chapters: 195},
+			{DocumentID: "us-usc-title-04", Status: "ingested", Triples: 5000, Articles: 1000, Chapters: 5},
+		},
+	}
+
+	output := FormatIngestReport(report)
+
+	if !strings.Contains(output, "Totals:") {
+		t.Error("expected aggregate totals section")
+	}
+	if !strings.Contains(output, "30000 triples") {
+		t.Error("expected total triple count")
+	}
+	if !strings.Contains(output, "5000 articles") {
+		t.Error("expected total article count")
+	}
+	if !strings.Contains(output, "200 chapters") {
+		t.Error("expected total chapter count")
+	}
+}
+
+func TestFormatDuration(t *testing.T) {
+	testCases := []struct {
+		name     string
+		duration time.Duration
+		expected string
+	}{
+		{"milliseconds", 500 * time.Millisecond, "500ms"},
+		{"seconds", 5500 * time.Millisecond, "5.5s"},
+		{"minutes", 125 * time.Second, "2m5s"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := formatDuration(testCase.duration)
+			if result != testCase.expected {
+				t.Errorf("formatDuration(%v) = %q, want %q", testCase.duration, result, testCase.expected)
+			}
+		})
 	}
 }
