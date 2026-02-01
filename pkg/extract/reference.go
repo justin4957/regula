@@ -21,9 +21,11 @@ const (
 	TargetArticle    ReferenceTarget = "article"
 	TargetParagraph  ReferenceTarget = "paragraph"
 	TargetPoint      ReferenceTarget = "point"
-	TargetChapter    ReferenceTarget = "chapter"
-	TargetSection    ReferenceTarget = "section"
-	TargetDirective  ReferenceTarget = "directive"
+	TargetChapter     ReferenceTarget = "chapter"
+	TargetSection     ReferenceTarget = "section"
+	TargetSubsection  ReferenceTarget = "subsection"
+	TargetSubchapter  ReferenceTarget = "subchapter"
+	TargetDirective   ReferenceTarget = "directive"
 	TargetRegulation ReferenceTarget = "regulation"
 	TargetTreaty     ReferenceTarget = "treaty"
 	TargetDecision   ReferenceTarget = "decision"
@@ -79,6 +81,17 @@ type ReferenceExtractor struct {
 	usSubdivOfSectionPattern  *regexp.Regexp // subdivision (a) of Section 1798.100
 	usParagraphSubdivPattern  *regexp.Regexp // paragraph (1) of subdivision (a) of Section 1798.100
 	usSectionsRangePattern    *regexp.Regexp // Sections 1798.100 to 1798.199
+
+	// Internal reference patterns (USC-style)
+	uscSectionOfTitlePattern      *regexp.Regexp // section 1396a of this title
+	uscSectionOfOtherTitlePattern *regexp.Regexp // section 552a of title 5
+	uscSectionSubsecPattern       *regexp.Regexp // section 1396a(a)(10)
+	uscSectionBarePattern         *regexp.Regexp // section 1396a (bare, letter suffix required)
+	uscSubsectionPattern          *regexp.Regexp // subsection (a) or subsection (b)(1)
+	uscParagraphOfSubsecPattern   *regexp.Regexp // paragraph (2) of subsection (a)
+	uscSubchapterPattern          *regexp.Regexp // subchapter II of chapter 7
+	uscChapterArabicPattern       *regexp.Regexp // chapter 7 (Arabic numerals)
+	uscSectionOfActPattern        *regexp.Regexp // section 306 of the Public Health Service Act
 
 	// External reference patterns (EU-style)
 	directivePattern    *regexp.Regexp
@@ -139,6 +152,26 @@ func NewReferenceExtractor() *ReferenceExtractor {
 		usParagraphSubdivPattern: regexp.MustCompile(`paragraph\s+\((\d+)\)\s+of\s+subdivision\s+\(([a-z])\)\s+of\s+Section\s+(\d+)\.(\d+)`),
 		// "Sections 1798.100 to 1798.199" or "Sections 1798.100 through 1798.199"
 		usSectionsRangePattern: regexp.MustCompile(`Sections\s+(\d+)\.(\d+)\s+(?:to|through)\s+(\d+)\.(\d+)`),
+
+		// Internal references (USC-style)
+		// "section 1396a of this title" or "section 1396a(a)(10) of this title"
+		uscSectionOfTitlePattern: regexp.MustCompile(`(?i)section\s+(\d+[a-z]?(?:-\d+[a-z]?)?)\s*(\([^)]*\)(?:\(\d+\))?)?\s+of\s+this\s+title`),
+		// "section 552a of title 5"
+		uscSectionOfOtherTitlePattern: regexp.MustCompile(`(?i)section\s+(\d+[a-z]?(?:-\d+[a-z]?)?)\s*(\([^)]*\)(?:\(\d+\))?)?\s+of\s+title\s+(\d+)`),
+		// "section 1396a(a)" or "section 1396a(a)(10)" (with parentheticals, no "of" context)
+		uscSectionSubsecPattern: regexp.MustCompile(`(?i)\bsection\s+(\d+[a-z]?(?:-\d+[a-z]?)?)\(([a-z])\)(?:\((\d+)\))?`),
+		// "section 1396a" or "section 1320d-1" (bare section with letter suffix, avoids matching "Section 1")
+		uscSectionBarePattern: regexp.MustCompile(`(?i)\bsection\s+(\d+[a-z](?:-\d+[a-z]?)?)\b`),
+		// "subsection (a)" or "subsection (b)(1)"
+		uscSubsectionPattern: regexp.MustCompile(`(?i)subsection\s+\(([a-z])\)(?:\((\d+)\))?`),
+		// "paragraph (2) of subsection (a)"
+		uscParagraphOfSubsecPattern: regexp.MustCompile(`(?i)paragraph\s+\((\d+)\)\s+of\s+subsection\s+\(([a-z])\)`),
+		// "subchapter II of chapter 7"
+		uscSubchapterPattern: regexp.MustCompile(`(?i)subchapter\s+([IVXivx]+)\s+of\s+chapter\s+(\d+)`),
+		// "chapter 7" (Arabic numerals, not Roman — avoids overlap with EU chapterPattern)
+		uscChapterArabicPattern: regexp.MustCompile(`(?i)\bchapter\s+(\d+)\b`),
+		// "section 306 of the Public Health Service Act"
+		uscSectionOfActPattern: regexp.MustCompile(`(?i)section\s+(\d+[a-z]?(?:-\d+[a-z]?)?)\s*(\([^)]*\)(?:\(\d+\))?)?\s+of\s+the\s+([A-Z][^,;.]+?)\s+Act`),
 
 		// External references (EU-style)
 		// "Directive 95/46/EC" or "Directive (EU) 2016/680"
@@ -222,8 +255,11 @@ func (e *ReferenceExtractor) ExtractFromArticle(article *Article) []*Reference {
 	refs = append(refs, e.extractChapterRefs(text, article.Number)...)
 	refs = append(refs, e.extractSectionRefs(text, article.Number)...)
 
-	// Extract internal references (US-style)
+	// Extract internal references (US-style California Civil Code)
 	refs = append(refs, e.extractUSSectionRefs(text, article.Number)...)
+
+	// Extract internal references (USC-style)
+	refs = append(refs, e.extractUSCSectionRefs(text, article.Number, refs)...)
 
 	// Extract external references (EU-style)
 	refs = append(refs, e.extractDirectiveRefs(text, article.Number)...)
@@ -719,6 +755,312 @@ func buildUSSectionIdentifier(codePrefix, sectionNum int, subdivLetter, paragrap
 // buildUSSectionsRangeIdentifier creates an identifier for US section ranges.
 func buildUSSectionsRangeIdentifier(startPrefix, startSection, endPrefix, endSection int) string {
 	return "Sections " + itoa(startPrefix) + "." + itoa(startSection) + "-" + itoa(endPrefix) + "." + itoa(endSection)
+}
+
+// extractUSCSectionRefs extracts USC-style internal cross-references.
+// USC uses lowercase "section", no dot separators, letter suffixes (1396a), dash extensions (1320d-1),
+// and context phrases like "of this title" (internal) or "of title 5" (cross-title external).
+func (e *ReferenceExtractor) extractUSCSectionRefs(text string, sourceArticle int, existingRefs []*Reference) []*Reference {
+	var refs []*Reference
+
+	// 1. Cross-title: "section 552a of title 5" (external)
+	matches := e.uscSectionOfOtherTitlePattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if isOverlappingWithSlice(match[0], match[1], existingRefs) || e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		sectionStr := text[match[2]:match[3]]
+		var subsecStr string
+		if match[4] != -1 {
+			subsecStr = text[match[4]:match[5]]
+		}
+		titleNum := text[match[6]:match[7]]
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeExternal,
+			Target:        TargetSection,
+			RawText:       rawText,
+			Identifier:    titleNum + " U.S.C. § " + sectionStr + subsecStr,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ExternalDoc:   "USC",
+			DocNumber:     titleNum,
+			SectionNum:    parseUSCSectionNum(sectionStr),
+		})
+	}
+
+	// 2. Same-title: "section 1396a of this title" (internal)
+	matches = e.uscSectionOfTitlePattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if isOverlappingWithSlice(match[0], match[1], existingRefs) || e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		sectionStr := text[match[2]:match[3]]
+		var subsecStr string
+		if match[4] != -1 {
+			subsecStr = text[match[4]:match[5]]
+		}
+
+		sectionNum := parseUSCSectionNum(sectionStr)
+		identifier := buildUSCSectionIdentifier(sectionStr, subsecStr, "")
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeInternal,
+			Target:        TargetSection,
+			RawText:       rawText,
+			Identifier:    identifier,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ArticleNum:    sectionNum,
+			SectionNum:    sectionNum,
+		})
+	}
+
+	// 3. Section of Act: "section 306 of the Public Health Service Act" (external)
+	matches = e.uscSectionOfActPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if isOverlappingWithSlice(match[0], match[1], existingRefs) || e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		sectionStr := text[match[2]:match[3]]
+		var subsecStr string
+		if match[4] != -1 {
+			subsecStr = text[match[4]:match[5]]
+		}
+		actName := strings.TrimSpace(text[match[6]:match[7]])
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeExternal,
+			Target:        TargetSection,
+			RawText:       rawText,
+			Identifier:    sectionStr + subsecStr + " of " + actName + " Act",
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ExternalDoc:   "USAct",
+			DocNumber:     actName + " Act",
+			SectionNum:    parseUSCSectionNum(sectionStr),
+		})
+	}
+
+	// 4. Paragraph of subsection: "paragraph (2) of subsection (a)"
+	matches = e.uscParagraphOfSubsecPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if isOverlappingWithSlice(match[0], match[1], existingRefs) || e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		paragraphNum := text[match[2]:match[3]]
+		subsecLetter := text[match[4]:match[5]]
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeInternal,
+			Target:        TargetSubsection,
+			RawText:       rawText,
+			Identifier:    "subsection (" + subsecLetter + ")(" + paragraphNum + ")",
+			SubRef:        "paragraph",
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ArticleNum:    sourceArticle,
+			ParagraphNum:  mustAtoi(paragraphNum),
+			PointLetter:   subsecLetter,
+		})
+	}
+
+	// 5. Section with subsection: "section 1396a(a)" or "section 1396a(a)(10)"
+	matches = e.uscSectionSubsecPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if isOverlappingWithSlice(match[0], match[1], existingRefs) || e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		sectionStr := text[match[2]:match[3]]
+		subsecLetter := text[match[4]:match[5]]
+		var paragraphNum string
+		if match[6] != -1 {
+			paragraphNum = text[match[6]:match[7]]
+		}
+
+		sectionNum := parseUSCSectionNum(sectionStr)
+		identifier := buildUSCSectionIdentifier(sectionStr, "("+subsecLetter+")", paragraphNum)
+
+		ref := &Reference{
+			Type:          ReferenceTypeInternal,
+			Target:        TargetSection,
+			RawText:       rawText,
+			Identifier:    identifier,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ArticleNum:    sectionNum,
+			SectionNum:    sectionNum,
+			PointLetter:   subsecLetter,
+		}
+		if paragraphNum != "" {
+			ref.ParagraphNum = mustAtoi(paragraphNum)
+			ref.SubRef = "paragraph"
+		} else {
+			ref.SubRef = "subsection"
+		}
+		refs = append(refs, ref)
+	}
+
+	// 6. Subsection: "subsection (a)" or "subsection (b)(1)"
+	matches = e.uscSubsectionPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if isOverlappingWithSlice(match[0], match[1], existingRefs) || e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		subsecLetter := text[match[2]:match[3]]
+		var paragraphNum string
+		if match[4] != -1 {
+			paragraphNum = text[match[4]:match[5]]
+		}
+
+		identifier := "subsection (" + subsecLetter + ")"
+		if paragraphNum != "" {
+			identifier += "(" + paragraphNum + ")"
+		}
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeInternal,
+			Target:        TargetSubsection,
+			RawText:       rawText,
+			Identifier:    identifier,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ArticleNum:    sourceArticle,
+			PointLetter:   subsecLetter,
+			ParagraphNum:  mustAtoi(paragraphNum),
+		})
+	}
+
+	// 7. Subchapter: "subchapter II of chapter 7"
+	matches = e.uscSubchapterPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if isOverlappingWithSlice(match[0], match[1], existingRefs) || e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		subchapterNum := strings.ToUpper(text[match[2]:match[3]])
+		chapterNum := text[match[4]:match[5]]
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeInternal,
+			Target:        TargetSubchapter,
+			RawText:       rawText,
+			Identifier:    "subchapter " + subchapterNum + " of chapter " + chapterNum,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ChapterNum:    chapterNum,
+		})
+	}
+
+	// 8. Chapter (Arabic numerals): "chapter 7"
+	matches = e.uscChapterArabicPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if isOverlappingWithSlice(match[0], match[1], existingRefs) || e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		chapterNum := text[match[2]:match[3]]
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeInternal,
+			Target:        TargetChapter,
+			RawText:       rawText,
+			Identifier:    "chapter " + chapterNum,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ChapterNum:    chapterNum,
+		})
+	}
+
+	// 9. Bare section with letter suffix: "section 1396a" or "section 1320d-1"
+	matches = e.uscSectionBarePattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if isOverlappingWithSlice(match[0], match[1], existingRefs) || e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		// Trim leading whitespace from rawText (word boundary may match start of line)
+		rawText = strings.TrimLeft(rawText, " \t")
+		sectionStr := text[match[2]:match[3]]
+		sectionNum := parseUSCSectionNum(sectionStr)
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeInternal,
+			Target:        TargetSection,
+			RawText:       rawText,
+			Identifier:    "Section " + sectionStr,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ArticleNum:    sectionNum,
+			SectionNum:    sectionNum,
+		})
+	}
+
+	return refs
+}
+
+// buildUSCSectionIdentifier creates a standardized USC section identifier.
+// sectionStr is the raw section number like "1396a" or "1320d-1".
+// subsecStr is the parenthetical like "(a)" or "(a)(10)" (may be empty).
+// paragraphNum is a standalone paragraph number (may be empty).
+func buildUSCSectionIdentifier(sectionStr, subsecStr, paragraphNum string) string {
+	identifier := "Section " + sectionStr
+	if subsecStr != "" {
+		identifier += subsecStr
+	}
+	if paragraphNum != "" {
+		identifier += "(" + paragraphNum + ")"
+	}
+	return identifier
+}
+
+// parseUSCSectionNum extracts the numeric portion of a USC section number.
+// "1396" → 1396, "1396a" → 1396, "1320d-1" → 1320.
+func parseUSCSectionNum(sectionStr string) int {
+	var digits strings.Builder
+	for _, ch := range sectionStr {
+		if ch >= '0' && ch <= '9' {
+			digits.WriteRune(ch)
+		} else {
+			break
+		}
+	}
+	return mustAtoi(digits.String())
+}
+
+// isOverlappingWithSlice checks if a match region overlaps with any reference in a slice.
+func isOverlappingWithSlice(start, end int, refs []*Reference) bool {
+	for _, ref := range refs {
+		refEnd := ref.TextOffset + ref.TextLength
+		if start < refEnd && end > ref.TextOffset {
+			return true
+		}
+	}
+	return false
 }
 
 // extractDirectiveRefs extracts Directive references.
