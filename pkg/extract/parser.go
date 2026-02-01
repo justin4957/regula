@@ -67,14 +67,16 @@ type Chapter struct {
 
 // Section represents a section within a chapter.
 type Section struct {
-	Number   int        `json:"number"`
-	Title    string     `json:"title"`
-	Articles []*Article `json:"articles"`
+	Number    int        `json:"number"`
+	SectionID string     `json:"section_id,omitempty"` // Full alphanumeric identifier (e.g., "300aa-25")
+	Title     string     `json:"title"`
+	Articles  []*Article `json:"articles"`
 }
 
 // Article represents an article in a regulatory document.
 type Article struct {
 	Number     int          `json:"number"`
+	SectionID  string       `json:"section_id,omitempty"` // Full alphanumeric identifier (e.g., "300aa-25")
 	Title      string       `json:"title"`
 	Paragraphs []*Paragraph `json:"paragraphs,omitempty"`
 	Text       string       `json:"text,omitempty"`
@@ -176,8 +178,8 @@ func NewParser() *Parser {
 		// Iowa alphanumeric: Section 715D.1
 		ioAlphanumericSectionPattern: regexp.MustCompile(`^(?:Section|§)\s*(\d+[A-Z])\.(\d+)$`),
 
-		// USC plain integer section: "Section 26 heading text" or "Section 26"
-		uscSectionPattern: regexp.MustCompile(`^Section\s+(\d+)\s*(.*)$`),
+		// USC section: "Section 26 heading text", "Section 300aa-25 heading", "Section 1396a"
+		uscSectionPattern: regexp.MustCompile(`^Section\s+(\d+[a-zA-Z]*(?:-\d+[a-zA-Z]*)*)\s*(.*)$`),
 
 		// UK-style patterns (Acts and Statutory Instruments)
 		ukPartPattern:       regexp.MustCompile(`^PART\s+(\d+)\s*$`),
@@ -739,8 +741,9 @@ func (p *Parser) parseUSDocument(doc *Document, lines []string) {
 			subNum, _ := strconv.Atoi(m[2])
 
 			currentSection = &Article{
-				Number: subNum,
-				Title:  "", // Will be set from next line
+				Number:    subNum,
+				SectionID: m[1] + "-" + m[2],
+				Title:     "", // Will be set from next line
 			}
 			pendingSectionTitle = true
 			pendingSection = currentSection
@@ -760,8 +763,9 @@ func (p *Parser) parseUSDocument(doc *Document, lines []string) {
 			subNum, _ := strconv.Atoi(m[3])
 
 			currentSection = &Article{
-				Number: subNum,
-				Title:  "", // Will be set from next line
+				Number:    subNum,
+				SectionID: m[1] + "-" + m[2] + "-" + m[3],
+				Title:     "", // Will be set from next line
 			}
 			pendingSectionTitle = true
 			pendingSection = currentSection
@@ -792,8 +796,9 @@ func (p *Parser) parseUSDocument(doc *Document, lines []string) {
 			subNum, _ := strconv.Atoi(m[2])
 
 			currentSection = &Article{
-				Number: subNum,
-				Title:  "", // Will be set from next line
+				Number:    subNum,
+				SectionID: m[1] + "." + m[2],
+				Title:     "", // Will be set from next line
 			}
 			pendingSectionTitle = true
 			pendingSection = currentSection
@@ -825,8 +830,9 @@ func (p *Parser) parseUSDocument(doc *Document, lines []string) {
 			subNum, _ := strconv.Atoi(m[2])
 
 			currentSection = &Article{
-				Number: subNum,
-				Title:  "", // Will be set from next line
+				Number:    subNum,
+				SectionID: m[1] + "." + m[2],
+				Title:     "", // Will be set from next line
 			}
 			pendingSectionTitle = true
 			pendingSection = currentSection
@@ -845,12 +851,14 @@ func (p *Parser) parseUSDocument(doc *Document, lines []string) {
 					p.addArticle(currentChapter, nil, currentSection)
 				}
 
-				sectionNum, _ := strconv.Atoi(m[1])
+				sectionIDStr := m[1]
+				sectionNum := parseLeadingInt(sectionIDStr)
 				sectionTitle := strings.TrimSpace(m[2])
 
 				currentSection = &Article{
-					Number: sectionNum,
-					Title:  sectionTitle,
+					Number:    sectionNum,
+					SectionID: sectionIDStr,
+					Title:     sectionTitle,
 				}
 				if sectionTitle == "" {
 					pendingSectionTitle = true
@@ -1340,6 +1348,24 @@ func (p *Parser) addArticle(chapter *Chapter, section *Section, article *Article
 	} else {
 		chapter.Articles = append(chapter.Articles, article)
 	}
+}
+
+// parseLeadingInt extracts the leading integer from a string that may contain
+// alphanumeric suffixes. For example: "300aa-25" → 300, "1396a" → 1396, "26" → 26.
+func parseLeadingInt(s string) int {
+	var digits strings.Builder
+	for _, ch := range s {
+		if ch >= '0' && ch <= '9' {
+			digits.WriteRune(ch)
+		} else {
+			break
+		}
+	}
+	if digits.Len() == 0 {
+		return 0
+	}
+	n, _ := strconv.Atoi(digits.String())
+	return n
 }
 
 // findDefinitionArticles locates all articles containing definitions using

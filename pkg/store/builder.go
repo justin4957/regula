@@ -161,8 +161,16 @@ func (b *GraphBuilder) sectionURI(chapterNum string, sectionNum int) string {
 	return b.baseURI + b.regID + ":Chapter" + chapterNum + ":Section" + itoa(sectionNum)
 }
 
+func (b *GraphBuilder) sectionURIStr(chapterNum string, sectionID string) string {
+	return b.baseURI + b.regID + ":Chapter" + chapterNum + ":Section" + sectionID
+}
+
 func (b *GraphBuilder) articleURI(number int) string {
 	return b.baseURI + b.regID + ":Art" + itoa(number)
+}
+
+func (b *GraphBuilder) articleURIStr(sectionID string) string {
+	return b.baseURI + b.regID + ":Art" + sectionID
 }
 
 func (b *GraphBuilder) paragraphURI(articleNum, paraNum int) string {
@@ -301,11 +309,19 @@ func (b *GraphBuilder) buildChapter(chapter *extract.Chapter, stats *BuildStats)
 }
 
 func (b *GraphBuilder) buildSection(section *extract.Section, chapterNum string, chapterURI string, stats *BuildStats) {
-	uri := b.sectionURI(chapterNum, section.Number)
+	var uri string
+	var numberValue string
+	if section.SectionID != "" {
+		uri = b.sectionURIStr(chapterNum, section.SectionID)
+		numberValue = section.SectionID
+	} else {
+		uri = b.sectionURI(chapterNum, section.Number)
+		numberValue = itoa(section.Number)
+	}
 	regURI := b.regulationURI()
 
 	b.store.Add(uri, RDFType, ClassSection)
-	b.store.Add(uri, PropNumber, itoa(section.Number))
+	b.store.Add(uri, PropNumber, numberValue)
 	if section.Title != "" {
 		b.store.Add(uri, PropTitle, section.Title)
 	}
@@ -329,11 +345,19 @@ func (b *GraphBuilder) buildSection(section *extract.Section, chapterNum string,
 }
 
 func (b *GraphBuilder) buildArticle(article *extract.Article, parentURI string, stats *BuildStats) {
-	uri := b.articleURI(article.Number)
+	var uri string
+	var numberValue string
+	if article.SectionID != "" {
+		uri = b.articleURIStr(article.SectionID)
+		numberValue = article.SectionID
+	} else {
+		uri = b.articleURI(article.Number)
+		numberValue = itoa(article.Number)
+	}
 	regURI := b.regulationURI()
 
 	b.store.Add(uri, RDFType, ClassArticle)
-	b.store.Add(uri, PropNumber, itoa(article.Number))
+	b.store.Add(uri, PropNumber, numberValue)
 	if article.Title != "" {
 		b.store.Add(uri, PropTitle, article.Title)
 	}
@@ -488,8 +512,13 @@ func (b *GraphBuilder) buildReference(ref *extract.Reference, stats *BuildStats)
 	// Reference type
 	if ref.Type == extract.ReferenceTypeInternal {
 		// Try to resolve internal reference
-		if ref.ArticleNum > 0 {
-			targetURI := b.articleURI(ref.ArticleNum)
+		if ref.ArticleNum > 0 || ref.SectionStr != "" {
+			var targetURI string
+			if ref.SectionStr != "" {
+				targetURI = b.articleURIStr(ref.SectionStr)
+			} else {
+				targetURI = b.articleURI(ref.ArticleNum)
+			}
 			b.store.Add(sourceURI, PropReferences, targetURI)
 			b.store.Add(targetURI, PropReferencedBy, sourceURI)
 

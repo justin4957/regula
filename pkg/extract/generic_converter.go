@@ -147,9 +147,10 @@ func buildChapterFromSection(genericSection *pattern.GenericSection, chapterInde
 func buildArticleFromSection(genericSection *pattern.GenericSection, articleIndex int) *Article {
 	articleNumber := sectionNumberToInt(genericSection.Number, articleIndex)
 	return &Article{
-		Number: articleNumber,
-		Title:  genericSection.Title,
-		Text:   genericSection.Content,
+		Number:    articleNumber,
+		SectionID: genericSection.Number,
+		Title:     genericSection.Title,
+		Text:      genericSection.Content,
 	}
 }
 
