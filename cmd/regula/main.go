@@ -2860,13 +2860,15 @@ Workflow:
   1. regula bulk list <source>          List available datasets
   2. regula bulk download <source>      Download archives to .regula/downloads/
   3. regula bulk ingest --source <src>  Parse downloaded files and add to library
-  4. regula bulk status                 Check download/ingest progress`,
+  4. regula bulk status                 Check download/ingest progress
+  5. regula bulk stats                  Show comprehensive ingestion statistics`,
 	}
 
 	cmd.AddCommand(bulkListCmd())
 	cmd.AddCommand(bulkDownloadCmd())
 	cmd.AddCommand(bulkIngestCmd())
 	cmd.AddCommand(bulkStatusCmd())
+	cmd.AddCommand(bulkStatsCmd())
 
 	return cmd
 }
@@ -3179,6 +3181,94 @@ Examples:
 	}
 
 	cmd.Flags().String("source", "", "Filter status to a specific source")
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+
+	return cmd
+}
+
+func bulkStatsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "stats",
+		Short: "Show comprehensive statistics for ingested bulk data",
+		Long: `Display a detailed breakdown of ingested bulk legislation data.
+
+Shows per-title metrics (triples, articles, chapters, definitions,
+cross-references, rights, obligations), aggregate totals, and
+titles ingested vs. total.
+
+Supports table, JSON, and CSV output formats.
+
+Examples:
+  regula bulk stats                          Show stats as ASCII table
+  regula bulk stats --format json            Output as JSON
+  regula bulk stats --format csv             Output as CSV
+  regula bulk stats --source uscode          Filter to USC only`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sourceFilter, _ := cmd.Flags().GetString("source")
+			formatFlag, _ := cmd.Flags().GetString("format")
+			libraryPath, _ := cmd.Flags().GetString("path")
+
+			downloadDirectory := filepath.Join(libraryPath, "downloads")
+			manifestPath := filepath.Join(downloadDirectory, "manifest.json")
+
+			manifest, err := bulk.LoadManifest(manifestPath)
+			if err != nil {
+				return fmt.Errorf("failed to load download manifest: %w", err)
+			}
+
+			// Apply source filter to manifest if specified
+			if sourceFilter != "" {
+				filteredManifest := bulk.NewDownloadManifest()
+				for _, record := range manifest.Downloads {
+					if record.SourceName == sourceFilter {
+						filteredManifest.RecordDownload(record)
+					}
+				}
+				manifest = filteredManifest
+			}
+
+			// Load library document stats
+			var documentStats map[string]*bulk.DocumentStatsSummary
+			lib, libErr := library.Open(libraryPath)
+			if libErr == nil {
+				documentStats = make(map[string]*bulk.DocumentStatsSummary)
+				for _, doc := range lib.ListDocuments() {
+					summary := &bulk.DocumentStatsSummary{
+						Status:      string(doc.Status),
+						DisplayName: doc.Name,
+						IngestedAt:  doc.IngestedAt,
+						Source:      doc.SourceInfo,
+					}
+					if doc.Stats != nil {
+						summary.Triples = doc.Stats.TotalTriples
+						summary.Articles = doc.Stats.Articles
+						summary.Chapters = doc.Stats.Chapters
+						summary.Definitions = doc.Stats.Definitions
+						summary.References = doc.Stats.References
+						summary.Rights = doc.Stats.Rights
+						summary.Obligations = doc.Stats.Obligations
+					}
+					documentStats[doc.ID] = summary
+				}
+			}
+
+			report := bulk.CollectStats(manifest, documentStats)
+
+			switch formatFlag {
+			case "json":
+				fmt.Println(bulk.FormatStatsJSON(report))
+			case "csv":
+				fmt.Print(bulk.FormatStatsCSV(report))
+			default:
+				fmt.Print(bulk.FormatStatsTable(report))
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("format", "table", "Output format (table, json, csv)")
+	cmd.Flags().String("source", "", "Filter statistics to a specific source")
 	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
 
 	return cmd

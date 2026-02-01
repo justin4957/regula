@@ -1,8 +1,11 @@
 package bulk
 
 import (
+	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -126,10 +129,17 @@ func FormatIngestReportJSON(report *IngestReport) string {
 
 // DocumentStatsSummary holds per-document statistics for status reporting.
 type DocumentStatsSummary struct {
-	Triples  int
-	Articles int
-	Chapters int
-	Status   string
+	Triples     int
+	Articles    int
+	Chapters    int
+	Definitions int
+	References  int
+	Rights      int
+	Obligations int
+	Status      string
+	DisplayName string
+	Source      string
+	IngestedAt  time.Time
 }
 
 // FormatStatusReport formats download and ingest status for terminal output.
@@ -217,4 +227,207 @@ func formatDuration(duration time.Duration) string {
 	minutes := int(duration.Minutes())
 	seconds := int(duration.Seconds()) % 60
 	return fmt.Sprintf("%dm%ds", minutes, seconds)
+}
+
+// CollectStats builds a StatsReport from a download manifest and per-document statistics.
+// It cross-references each download record with its corresponding library stats entry.
+func CollectStats(manifest *DownloadManifest, documentStats map[string]*DocumentStatsSummary) *StatsReport {
+	report := &StatsReport{}
+
+	// Collect entries sorted by identifier for deterministic output
+	var identifiers []string
+	for identifier := range manifest.Downloads {
+		identifiers = append(identifiers, identifier)
+	}
+	sort.Strings(identifiers)
+
+	report.TitlesTotal = len(identifiers)
+
+	for _, identifier := range identifiers {
+		record := manifest.Downloads[identifier]
+		documentID := deriveDocumentID(record)
+
+		entry := StatsEntry{
+			Identifier: record.Identifier,
+			DocumentID: documentID,
+			Source:     record.SourceName,
+			Status:     "pending",
+		}
+
+		if documentStats != nil {
+			if stats, exists := documentStats[documentID]; exists {
+				entry.Triples = stats.Triples
+				entry.Articles = stats.Articles
+				entry.Chapters = stats.Chapters
+				entry.Definitions = stats.Definitions
+				entry.References = stats.References
+				entry.Rights = stats.Rights
+				entry.Obligations = stats.Obligations
+				entry.Status = stats.Status
+				entry.DisplayName = stats.DisplayName
+				entry.Source = stats.Source
+				entry.IngestedAt = stats.IngestedAt
+
+				if stats.Triples > 0 {
+					report.TitlesIngested++
+					report.TotalTriples += stats.Triples
+					report.TotalArticles += stats.Articles
+					report.TotalChapters += stats.Chapters
+					report.TotalDefinitions += stats.Definitions
+					report.TotalReferences += stats.References
+					report.TotalRights += stats.Rights
+					report.TotalObligations += stats.Obligations
+				}
+
+				// Use source from record if not set via documentStats
+				if entry.Source == "" {
+					entry.Source = record.SourceName
+				}
+			}
+		}
+
+		// Fallback source from download record
+		if entry.Source == "" {
+			entry.Source = record.SourceName
+		}
+
+		report.Entries = append(report.Entries, entry)
+	}
+
+	return report
+}
+
+// FormatStatsTable formats a StatsReport as an ASCII table for terminal display.
+func FormatStatsTable(report *StatsReport) string {
+	var builder strings.Builder
+
+	builder.WriteString("\nBulk Ingestion Statistics\n")
+	builder.WriteString(strings.Repeat("═", 110) + "\n")
+	builder.WriteString(fmt.Sprintf("Titles Ingested: %d/%d\n", report.TitlesIngested, report.TitlesTotal))
+	builder.WriteString(strings.Repeat("─", 110) + "\n")
+
+	// Column headers
+	builder.WriteString(fmt.Sprintf("  %-28s %10s %10s %8s %8s %8s %8s %8s  %-8s\n",
+		"TITLE", "TRIPLES", "ARTICLES", "CHPTRS", "DEFS", "XREFS", "RIGHTS", "OBLIGS", "STATUS"))
+	builder.WriteString("  " + strings.Repeat("─", 106) + "\n")
+
+	for _, entry := range report.Entries {
+		titleLabel := entry.Identifier
+		if entry.DisplayName != "" {
+			titleLabel = entry.DisplayName
+		}
+		if len(titleLabel) > 28 {
+			titleLabel = titleLabel[:25] + "..."
+		}
+
+		if entry.Status == "pending" || entry.Triples == 0 {
+			builder.WriteString(fmt.Sprintf("  %-28s %10s %10s %8s %8s %8s %8s %8s  %-8s\n",
+				titleLabel, "-", "-", "-", "-", "-", "-", "-", entry.Status))
+		} else {
+			builder.WriteString(fmt.Sprintf("  %-28s %10s %10s %8s %8s %8s %8s %8s  %-8s\n",
+				titleLabel,
+				formatNumber(entry.Triples),
+				formatNumber(entry.Articles),
+				formatNumber(entry.Chapters),
+				formatNumber(entry.Definitions),
+				formatNumber(entry.References),
+				formatNumber(entry.Rights),
+				formatNumber(entry.Obligations),
+				entry.Status))
+		}
+	}
+
+	// Totals row
+	builder.WriteString("  " + strings.Repeat("─", 106) + "\n")
+	builder.WriteString(fmt.Sprintf("  %-28s %10s %10s %8s %8s %8s %8s %8s\n",
+		"TOTALS",
+		formatNumber(report.TotalTriples),
+		formatNumber(report.TotalArticles),
+		formatNumber(report.TotalChapters),
+		formatNumber(report.TotalDefinitions),
+		formatNumber(report.TotalReferences),
+		formatNumber(report.TotalRights),
+		formatNumber(report.TotalObligations)))
+
+	return builder.String()
+}
+
+// FormatStatsJSON formats a StatsReport as indented JSON.
+func FormatStatsJSON(report *StatsReport) string {
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Sprintf(`{"error": %q}`, err.Error())
+	}
+	return string(data)
+}
+
+// FormatStatsCSV formats a StatsReport as CSV with a header row and per-entry data rows.
+func FormatStatsCSV(report *StatsReport) string {
+	var buffer bytes.Buffer
+	writer := csv.NewWriter(&buffer)
+
+	// Header row
+	header := []string{
+		"identifier", "document_id", "display_name", "source",
+		"triples", "articles", "chapters", "definitions",
+		"references", "rights", "obligations", "status", "ingested_at",
+	}
+	_ = writer.Write(header)
+
+	// Data rows
+	for _, entry := range report.Entries {
+		ingestedAt := ""
+		if !entry.IngestedAt.IsZero() {
+			ingestedAt = entry.IngestedAt.Format(time.RFC3339)
+		}
+
+		row := []string{
+			entry.Identifier,
+			entry.DocumentID,
+			entry.DisplayName,
+			entry.Source,
+			fmt.Sprintf("%d", entry.Triples),
+			fmt.Sprintf("%d", entry.Articles),
+			fmt.Sprintf("%d", entry.Chapters),
+			fmt.Sprintf("%d", entry.Definitions),
+			fmt.Sprintf("%d", entry.References),
+			fmt.Sprintf("%d", entry.Rights),
+			fmt.Sprintf("%d", entry.Obligations),
+			entry.Status,
+			ingestedAt,
+		}
+		_ = writer.Write(row)
+	}
+
+	writer.Flush()
+	return buffer.String()
+}
+
+// formatNumber returns a comma-separated number string (e.g., 25100 → "25,100").
+func formatNumber(value int) string {
+	if value == 0 {
+		return "0"
+	}
+
+	negative := value < 0
+	if negative {
+		value = -value
+	}
+
+	raw := fmt.Sprintf("%d", value)
+	length := len(raw)
+
+	var result strings.Builder
+	if negative {
+		result.WriteByte('-')
+	}
+
+	for index, digit := range raw {
+		if index > 0 && (length-index)%3 == 0 {
+			result.WriteByte(',')
+		}
+		result.WriteRune(digit)
+	}
+
+	return result.String()
 }

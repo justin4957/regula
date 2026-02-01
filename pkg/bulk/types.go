@@ -165,6 +165,37 @@ type IngestEntry struct {
 	SourceBytes int           `json:"source_bytes,omitempty"`
 }
 
+// StatsReport holds aggregate and per-title statistics for the bulk stats dashboard.
+type StatsReport struct {
+	TitlesIngested   int          `json:"titles_ingested"`
+	TitlesTotal      int          `json:"titles_total"`
+	TotalTriples     int          `json:"total_triples"`
+	TotalArticles    int          `json:"total_articles"`
+	TotalChapters    int          `json:"total_chapters"`
+	TotalDefinitions int          `json:"total_definitions"`
+	TotalReferences  int          `json:"total_references"`
+	TotalRights      int          `json:"total_rights"`
+	TotalObligations int          `json:"total_obligations"`
+	Entries          []StatsEntry `json:"entries"`
+}
+
+// StatsEntry holds per-title statistics for a single ingested document.
+type StatsEntry struct {
+	Identifier  string    `json:"identifier"`
+	DocumentID  string    `json:"document_id"`
+	DisplayName string    `json:"display_name"`
+	Source      string    `json:"source"`
+	Triples     int       `json:"triples"`
+	Articles    int       `json:"articles"`
+	Chapters    int       `json:"chapters"`
+	Definitions int       `json:"definitions"`
+	References  int       `json:"references"`
+	Rights      int       `json:"rights"`
+	Obligations int       `json:"obligations"`
+	Status      string    `json:"status"`
+	IngestedAt  time.Time `json:"ingested_at"`
+}
+
 // ResolveSource creates a Source instance from a source name string.
 func ResolveSource(sourceName string, config DownloadConfig) (Source, error) {
 	switch sourceName {
