@@ -1,0 +1,19 @@
+S. 456
+
+A BILL
+To require the Secretary of Commerce to conduct a study on the
+impact of artificial intelligence on small businesses.
+
+Be it enacted by the Senate and House of Representatives of the
+United States of America in Congress assembled,
+
+SECTION 1. STUDY ON ARTIFICIAL INTELLIGENCE IMPACT.
+
+    (a) IN GENERAL.--Not later than 1 year after the date of
+enactment of this Act, the Secretary of Commerce shall conduct a
+study on the impact of artificial intelligence technologies on
+small businesses in the United States.
+    (b) REPORT.--Not later than 18 months after the date of
+enactment of this Act, the Secretary shall submit to Congress a
+report containing the results of the study conducted under
+subsection (a).

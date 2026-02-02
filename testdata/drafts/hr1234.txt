@@ -1,0 +1,69 @@
+118th CONGRESS
+1st SESSION
+
+H. R. 1234
+
+AN ACT
+To amend title 42, United States Code, to improve protections for children's
+online privacy, and for other purposes.
+
+Be it enacted by the Senate and House of Representatives of the
+United States of America in Congress assembled,
+
+SECTION 1. SHORT TITLE.
+
+    This Act may be cited as the "Children's Online Privacy
+Protection Modernization Act".
+
+SEC. 2. DEFINITIONS.
+
+    In this Act:
+        (1) COMMISSION.--The term "Commission" means the Federal
+    Trade Commission.
+        (2) COVERED INFORMATION.--The term "covered information"
+    means personally identifiable information collected online from
+    a child, including--
+            (A) a first and last name;
+            (B) a home or physical address;
+            (C) an email address or other online contact information;
+            (D) a telephone number;
+            (E) a Social Security number; and
+            (F) any other identifier that permits the physical or
+        online contacting of a specific individual.
+        (3) OPERATOR.--The term "operator" means any person who
+    operates a website or online service directed to children.
+
+SEC. 3. ENHANCED PROTECTIONS FOR CHILDREN'S ONLINE PRIVACY.
+
+    (a) IN GENERAL.--Section 1303 of the Children's Online Privacy
+Protection Act of 1998 (15 U.S.C. 6502) is amended--
+        (1) intes in subsection (b)--
+            (A) in paragraph (1), by striking "13" and inserting "16";
+            (B) in paragraph (2), by adding at the end the following:
+                "(C) PROHIBITION ON TARGETED ADVERTISING.--An operator
+            shall not engage in targeted advertising directed at a
+            child whose age the operator has actual knowledge of."; and
+        (2) by adding at the end the following new subsection:
+    "(e) DATA MINIMIZATION.--An operator shall--
+        "(1) limit the collection of personal information from
+    children to what is strictly necessary for the activity; and
+        "(2) delete personal information collected from a child
+    after a reasonable period not to exceed 2 years.".
+
+SEC. 4. ENFORCEMENT.
+
+    (a) CIVIL PENALTIES.--Section 1306(d) of the Children's Online
+Privacy Protection Act of 1998 (15 U.S.C. 6505(d)) is amended by
+striking "$50,000" and inserting "$100,000".
+    (b) STATE ATTORNEY GENERAL ENFORCEMENT.--
+        (1) IN GENERAL.--The attorney general of a State may bring
+    a civil action on behalf of the residents of the State in any
+    United States district court for the district in which the
+    defendant is found or transacts business to enforce this Act.
+        (2) NOTICE.--The State shall provide written notice to the
+    Commission prior to initiating an action under paragraph (1).
+
+SEC. 5. EFFECTIVE DATE.
+
+    This Act shall take effect 180 days after the date of enactment
+of this Act.
