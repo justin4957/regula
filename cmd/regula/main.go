@@ -1,16 +1,20 @@
 package main
 
 import (
+	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/coolbeans/regula/pkg/analysis"
 	"github.com/coolbeans/regula/pkg/bulk"
 	"github.com/coolbeans/regula/pkg/crawler"
+	"github.com/coolbeans/regula/pkg/draft"
 	"github.com/coolbeans/regula/pkg/eurlex"
 	"github.com/coolbeans/regula/pkg/extract"
 	"github.com/coolbeans/regula/pkg/fetch"
@@ -67,6 +71,7 @@ It ingests regulatory documents and produces:
 	rootCmd.AddCommand(crawlCmd())
 	rootCmd.AddCommand(playgroundCmd())
 	rootCmd.AddCommand(bulkCmd())
+	rootCmd.AddCommand(draftCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -3579,4 +3584,367 @@ Examples:
 	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
 
 	return cmd
+}
+
+// --- Draft legislation analysis commands ---
+
+func draftCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "draft",
+		Short: "Draft legislation analysis pipeline",
+		Long: `Parse draft Congressional bills and analyze their impact on existing law.
+
+Commands:
+  ingest    Parse a draft bill and display its structure and amendments
+  diff      Compute structural diff against the USC knowledge graph
+
+Examples:
+  regula draft ingest --bill draft-hr-1234.txt
+  regula draft ingest --bill draft-hr-1234.txt --format json
+  regula draft diff --bill draft-hr-1234.txt --path .regula
+  regula draft diff --bill draft-hr-1234.txt --format csv`,
+	}
+
+	cmd.AddCommand(draftIngestCmd())
+	cmd.AddCommand(draftDiffCmd())
+
+	return cmd
+}
+
+func draftIngestCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ingest",
+		Short: "Parse a draft bill and display its structure",
+		Long: `Parse a draft Congressional bill file and display its structural
+metadata, sections, and extracted amendments.
+
+The parser extracts bill number, title, Congress, session, and
+individual sections. The amendment recognizer then analyzes each
+section's text to identify amendment instructions (strike-and-insert,
+repeal, add new section, etc.) and their USC targets.
+
+Examples:
+  regula draft ingest --bill testdata/drafts/hr1234.txt
+  regula draft ingest --bill draft-hr-1234.txt --format json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			billPath, _ := cmd.Flags().GetString("bill")
+			formatFlag, _ := cmd.Flags().GetString("format")
+
+			if billPath == "" {
+				return fmt.Errorf("--bill flag is required: specify the path to a draft bill file")
+			}
+
+			bill, err := parseBillWithAmendments(billPath)
+			if err != nil {
+				return err
+			}
+
+			switch formatFlag {
+			case "json":
+				data, marshalErr := json.MarshalIndent(bill, "", "  ")
+				if marshalErr != nil {
+					return fmt.Errorf("failed to marshal JSON: %w", marshalErr)
+				}
+				fmt.Println(string(data))
+			default:
+				fmt.Print(formatIngestTable(bill))
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("bill", "", "Path to draft bill file (required)")
+	cmd.Flags().String("format", "table", "Output format (table, json)")
+
+	return cmd
+}
+
+func draftDiffCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "diff",
+		Short: "Compute structural diff against the USC knowledge graph",
+		Long: `Compute and display a structured diff between a draft bill's
+amendments and existing provisions in the USC knowledge graph.
+
+For each amendment, resolves the target provision in the library,
+counts affected triples, and identifies cross-references. Results
+are classified as added, removed, modified, or redesignated.
+
+Requires a populated library (use 'regula bulk ingest' first).
+
+Examples:
+  regula draft diff --bill testdata/drafts/hr1234.txt
+  regula draft diff --bill draft-hr-1234.txt --path .regula
+  regula draft diff --bill draft-hr-1234.txt --format json
+  regula draft diff --bill draft-hr-1234.txt --format csv`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			billPath, _ := cmd.Flags().GetString("bill")
+			libraryPath, _ := cmd.Flags().GetString("path")
+			formatFlag, _ := cmd.Flags().GetString("format")
+
+			if billPath == "" {
+				return fmt.Errorf("--bill flag is required: specify the path to a draft bill file")
+			}
+
+			bill, err := parseBillWithAmendments(billPath)
+			if err != nil {
+				return err
+			}
+
+			diffResult, err := draft.ComputeDiff(bill, libraryPath)
+			if err != nil {
+				return fmt.Errorf("diff computation failed: %w", err)
+			}
+
+			switch formatFlag {
+			case "json":
+				data, marshalErr := json.MarshalIndent(diffResult, "", "  ")
+				if marshalErr != nil {
+					return fmt.Errorf("failed to marshal JSON: %w", marshalErr)
+				}
+				fmt.Println(string(data))
+			case "csv":
+				fmt.Print(formatDiffCSV(diffResult))
+			default:
+				fmt.Print(formatDiffTable(diffResult))
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("bill", "", "Path to draft bill file (required)")
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+	cmd.Flags().String("format", "table", "Output format (table, json, csv)")
+
+	return cmd
+}
+
+// parseBillWithAmendments parses a draft bill file and runs amendment
+// recognition on each section. The parser alone does not extract amendments;
+// the Recognizer must be applied separately.
+func parseBillWithAmendments(billPath string) (*draft.DraftBill, error) {
+	bill, err := draft.ParseBillFromFile(billPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse bill: %w", err)
+	}
+
+	recognizer := draft.NewRecognizer()
+	for _, section := range bill.Sections {
+		amendments, extractErr := recognizer.ExtractAmendments(section.RawText)
+		if extractErr != nil {
+			return nil, fmt.Errorf("failed to extract amendments from section %s: %w", section.Number, extractErr)
+		}
+		section.Amendments = amendments
+	}
+
+	return bill, nil
+}
+
+// collectTargetTitles returns a sorted list of unique USC title numbers
+// referenced across all amendments in the bill.
+func collectTargetTitles(bill *draft.DraftBill) []string {
+	titleSet := make(map[string]bool)
+	for _, section := range bill.Sections {
+		for _, amendment := range section.Amendments {
+			if amendment.TargetTitle != "" {
+				titleSet[amendment.TargetTitle] = true
+			}
+		}
+	}
+
+	titles := make([]string, 0, len(titleSet))
+	for title := range titleSet {
+		titles = append(titles, title)
+	}
+	sort.Strings(titles)
+	return titles
+}
+
+// formatIngestTable formats a parsed bill as a human-readable table showing
+// bill metadata, per-section structure, and amendment counts.
+func formatIngestTable(bill *draft.DraftBill) string {
+	var builder strings.Builder
+	stats := bill.Statistics()
+	targetTitles := collectTargetTitles(bill)
+
+	builder.WriteString(fmt.Sprintf("\nDraft Bill: %s\n", bill.String()))
+	builder.WriteString(strings.Repeat("═", 70) + "\n")
+
+	if bill.Congress != "" {
+		builder.WriteString(fmt.Sprintf("  Congress:    %s\n", bill.Congress))
+	}
+	if bill.Session != "" {
+		builder.WriteString(fmt.Sprintf("  Session:     %s\n", bill.Session))
+	}
+	builder.WriteString(fmt.Sprintf("  Sections:    %d\n", stats.SectionCount))
+	builder.WriteString(fmt.Sprintf("  Amendments:  %d\n", stats.AmendmentCount))
+	if len(targetTitles) > 0 {
+		builder.WriteString(fmt.Sprintf("  Targets:     %d title(s) (%s)\n", len(targetTitles), strings.Join(targetTitles, ", ")))
+	}
+	builder.WriteString(strings.Repeat("─", 70) + "\n")
+
+	// Per-section table
+	builder.WriteString(fmt.Sprintf("  %-6s %-38s %s\n", "Sec.", "Title", "Amendments"))
+	builder.WriteString(fmt.Sprintf("  %-6s %-38s %s\n", "────", "──────────────────────────────────────", "──────────"))
+	for _, section := range bill.Sections {
+		sectionTitle := section.Title
+		if len(sectionTitle) > 38 {
+			sectionTitle = sectionTitle[:35] + "..."
+		}
+
+		amendmentSummary := fmt.Sprintf("%d", len(section.Amendments))
+		if len(section.Amendments) > 0 {
+			sectionTargets := make(map[string]bool)
+			for _, amendment := range section.Amendments {
+				if amendment.TargetTitle != "" {
+					sectionTargets[amendment.TargetTitle] = true
+				}
+			}
+			targetList := make([]string, 0, len(sectionTargets))
+			for title := range sectionTargets {
+				targetList = append(targetList, "Title "+title)
+			}
+			sort.Strings(targetList)
+			if len(targetList) > 0 {
+				amendmentSummary += " → " + strings.Join(targetList, ", ")
+			}
+		}
+
+		builder.WriteString(fmt.Sprintf("  %-6s %-38s %s\n", section.Number, sectionTitle, amendmentSummary))
+	}
+
+	builder.WriteString(strings.Repeat("─", 70) + "\n")
+	return builder.String()
+}
+
+// formatDiffTable formats a DraftDiff as a styled table matching the output
+// example from the issue specification.
+func formatDiffTable(diffResult *draft.DraftDiff) string {
+	var builder strings.Builder
+	bill := diffResult.Bill
+	stats := bill.Statistics()
+	targetTitles := collectTargetTitles(bill)
+
+	builder.WriteString(fmt.Sprintf("\nDraft Legislation Diff: %s\n", bill.BillNumber))
+	builder.WriteString(strings.Repeat("═", 70) + "\n")
+	builder.WriteString(fmt.Sprintf("  Bill sections: %d\n", stats.SectionCount))
+	builder.WriteString(fmt.Sprintf("  Amendments:    %d\n", stats.AmendmentCount))
+	if len(targetTitles) > 0 {
+		builder.WriteString(fmt.Sprintf("  Targets:       %d title(s) (%s)\n", len(targetTitles), strings.Join(targetTitles, ", ")))
+	}
+	builder.WriteString("\n")
+
+	// Modified entries
+	if len(diffResult.Modified) > 0 {
+		builder.WriteString(fmt.Sprintf("  MODIFIED (%d):\n", len(diffResult.Modified)))
+		for _, entry := range diffResult.Modified {
+			targetLabel := formatTargetLabel(entry)
+			incomingCount := len(entry.CrossRefsTo)
+			builder.WriteString(fmt.Sprintf("    %-30s %4d triples affected  %3d incoming refs\n",
+				targetLabel, entry.AffectedTriples, incomingCount))
+		}
+		builder.WriteString("\n")
+	}
+
+	// Removed entries
+	if len(diffResult.Removed) > 0 {
+		builder.WriteString(fmt.Sprintf("  REPEALED (%d):\n", len(diffResult.Removed)))
+		for _, entry := range diffResult.Removed {
+			targetLabel := formatTargetLabel(entry)
+			incomingCount := len(entry.CrossRefsTo)
+			highImpact := ""
+			if incomingCount >= 10 {
+				highImpact = "  !! HIGH IMPACT"
+			}
+			builder.WriteString(fmt.Sprintf("    %-30s %4d triples affected  %3d incoming refs%s\n",
+				targetLabel, entry.AffectedTriples, incomingCount, highImpact))
+		}
+		builder.WriteString("\n")
+	}
+
+	// Added entries
+	if len(diffResult.Added) > 0 {
+		builder.WriteString(fmt.Sprintf("  ADDED (%d):\n", len(diffResult.Added)))
+		for _, entry := range diffResult.Added {
+			targetLabel := formatTargetLabel(entry) + " (new)"
+			incomingCount := len(entry.CrossRefsTo)
+			builder.WriteString(fmt.Sprintf("    %-30s %4d triples affected  %3d incoming refs\n",
+				targetLabel, entry.AffectedTriples, incomingCount))
+		}
+		builder.WriteString("\n")
+	}
+
+	// Redesignated entries
+	if len(diffResult.Redesignated) > 0 {
+		builder.WriteString(fmt.Sprintf("  REDESIGNATED (%d):\n", len(diffResult.Redesignated)))
+		for _, entry := range diffResult.Redesignated {
+			targetLabel := formatTargetLabel(entry)
+			builder.WriteString(fmt.Sprintf("    %-30s %4d triples affected\n",
+				targetLabel, entry.AffectedTriples))
+		}
+		builder.WriteString("\n")
+	}
+
+	// Unresolved targets
+	builder.WriteString(fmt.Sprintf("  UNRESOLVED (%d)", len(diffResult.UnresolvedTargets)))
+	if len(diffResult.UnresolvedTargets) > 0 {
+		builder.WriteString(":\n")
+		for _, target := range diffResult.UnresolvedTargets {
+			builder.WriteString(fmt.Sprintf("    %s\n", target))
+		}
+	}
+	builder.WriteString("\n\n")
+
+	builder.WriteString(fmt.Sprintf("  Total triples affected: %d\n", diffResult.TriplesInvalidated))
+	builder.WriteString(strings.Repeat("─", 70) + "\n")
+
+	return builder.String()
+}
+
+// formatTargetLabel creates a human-readable label like "Title 15 §6502(d)"
+// from a DiffEntry's amendment target fields.
+func formatTargetLabel(entry draft.DiffEntry) string {
+	label := "Title " + entry.Amendment.TargetTitle + " §" + entry.Amendment.TargetSection
+	if entry.Amendment.TargetSubsection != "" {
+		label += "(" + entry.Amendment.TargetSubsection + ")"
+	}
+	return label
+}
+
+// formatDiffCSV formats a DraftDiff as CSV with a header row and one row
+// per diff entry across all categories.
+func formatDiffCSV(diffResult *draft.DraftDiff) string {
+	var buffer bytes.Buffer
+	writer := csv.NewWriter(&buffer)
+
+	header := []string{"category", "title", "section", "subsection", "type", "triples_affected", "incoming_refs", "outgoing_refs", "target_uri", "document_id"}
+	_ = writer.Write(header)
+
+	writeDiffEntries := func(category string, entries []draft.DiffEntry) {
+		for _, entry := range entries {
+			row := []string{
+				category,
+				entry.Amendment.TargetTitle,
+				entry.Amendment.TargetSection,
+				entry.Amendment.TargetSubsection,
+				string(entry.Amendment.Type),
+				fmt.Sprintf("%d", entry.AffectedTriples),
+				fmt.Sprintf("%d", len(entry.CrossRefsTo)),
+				fmt.Sprintf("%d", len(entry.CrossRefsFrom)),
+				entry.TargetURI,
+				entry.TargetDocumentID,
+			}
+			_ = writer.Write(row)
+		}
+	}
+
+	writeDiffEntries("modified", diffResult.Modified)
+	writeDiffEntries("repealed", diffResult.Removed)
+	writeDiffEntries("added", diffResult.Added)
+	writeDiffEntries("redesignated", diffResult.Redesignated)
+
+	writer.Flush()
+	return buffer.String()
 }
