@@ -19,6 +19,7 @@ go test ./pkg/extract/... -v
 go test ./pkg/store/... -v
 go test ./pkg/simulate/... -v
 go test ./pkg/analysis/... -v
+go test ./pkg/draft/... -v
 ```
 
 ### Integration Tests
@@ -551,6 +552,133 @@ regula validate --source testdata/gdpr.txt --load-profile gdpr-custom.yaml
 | `TestProfileSuggestion_String` | Human-readable output contains key sections |
 | `TestProfileSuggestion_ToJSON` | JSON output contains profile, reasoning, confidence |
 | `TestRoundToDecimals` | Rounding utility correctness |
+
+### Draft Legislation Parser Tests
+
+Test the draft bill parser, amendment pattern recognizer, and legislation diff engine (`pkg/draft/`):
+
+```bash
+# Run all draft legislation tests
+go test ./pkg/draft/... -v -count=1
+
+# Run parser tests only
+go test ./pkg/draft/... -run "TestNewParser|TestParse|TestSection|TestShortTitle|TestBill|TestAmendments" -v
+
+# Run amendment pattern recognition tests
+go test ./pkg/draft/... -run "TestNewRecognizer|TestClassify|TestParseTarget|TestExtractAmendments" -v
+
+# Run legislation diff tests
+go test ./pkg/draft/... -run "TestComputeDiff|TestResolveAmendment|TestCountAffected|TestFindCross" -v
+
+# Run with coverage
+go test ./pkg/draft/... -coverprofile=draft-coverage.out -count=1
+go tool cover -func=draft-coverage.out
+```
+
+#### Bill Parser Tests (`pkg/draft/parser_test.go`)
+
+| Test | What it verifies |
+|------|------------------|
+| `TestNewParser` | Parser constructor compiles all regex patterns |
+| `TestParseFullBill` | Full bill with metadata, sections, and amendment text |
+| `TestParseMinimalBill` | Minimal bill with single section |
+| `TestParseBillFromFile` | File loading round-trip via `ParseBillFromFile()` |
+| `TestParseBillString` | String parsing via `ParseBill()` convenience function |
+| `TestParseEmptyInput` | Graceful handling of empty input |
+| `TestParseNoSections` | Header-only bill with no SEC. markers |
+| `TestSectionBoundaries` | Multiple sections correctly split at SEC. boundaries |
+| `TestShortTitleExtraction` | Short title extracted from "may be cited as" pattern |
+| `TestShortTitleMissing` | Bill without short title handled gracefully |
+| `TestBillStatistics` | `Statistics()` method returns correct aggregate counts |
+| `TestBillString` | `String()` representation includes bill number and title |
+| `TestBillStringWithoutCongress` | String representation when Congress field is empty |
+| `TestAmendmentsInitializedEmpty` | Each section's Amendments slice initialized to `[]` (not nil) |
+| `TestSectionNumberParsing` | Section numbers extracted from various SEC. header formats |
+
+#### Amendment Pattern Recognition Tests (`pkg/draft/patterns_test.go`)
+
+| Test | What it verifies |
+|------|------------------|
+| `TestNewRecognizer` | Recognizer constructor compiles all 15 regex patterns |
+| `TestClassifyAmendmentType` | All 6 amendment types classified (11 subtests: strike-insert, dollar amounts, repeal, hereby repealed, add new section, add at end, add at end new subsection, redesignate paragraph, redesignate subsection, table of contents, no match) |
+| `TestParseTargetReference` | USC target extraction (5 subtests: USC citation, USC with subsection, title comma format, title-of-the format, no reference) |
+| `TestExtractAmendments_StrikeInsert` | Strike-and-insert pattern with target title, section, strike/insert text |
+| `TestExtractAmendments_Repeal` | Section repeal and "hereby repealed" with subsection (2 subtests) |
+| `TestExtractAmendments_AddNewSection` | New section insertion after existing section |
+| `TestExtractAmendments_AddAtEnd` | Append content to end of existing section |
+| `TestExtractAmendments_Redesignate` | Paragraph and subsection redesignation |
+| `TestExtractAmendments_MultipleInOneSection` | Compound amendments within a single bill section |
+| `TestExtractAmendments_NonAmendmentSection` | Non-amendment sections return empty results (4 subtests: definitions, effective date, short title, empty text) |
+| `TestExtractAmendments_Integration` | Full integration with real bill sections from `testdata/drafts/hr1234.txt` (5 subtests) |
+
+#### Legislation Diff Tests (`pkg/draft/diff_test.go`)
+
+Tests use a mock library with seeded triple stores (42 triples for USC Title 15 articles 6502, 6503, 6505 with cross-references).
+
+| Test | What it verifies |
+|------|------------------|
+| `TestComputeDiff_SingleModification` | Strike-and-insert classified as Modified, existing text and affected triples populated |
+| `TestComputeDiff_Repeal` | Repeal classified as Removed, cross-references identified |
+| `TestComputeDiff_AddNewSection` | New section classified as Added, proposed text populated |
+| `TestComputeDiff_MultipleAmendments` | Mixed amendment types in one bill correctly separated into Added/Modified/Removed |
+| `TestComputeDiff_UnresolvedTarget` | Amendment targeting non-existent section collected in `UnresolvedTargets` |
+| `TestResolveAmendmentTarget` | Target resolution to knowledge graph URIs (5 subtests: basic section, subsection, missing title, missing section, document not in library) |
+| `TestCountAffectedTriples` | Counts triples where target URI appears as subject or object |
+| `TestFindCrossReferences` | Bidirectional cross-reference lookup via `reg:references` and `reg:referencedBy` |
+
+#### CLI Testing
+
+```bash
+# Build and test CLI commands
+go build -o regula ./cmd/regula
+
+# Parse and display bill structure (table format)
+regula draft ingest --bill testdata/drafts/hr1234.txt
+
+# Parse and display bill structure (JSON format)
+regula draft ingest --bill testdata/drafts/hr1234.txt --format json
+
+# Compute diff against knowledge graph (table format)
+regula draft diff --bill testdata/drafts/hr1234.txt --path .regula
+
+# Compute diff (JSON format)
+regula draft diff --bill testdata/drafts/hr1234.txt --format json
+
+# Compute diff (CSV format)
+regula draft diff --bill testdata/drafts/hr1234.txt --format csv
+
+# Error handling: missing --bill flag
+regula draft ingest   # exits with error
+regula draft diff     # exits with error
+```
+
+#### Test Coverage
+
+Overall package coverage: **87.3%** (34 tests + 41 subtests)
+
+| File | Function | Coverage |
+|------|----------|----------|
+| `parser.go` | `NewParser` | 100% |
+| `parser.go` | `Parse` | 88.9% |
+| `parser.go` | `ParseBill` | 100% |
+| `parser.go` | `ParseBillFromFile` | 80.0% |
+| `patterns.go` | `NewRecognizer` | 100% |
+| `patterns.go` | `ClassifyAmendmentType` | 100% |
+| `patterns.go` | `ParseTargetReference` | 89.5% |
+| `patterns.go` | `ExtractAmendments` | 89.5% |
+| `diff.go` | `ComputeDiff` | 82.8% |
+| `diff.go` | `ResolveAmendmentTarget` | 92.3% |
+| `diff.go` | `CountAffectedTriples` | 100% |
+| `diff.go` | `FindCrossReferences` | 100% |
+| `types.go` | `Statistics` | 100% |
+| `types.go` | `String` | 100% |
+
+#### Test Data
+
+| File | Description |
+|------|-------------|
+| `testdata/drafts/hr1234.txt` | H.R. 1234 — Children's Online Privacy Protection Modernization Act (5 sections, 4 amendments targeting Title 15) |
+| `testdata/drafts/s456_minimal.txt` | S. 456 — AI small business study bill (1 section, 0 amendments) |
 
 ### E2E Tests
 
