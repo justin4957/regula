@@ -150,6 +150,10 @@ type Parser struct {
 	// Disabled by default to avoid conflicting with state-specific patterns.
 	enableUSCPlainSections bool
 
+	// isHouseRulesFormat indicates that the document is a US House/Senate
+	// procedural rules document, which uses RULE [Roman] / clause structure.
+	isHouseRulesFormat bool
+
 	// Pattern library integration (optional)
 	patternRegistry pattern.Registry
 	patternBridge   *pattern.PatternBridge
@@ -324,6 +328,24 @@ func (p *Parser) applyUKPatternBridge(bridge *pattern.PatternBridge) {
 	}
 }
 
+// applyUSHouseRulesBridge configures the parser to use patterns for US House
+// of Representatives procedural rules. These documents use RULE [Roman numeral]
+// as chapters and numbered clauses as articles.
+func (p *Parser) applyUSHouseRulesBridge(bridge *pattern.PatternBridge) {
+	if bridge == nil {
+		return
+	}
+	p.patternBridge = bridge
+	p.isHouseRulesFormat = true
+
+	// Override chapter pattern to match "RULE I", "RULE II", etc.
+	if chapterPattern := bridge.HierarchyPattern("chapter"); chapterPattern != nil {
+		p.usChapterPattern = chapterPattern
+	} else {
+		p.usChapterPattern = regexp.MustCompile(`(?m)^RULE\s+([IVXLCDM]+)\s*$`)
+	}
+}
+
 // Parse parses the regulatory text from a reader and returns a structured Document.
 func (p *Parser) Parse(r io.Reader) (*Document, error) {
 	scanner := bufio.NewScanner(r)
@@ -349,6 +371,11 @@ func (p *Parser) Parse(r io.Reader) (*Document, error) {
 		p.format = p.detectFormat(lines)
 	}
 
+	// Apply preprocessing for House Rules format (removes PDF artifacts)
+	if p.isHouseRulesFormat {
+		lines = PreprocessHouseRules(lines)
+	}
+
 	// Parse title and type from first lines
 	if len(lines) > 0 {
 		doc.Title = lines[0]
@@ -361,7 +388,11 @@ func (p *Parser) Parse(r io.Reader) (*Document, error) {
 	// Parse based on detected format
 	switch p.format {
 	case FormatUS:
-		p.parseUSDocument(doc, lines)
+		if p.isHouseRulesFormat {
+			p.parseUSHouseRulesDocument(doc, lines)
+		} else {
+			p.parseUSDocument(doc, lines)
+		}
 	case FormatUK:
 		p.parseUKDocument(doc, lines)
 	case FormatGeneric:
@@ -401,6 +432,10 @@ func (p *Parser) detectFormat(lines []string) DocumentFormat {
 				p.applyUSPatternBridge(bridge)
 				return FormatUS
 			case "US", "US-Federal":
+				if bridge.FormatID() == "us-house-rules" {
+					p.applyUSHouseRulesBridge(bridge)
+					return FormatUS
+				}
 				p.applyUSPatternBridge(bridge)
 				return FormatUS
 			case "GB", "GB-SCT":
@@ -898,6 +933,160 @@ func (p *Parser) parseUSDocument(doc *Document, lines []string) {
 
 	// Extract definitions
 	doc.Definitions = p.extractUSDefinitions(doc)
+}
+
+// parseUSHouseRulesDocument parses US House of Representatives procedural rules.
+// The structure is: RULE [Roman] > clause heading > numbered clause > subsections.
+func (p *Parser) parseUSHouseRulesDocument(doc *Document, lines []string) {
+	var currentChapter *Chapter
+	var currentArticle *Article
+	var articleText strings.Builder
+
+	// Pattern for RULE headers: "RULE I", "RULE XXIX", etc.
+	ruleHeaderPattern := regexp.MustCompile(`^RULE\s+([IVXLCDM]+)\s*$`)
+
+	// Pattern for numbered clauses: "1. The Speaker shall...", "2. (a) ..."
+	clauseNumberPattern := regexp.MustCompile(`^(\d+)\.\s+(.*)$`)
+
+	// Pattern to detect clause headings (mixed-case descriptive titles
+	// that appear before numbered clauses, e.g., "Approval of the Journal")
+	clauseHeadingPattern := regexp.MustCompile(`^[A-Z][a-z]`)
+
+	// Track pending clause heading to assign as article title
+	pendingClauseHeading := ""
+
+	// Skip the table of contents and preamble — find the first RULE header
+	startIndex := 0
+	for i, line := range lines {
+		if ruleHeaderPattern.MatchString(strings.TrimSpace(line)) {
+			startIndex = i
+			break
+		}
+	}
+
+	for i := startIndex; i < len(lines); i++ {
+		line := lines[i]
+		trimmedLine := strings.TrimSpace(line)
+
+		// Skip empty lines
+		if trimmedLine == "" {
+			continue
+		}
+
+		// Check for RULE header (chapter boundary)
+		if m := ruleHeaderPattern.FindStringSubmatch(trimmedLine); m != nil {
+			// Save the current article
+			if currentArticle != nil {
+				currentArticle.Text = strings.TrimSpace(articleText.String())
+				p.addArticle(currentChapter, nil, currentArticle)
+				currentArticle = nil
+				articleText.Reset()
+			}
+
+			// Collect the rule title from subsequent ALL-CAPS line(s)
+			ruleTitle := ""
+			for j := i + 1; j < len(lines) && j < i+5; j++ {
+				candidate := strings.TrimSpace(lines[j])
+				if candidate == "" {
+					continue
+				}
+				// Rule titles are ALL-CAPS (e.g., "THE SPEAKER", "ORGANIZATION OF COMMITTEES")
+				if candidate == strings.ToUpper(candidate) && len(candidate) > 1 {
+					if ruleTitle != "" {
+						ruleTitle += " "
+					}
+					ruleTitle += candidate
+				} else {
+					break
+				}
+			}
+
+			currentChapter = &Chapter{
+				Number:   m[1],
+				Title:    ruleTitle,
+				Sections: make([]*Section, 0),
+				Articles: make([]*Article, 0),
+			}
+			doc.Chapters = append(doc.Chapters, currentChapter)
+			pendingClauseHeading = ""
+			continue
+		}
+
+		// Skip lines that are the rule title (ALL-CAPS, already captured)
+		if currentChapter != nil && trimmedLine == strings.ToUpper(trimmedLine) &&
+			len(trimmedLine) > 1 && trimmedLine == currentChapter.Title {
+			continue
+		}
+		// Skip multi-line title fragments that were already included
+		if currentChapter != nil && trimmedLine == strings.ToUpper(trimmedLine) &&
+			len(trimmedLine) > 1 && strings.Contains(currentChapter.Title, trimmedLine) {
+			continue
+		}
+
+		// Check for numbered clause (article boundary)
+		if m := clauseNumberPattern.FindStringSubmatch(trimmedLine); m != nil {
+			// Save the previous article
+			if currentArticle != nil {
+				currentArticle.Text = strings.TrimSpace(articleText.String())
+				p.addArticle(currentChapter, nil, currentArticle)
+			}
+
+			clauseNumber, _ := strconv.Atoi(m[1])
+			clauseTitle := pendingClauseHeading
+			pendingClauseHeading = ""
+
+			currentArticle = &Article{
+				Number: clauseNumber,
+				Title:  clauseTitle,
+			}
+			articleText.Reset()
+			articleText.WriteString(m[2])
+			continue
+		}
+
+		// Check for clause heading (mixed-case descriptive title before a numbered clause)
+		if clauseHeadingPattern.MatchString(trimmedLine) && currentArticle == nil ||
+			(clauseHeadingPattern.MatchString(trimmedLine) && currentChapter != nil &&
+				!strings.HasPrefix(trimmedLine, "(")) {
+			// Look ahead: is the next non-empty line a numbered clause?
+			isHeading := false
+			for j := i + 1; j < len(lines) && j < i+3; j++ {
+				nextTrimmed := strings.TrimSpace(lines[j])
+				if nextTrimmed == "" {
+					continue
+				}
+				if clauseNumberPattern.MatchString(nextTrimmed) {
+					isHeading = true
+				}
+				break
+			}
+			if isHeading {
+				// Save the current article before the new heading
+				if currentArticle != nil {
+					currentArticle.Text = strings.TrimSpace(articleText.String())
+					p.addArticle(currentChapter, nil, currentArticle)
+					currentArticle = nil
+					articleText.Reset()
+				}
+				pendingClauseHeading = trimmedLine
+				continue
+			}
+		}
+
+		// Accumulate article text
+		if currentArticle != nil && trimmedLine != "" {
+			if articleText.Len() > 0 {
+				articleText.WriteString("\n")
+			}
+			articleText.WriteString(trimmedLine)
+		}
+	}
+
+	// Save the last article
+	if currentArticle != nil {
+		currentArticle.Text = strings.TrimSpace(articleText.String())
+		p.addArticle(currentChapter, nil, currentArticle)
+	}
 }
 
 // extractUKIdentifier extracts an identifier from UK legislation.
