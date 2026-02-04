@@ -322,6 +322,134 @@ type ExtractionContext struct {
 
 ---
 
+## Draft Legislation Pipeline
+
+The draft legislation pipeline (`pkg/draft/`) parses proposed Congressional bills, recognizes amendment instructions, and computes a structured diff against the existing USC knowledge graph. The pipeline follows conventions from the [Office of Legislative Counsel Drafting Manual](https://legcounsel.house.gov/HOLC/Drafting_Legislation/drafting-guide.html).
+
+### Pipeline Overview
+
+```
+                    Draft Bill Text (HR/S)
+                            │
+                            ▼
+                 ┌─────────────────────┐
+                 │    Bill Parser       │  pkg/draft/parser.go
+                 │  ParseBillFromFile() │  Extracts metadata, splits sections
+                 └──────────┬──────────┘
+                            │
+                   DraftBill with []DraftSection
+                            │
+                            ▼
+                 ┌─────────────────────┐
+                 │  Amendment          │  pkg/draft/patterns.go
+                 │  Recognizer         │  Classifies and extracts amendments
+                 │  ExtractAmendments()│  per section
+                 └──────────┬──────────┘
+                            │
+                   DraftBill with []Amendment per section
+                            │
+                            ▼
+                 ┌─────────────────────┐
+                 │    Diff Engine       │  pkg/draft/diff.go
+                 │    ComputeDiff()     │  Resolves targets, loads triple
+                 │                      │  stores, classifies changes
+                 └──────────┬──────────┘
+                            │
+                            ▼
+                   DraftDiff (Added/Removed/Modified/
+                   Redesignated/Unresolved + triple counts)
+```
+
+### Amendment Pattern Grammar
+
+Congressional bills amend existing law using standardized phrasing. The recognizer matches six amendment types, checked in priority order (most specific first):
+
+| Priority | Type | Pattern | Example |
+|----------|------|---------|---------|
+| 1 | Strike-and-insert | `striking "X" and inserting "Y"` | `is amended by striking "13" and inserting "16"` |
+| 2 | Redesignation | `redesignating {unit} (X) as {unit} (Y)` | `is amended by redesignating paragraph (13A) as paragraph (13B)` |
+| 3 | Table of contents | `table of contents ... is amended` | `The table of contents for chapter 5 of title 42 is amended` |
+| 4 | Add new section | `inserting after section X the following new section` | `is amended by inserting after section 523 the following new section:` |
+| 5 | Add at end | `adding at the end the following` | `is amended by adding at the end the following:` |
+| 6 | Repeal | `is repealed` / `is hereby repealed` | `Section 230(c)(1) of title 47 is repealed` |
+
+Priority ordering prevents ambiguity: a strike-insert is checked before repeal because both may contain "is amended" preambles, and redesignation is checked before add-at-end because both may reference subsection targets.
+
+### Target Reference Resolution
+
+Amendment targets identify provisions using two formats. The recognizer tries the parenthetical format first, then the prose format:
+
+**Parenthetical (U.S.C. citation):**
+```
+(15 U.S.C. 6502)           → Title 15, Section 6502
+(15 U.S.C. 6505(d))        → Title 15, Section 6505, Subsection (d)
+(11 U.S.C. 101 et seq.)    → Title 11, Section 101
+```
+
+**Prose ("Section X of title Y"):**
+```
+Section 6502(b)(1) of title 15, United States Code
+Section 101 of title 11 of the United States Code
+```
+
+Resolved targets map to the knowledge graph as:
+```
+Title number  →  Document ID:  us-usc-title-{N}
+Section ref   →  Target URI:   {baseURI}US-USC-TITLE-{N}:Art{section}
+Subsection    →  Target URI:   {baseURI}US-USC-TITLE-{N}:Art{section}({subsection})
+```
+
+For example, "Section 6502(b)(1) of title 15" resolves to:
+- Document ID: `us-usc-title-15`
+- Target URI: `https://regula.dev/regulations/US-USC-TITLE-15:Art6502((b)(1))`
+
+### Linguistic Variations
+
+The recognizer handles common drafting variations:
+
+| Variation | Examples |
+|-----------|----------|
+| Amendment preamble | `"is amended—"` (em dash), `"is amended--"` (double hyphen), `"is amended by"` |
+| Title reference | `"of title 42, United States Code"`, `"of title 42 of the United States Code"` |
+| Repeal emphasis | `"is repealed"`, `"is hereby repealed"` |
+| Quoted text delimiters | Straight quotes `"..."` and curly quotes `\u201c...\u201d` |
+| Redesignation units | `paragraph`, `subsection`, `section`, `subparagraph`, `clause` |
+| Numbered clauses | `"(1) by striking..."`, `"(2) by inserting..."` within compound amendments |
+| Lettered sub-items | `"(A) in paragraph (1)..."`, `"(B) in paragraph (2)..."` |
+
+### Compound Amendments
+
+A single bill section may contain multiple amendments targeting different provisions. The recognizer splits these by detecting numbered clause boundaries:
+
+```
+Section 6502 of title 15, United States Code, is amended—
+    (1) in <paragraph (1), by striking "13" and inserting "16";>
+    (2) <by adding at the end the following:>
+        "(C) PROHIBITION ON TARGETED ADVERTISING.—..."
+```
+
+Each numbered clause `(1)`, `(2)`, etc. is processed independently. The target title and section from the preamble carry forward into each clause.
+
+### Diff Classification
+
+The diff engine (`ComputeDiff`) resolves each amendment target against the library, loads the document's triple store, and classifies the change:
+
+| Amendment Type | Diff Category | ProposedText | ExistingText |
+|----------------|---------------|-------------|--------------|
+| `strike_insert` | Modified | Insert text | Current provision text |
+| `repeal` | Removed | — | Current provision text |
+| `add_new_section` | Added | New section text | — |
+| `add_at_end` | Added | Appended text | — |
+| `redesignate` | Redesignated | New designation | — |
+| `table_of_contents` | Modified | Updated TOC entry | Current TOC text |
+
+For each resolved target, the engine also counts:
+- **Affected triples**: triples where the target URI appears as subject or object
+- **Cross-references**: provisions referencing or referenced by the target (via `reg:references` and `reg:referencedBy`)
+- **Unresolved targets**: amendments targeting provisions not found in the knowledge graph
+
+---
+
 ## Query Engine
 
 ### SPARQL Support
