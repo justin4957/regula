@@ -53,16 +53,6 @@ type RightsDelta struct {
 	Modified []string `json:"modified"`
 }
 
-// BrokenReference represents a cross-reference that will be invalidated by a
-// repeal or redesignation amendment. The SourceURI is the provision containing
-// the reference; TargetURI is the repealed or redesignated provision.
-type BrokenReference struct {
-	SourceURI string `json:"source_uri"`
-	TargetURI string `json:"target_uri"`
-	Predicate string `json:"predicate"`
-	Reason    string `json:"reason"`
-}
-
 // AnalyzeDraftImpact runs transitive impact analysis for every amendment in a
 // computed diff. For each modified or removed entry, it creates an ImpactAnalyzer
 // against the target document's triple store and runs analysis at the specified
@@ -116,7 +106,7 @@ func AnalyzeDraftImpact(diff *DraftDiff, libraryPath string, depth int) (*DraftI
 		collectObligationsAndRights(entry.TargetURI, tripleStore, &result.ObligationChanges.Modified, &result.RightsChanges.Modified)
 	}
 
-	// Analyze removed entries — these also generate broken cross-refs
+	// Analyze removed entries
 	for _, entry := range diff.Removed {
 		tripleStore, loadErr := loadOrCacheTripleStore(lib, entry.TargetDocumentID, tripleStoreCache)
 		if loadErr != nil {
@@ -124,7 +114,6 @@ func AnalyzeDraftImpact(diff *DraftDiff, libraryPath string, depth int) (*DraftI
 		}
 		analyzeEntry(entry, tripleStore, lib.BaseURI(), depth, "repealed", result, seenDirectURIs, seenTransitiveURIs)
 		collectObligationsAndRights(entry.TargetURI, tripleStore, &result.ObligationChanges.Removed, &result.RightsChanges.Removed)
-		collectBrokenReferences(entry, tripleStore, result)
 	}
 
 	// Analyze added entries for new obligations/rights
@@ -134,6 +123,12 @@ func AnalyzeDraftImpact(diff *DraftDiff, libraryPath string, depth int) (*DraftI
 			continue
 		}
 		collectObligationsAndRights(entry.TargetURI, tripleStore, &result.ObligationChanges.Added, &result.RightsChanges.Added)
+	}
+
+	// Detect broken cross-references across all amendment categories
+	brokenRefs, brokenErr := DetectBrokenCrossRefs(diff, libraryPath)
+	if brokenErr == nil {
+		result.BrokenCrossRefs = brokenRefs
 	}
 
 	result.TotalProvisionsAffected = len(result.DirectlyAffected) + len(result.TransitivelyAffected)
@@ -293,42 +288,6 @@ func collectObligationsAndRights(targetURI string, tripleStore *store.TripleStor
 	rightsTriples := tripleStore.Find(targetURI, store.PropGrantsRight, "")
 	for _, triple := range rightsTriples {
 		*rights = append(*rights, triple.Object)
-	}
-}
-
-// collectBrokenReferences identifies cross-references that will be invalidated
-// by a repeal amendment. Any provision referencing the repealed target will have
-// a broken reference.
-func collectBrokenReferences(entry DiffEntry, tripleStore *store.TripleStore, result *DraftImpactResult) {
-	targetLabel := extractURILabel(entry.TargetURI)
-
-	// Find incoming references that will break when the target is repealed
-	incomingTriples := tripleStore.Find("", store.PropReferences, entry.TargetURI)
-	for _, triple := range incomingTriples {
-		result.BrokenCrossRefs = append(result.BrokenCrossRefs, BrokenReference{
-			SourceURI: triple.Subject,
-			TargetURI: entry.TargetURI,
-			Predicate: store.PropReferences,
-			Reason:    fmt.Sprintf("references repealed %s", targetLabel),
-		})
-	}
-
-	// Also check referencedBy inverse triples
-	referencedByTriples := tripleStore.Find(entry.TargetURI, store.PropReferencedBy, "")
-	seenSources := make(map[string]bool)
-	for _, triple := range incomingTriples {
-		seenSources[triple.Subject] = true
-	}
-	for _, triple := range referencedByTriples {
-		if seenSources[triple.Object] {
-			continue
-		}
-		result.BrokenCrossRefs = append(result.BrokenCrossRefs, BrokenReference{
-			SourceURI: triple.Object,
-			TargetURI: entry.TargetURI,
-			Predicate: store.PropReferences,
-			Reason:    fmt.Sprintf("references repealed %s", targetLabel),
-		})
 	}
 }
 
