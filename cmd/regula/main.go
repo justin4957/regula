@@ -3597,16 +3597,20 @@ func draftCmd() *cobra.Command {
 Commands:
   ingest    Parse a draft bill and display its structure and amendments
   diff      Compute structural diff against the USC knowledge graph
+  impact    Run impact analysis against the USC knowledge graph
 
 Examples:
   regula draft ingest --bill draft-hr-1234.txt
   regula draft ingest --bill draft-hr-1234.txt --format json
   regula draft diff --bill draft-hr-1234.txt --path .regula
-  regula draft diff --bill draft-hr-1234.txt --format csv`,
+  regula draft diff --bill draft-hr-1234.txt --format csv
+  regula draft impact --bill draft-hr-1234.txt --depth 2
+  regula draft impact --bill draft-hr-1234.txt --format dot --output impact.dot`,
 	}
 
 	cmd.AddCommand(draftIngestCmd())
 	cmd.AddCommand(draftDiffCmd())
+	cmd.AddCommand(draftImpactCmd())
 
 	return cmd
 }
@@ -3947,4 +3951,340 @@ func formatDiffCSV(diffResult *draft.DraftDiff) string {
 
 	writer.Flush()
 	return buffer.String()
+}
+
+func draftImpactCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "impact",
+		Short: "Run impact analysis for a draft bill",
+		Long: `Run transitive impact analysis for a draft bill against the USC
+knowledge graph. Identifies directly and transitively affected provisions,
+broken cross-references, and obligation/rights changes.
+
+Requires a populated library (use 'regula bulk ingest' first).
+
+Output formats:
+  table   Styled summary with per-amendment breakdown (default)
+  json    Full DraftImpactResult as indented JSON
+  dot     Graphviz DOT graph (pipe to 'dot -Tpng' for rendering)
+
+Examples:
+  regula draft impact --bill draft-hr-1234.txt
+  regula draft impact --bill draft-hr-1234.txt --depth 3
+  regula draft impact --bill draft-hr-1234.txt --format json
+  regula draft impact --bill draft-hr-1234.txt --format dot --output impact.dot
+  regula draft impact --bill draft-hr-1234.txt --title-filter 15,42`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			billPath, _ := cmd.Flags().GetString("bill")
+			libraryPath, _ := cmd.Flags().GetString("path")
+			depthFlag, _ := cmd.Flags().GetInt("depth")
+			formatFlag, _ := cmd.Flags().GetString("format")
+			outputPath, _ := cmd.Flags().GetString("output")
+			titleFilter, _ := cmd.Flags().GetString("title-filter")
+
+			if billPath == "" {
+				return fmt.Errorf("--bill flag is required: specify the path to a draft bill file")
+			}
+
+			bill, err := parseBillWithAmendments(billPath)
+			if err != nil {
+				return err
+			}
+
+			diffResult, err := draft.ComputeDiff(bill, libraryPath)
+			if err != nil {
+				return fmt.Errorf("diff computation failed: %w", err)
+			}
+
+			impactResult, err := draft.AnalyzeDraftImpact(diffResult, libraryPath, depthFlag)
+			if err != nil {
+				return fmt.Errorf("impact analysis failed: %w", err)
+			}
+
+			impactResult.SortByDepth()
+
+			// Apply title filter if specified
+			if titleFilter != "" {
+				filterTitles := parseTitleFilter(titleFilter)
+				impactResult = filterImpactByTitles(impactResult, filterTitles)
+			}
+
+			switch formatFlag {
+			case "json":
+				data, marshalErr := json.MarshalIndent(impactResult, "", "  ")
+				if marshalErr != nil {
+					return fmt.Errorf("failed to marshal JSON: %w", marshalErr)
+				}
+				fmt.Println(string(data))
+			case "dot":
+				dotContent, dotErr := draft.RenderImpactGraph(impactResult)
+				if dotErr != nil {
+					return fmt.Errorf("failed to render DOT graph: %w", dotErr)
+				}
+				if outputPath != "" {
+					if writeErr := os.WriteFile(outputPath, []byte(dotContent), 0644); writeErr != nil {
+						return fmt.Errorf("failed to write DOT file: %w", writeErr)
+					}
+					fmt.Fprintf(os.Stderr, "DOT graph written to %s\n", outputPath)
+					fmt.Fprintf(os.Stderr, "Render with: dot -Tpng %s -o impact.png\n", outputPath)
+				} else {
+					fmt.Print(dotContent)
+				}
+			default:
+				fmt.Print(formatImpactTable(impactResult))
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("bill", "", "Path to draft bill file (required)")
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+	cmd.Flags().Int("depth", 2, "Transitive dependency depth (1=direct only)")
+	cmd.Flags().String("format", "table", "Output format (table, json, dot)")
+	cmd.Flags().String("output", "", "Output file path (useful for DOT format)")
+	cmd.Flags().String("title-filter", "", "Limit analysis to specific USC titles (comma-separated, e.g. 15,42)")
+
+	return cmd
+}
+
+// parseTitleFilter splits a comma-separated title filter string into a set
+// of title numbers for lookup.
+func parseTitleFilter(titleFilter string) map[string]bool {
+	filterSet := make(map[string]bool)
+	for _, segment := range strings.Split(titleFilter, ",") {
+		trimmed := strings.TrimSpace(segment)
+		if trimmed != "" {
+			filterSet[trimmed] = true
+		}
+	}
+	return filterSet
+}
+
+// filterImpactByTitles returns a copy of the impact result containing only
+// provisions and broken refs whose document IDs match the specified title
+// numbers. The diff is preserved unfiltered.
+func filterImpactByTitles(result *draft.DraftImpactResult, titleNumbers map[string]bool) *draft.DraftImpactResult {
+	matchesFilter := func(documentID string) bool {
+		for titleNum := range titleNumbers {
+			if strings.HasSuffix(documentID, "-"+titleNum) {
+				return true
+			}
+		}
+		return false
+	}
+
+	filtered := &draft.DraftImpactResult{
+		Bill:              result.Bill,
+		Diff:              result.Diff,
+		ObligationChanges: result.ObligationChanges,
+		RightsChanges:     result.RightsChanges,
+		MaxDepthReached:   result.MaxDepthReached,
+	}
+
+	for _, provision := range result.DirectlyAffected {
+		if matchesFilter(provision.DocumentID) {
+			filtered.DirectlyAffected = append(filtered.DirectlyAffected, provision)
+		}
+	}
+	for _, provision := range result.TransitivelyAffected {
+		if matchesFilter(provision.DocumentID) {
+			filtered.TransitivelyAffected = append(filtered.TransitivelyAffected, provision)
+		}
+	}
+	for _, brokenRef := range result.BrokenCrossRefs {
+		if matchesFilter(brokenRef.SourceDocumentID) {
+			filtered.BrokenCrossRefs = append(filtered.BrokenCrossRefs, brokenRef)
+		}
+	}
+
+	filtered.TotalProvisionsAffected = len(filtered.DirectlyAffected) + len(filtered.TransitivelyAffected)
+	return filtered
+}
+
+// formatImpactTable formats a DraftImpactResult as a styled table matching
+// the output example from issue #156.
+func formatImpactTable(result *draft.DraftImpactResult) string {
+	var builder strings.Builder
+	bill := result.Bill
+	targetTitles := collectTargetTitles(bill)
+
+	billLabel := bill.BillNumber
+	if bill.ShortTitle != "" {
+		billLabel += " — " + bill.ShortTitle
+	} else if bill.Title != "" {
+		billLabel += " — " + bill.Title
+	}
+
+	builder.WriteString(fmt.Sprintf("\nDraft Impact Analysis: %s\n", billLabel))
+	builder.WriteString(strings.Repeat("═", 70) + "\n")
+
+	stats := bill.Statistics()
+	titleSummary := ""
+	if len(targetTitles) > 0 {
+		titleSummary = fmt.Sprintf(" across %d title(s)", len(targetTitles))
+	}
+	builder.WriteString(fmt.Sprintf("  Amendments: %d%s\n", stats.AmendmentCount, titleSummary))
+	builder.WriteString(fmt.Sprintf("  Directly affected: %d provisions\n", len(result.DirectlyAffected)))
+	builder.WriteString(fmt.Sprintf("  Transitively affected: %d provisions (depth %d)\n", len(result.TransitivelyAffected), result.MaxDepthReached))
+	builder.WriteString(fmt.Sprintf("  Broken cross-references: %d\n", len(result.BrokenCrossRefs)))
+	builder.WriteString("\n")
+
+	// Per-amendment impact breakdown
+	if result.Diff != nil {
+		amendmentEntries := collectAmendmentSummaryEntries(result)
+		if len(amendmentEntries) > 0 {
+			builder.WriteString("  IMPACT BY AMENDMENT:\n")
+			builder.WriteString("  " + strings.Repeat("─", 58) + "\n")
+			for _, entry := range amendmentEntries {
+				builder.WriteString(entry)
+			}
+			builder.WriteString("\n")
+		}
+	}
+
+	// Broken cross-references section
+	if len(result.BrokenCrossRefs) > 0 {
+		builder.WriteString("  BROKEN CROSS-REFERENCES:\n")
+		builder.WriteString("  " + strings.Repeat("─", 58) + "\n")
+		for _, brokenRef := range result.BrokenCrossRefs {
+			severityTag := strings.ToUpper(brokenRef.Severity.String())
+			builder.WriteString(fmt.Sprintf("    [%s] %s → %s (%s)\n",
+				severityTag,
+				truncateImpactLabel(brokenRef.SourceLabel, 30),
+				truncateImpactLabel(brokenRef.TargetLabel, 20),
+				brokenRef.Reason))
+		}
+		builder.WriteString("\n")
+	}
+
+	// Obligation/rights changes section
+	obligationTotal := len(result.ObligationChanges.Added) +
+		len(result.ObligationChanges.Removed) +
+		len(result.ObligationChanges.Modified)
+	rightsTotal := len(result.RightsChanges.Added) +
+		len(result.RightsChanges.Removed)
+
+	if obligationTotal > 0 || rightsTotal > 0 {
+		builder.WriteString("  OBLIGATION/RIGHTS CHANGES:\n")
+		builder.WriteString("  " + strings.Repeat("─", 58) + "\n")
+		builder.WriteString(fmt.Sprintf("    Obligations added:    %d\n", len(result.ObligationChanges.Added)))
+		builder.WriteString(fmt.Sprintf("    Obligations removed:  %d\n", len(result.ObligationChanges.Removed)))
+		builder.WriteString(fmt.Sprintf("    Obligations modified: %d\n", len(result.ObligationChanges.Modified)))
+		builder.WriteString(fmt.Sprintf("    Rights added:         %d\n", len(result.RightsChanges.Added)))
+		builder.WriteString(fmt.Sprintf("    Rights removed:       %d\n", len(result.RightsChanges.Removed)))
+		builder.WriteString("\n")
+	}
+
+	builder.WriteString(strings.Repeat("═", 70) + "\n")
+	return builder.String()
+}
+
+// collectAmendmentSummaryEntries generates per-amendment summary lines for
+// the impact table, showing direct/transitive counts and broken refs per
+// modified or repealed target.
+func collectAmendmentSummaryEntries(result *draft.DraftImpactResult) []string {
+	var entries []string
+	if result.Diff == nil {
+		return entries
+	}
+
+	writeAmendmentGroup := func(diffEntries []draft.DiffEntry, changeLabel string) {
+		for _, entry := range diffEntries {
+			targetLabel := formatTargetLabel(entry)
+			directCount := countAffectedByTarget(entry, result.DirectlyAffected)
+			transitiveCount := countAffectedByTarget(entry, result.TransitivelyAffected)
+			brokenRefCount := countBrokenRefsByTarget(entry, result.BrokenCrossRefs)
+
+			var entryBuilder strings.Builder
+			highImpact := ""
+			if directCount >= 10 {
+				highImpact = "  !! HIGH IMPACT"
+			}
+			entryBuilder.WriteString(fmt.Sprintf("  %s [%s]%s\n", targetLabel, changeLabel, highImpact))
+			entryBuilder.WriteString(fmt.Sprintf("    Direct:      %d provisions reference this section\n", directCount))
+			entryBuilder.WriteString(fmt.Sprintf("    Transitive:  %d provisions at depth 2+\n", transitiveCount))
+
+			obligationCount := countObligationsByTarget(entry, result)
+			if obligationCount > 0 {
+				entryBuilder.WriteString(fmt.Sprintf("    Obligations: %d modified\n", obligationCount))
+			}
+			if brokenRefCount > 0 {
+				entryBuilder.WriteString(fmt.Sprintf("    Broken refs: %d (severity: error)\n", brokenRefCount))
+			}
+			entryBuilder.WriteString("\n")
+			entries = append(entries, entryBuilder.String())
+		}
+	}
+
+	writeAmendmentGroup(result.Diff.Modified, "MODIFIED")
+	writeAmendmentGroup(result.Diff.Removed, "REPEALED")
+	writeAmendmentGroup(result.Diff.Added, "ADDED")
+	writeAmendmentGroup(result.Diff.Redesignated, "REDESIGNATED")
+
+	return entries
+}
+
+// countAffectedByTarget counts how many affected provisions reference the
+// given diff entry's target, by checking if the provision's Reason field
+// mentions the target URI label.
+func countAffectedByTarget(entry draft.DiffEntry, provisions []draft.AffectedProvision) int {
+	targetLabel := extractDiffTargetLabel(entry)
+	count := 0
+	for _, provision := range provisions {
+		if strings.Contains(provision.Reason, targetLabel) {
+			count++
+		}
+	}
+	return count
+}
+
+// countBrokenRefsByTarget counts broken references whose target matches
+// the given diff entry.
+func countBrokenRefsByTarget(entry draft.DiffEntry, brokenRefs []draft.BrokenReference) int {
+	count := 0
+	for _, brokenRef := range brokenRefs {
+		if brokenRef.TargetURI == entry.TargetURI {
+			count++
+		}
+	}
+	return count
+}
+
+// countObligationsByTarget counts obligation changes associated with a
+// diff entry's target URI label.
+func countObligationsByTarget(entry draft.DiffEntry, result *draft.DraftImpactResult) int {
+	targetLabel := extractDiffTargetLabel(entry)
+	count := 0
+	for _, obligation := range result.ObligationChanges.Modified {
+		if strings.Contains(obligation, targetLabel) {
+			count++
+		}
+	}
+	for _, obligation := range result.ObligationChanges.Removed {
+		if strings.Contains(obligation, targetLabel) {
+			count++
+		}
+	}
+	return count
+}
+
+// extractDiffTargetLabel extracts the last segment of a diff entry's
+// target URI for matching against reason strings.
+func extractDiffTargetLabel(entry draft.DiffEntry) string {
+	uri := entry.TargetURI
+	for i := len(uri) - 1; i >= 0; i-- {
+		if uri[i] == ':' || uri[i] == '/' || uri[i] == '#' {
+			return uri[i+1:]
+		}
+	}
+	return uri
+}
+
+// truncateImpactLabel shortens a label for table display.
+func truncateImpactLabel(label string, maxLen int) string {
+	if len(label) <= maxLen {
+		return label
+	}
+	return label[:maxLen-3] + "..."
 }
