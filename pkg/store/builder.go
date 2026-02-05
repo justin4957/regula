@@ -47,6 +47,13 @@ func NewGraphBuilder(store *TripleStore, baseURI string) *GraphBuilder {
 	}
 }
 
+// SetRegulationID overrides the auto-derived regulation ID with a specific value.
+// This is useful for documents whose identifier does not follow EU regulation
+// patterns (e.g., US House Rules, US Code titles).
+func (b *GraphBuilder) SetRegulationID(id string) {
+	b.regID = id
+}
+
 // Build converts a parsed document into RDF triples and adds them to the store.
 func (b *GraphBuilder) Build(doc *extract.Document) (*BuildStats, error) {
 	if doc == nil {

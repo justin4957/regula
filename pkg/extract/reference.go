@@ -3,6 +3,7 @@ package extract
 import (
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -107,6 +108,11 @@ type ReferenceExtractor struct {
 	caTitlePattern     *regexp.Regexp // Section 17014 of Title 18
 	publicLawPattern   *regexp.Regexp // Public Law 104-191
 
+	// Internal reference patterns (House Rules-style)
+	houseClauseOfRulePattern *regexp.Regexp // clause 5 of rule XX
+	houseRuleRefPattern      *regexp.Regexp // rule XX
+	houseClauseRefPattern    *regexp.Regexp // clause 5
+
 	// Temporal reference patterns
 	asAmendedByPattern         *regexp.Regexp // as amended by {document}
 	asAmendedPattern           *regexp.Regexp // as amended / as amended accordingly
@@ -173,6 +179,14 @@ func NewReferenceExtractor() *ReferenceExtractor {
 		uscChapterArabicPattern: regexp.MustCompile(`(?i)\bchapter\s+(\d+)\b`),
 		// "section 306 of the Public Health Service Act"
 		uscSectionOfActPattern: regexp.MustCompile(`(?i)section\s+(\d+[a-z]*(?:-\d+[a-z]*)?)\s*(\([^)]*\)(?:\(\d+\))?)?\s+of\s+the\s+([A-Z][^,;.]+?)\s+Act`),
+
+		// Internal references (House Rules-style)
+		// "clause 5 of rule XX" or "clause 1(a)(1) of rule X"
+		houseClauseOfRulePattern: regexp.MustCompile(`(?i)clause\s+(\d+)(?:\(([a-z])\))?(?:\((\d+)\))?\s+of\s+rule\s+([IVXLCDM]+)`),
+		// "rule XX" (standalone rule reference)
+		houseRuleRefPattern: regexp.MustCompile(`(?i)\brule\s+([IVXLCDM]+)\b`),
+		// "clause 5" (standalone clause reference)
+		houseClauseRefPattern: regexp.MustCompile(`(?i)\bclause\s+(\d+)\b`),
 
 		// External references (EU-style)
 		// "Directive 95/46/EC" or "Directive (EU) 2016/680"
@@ -267,6 +281,9 @@ func (e *ReferenceExtractor) ExtractFromArticle(article *Article) []*Reference {
 	refs = append(refs, e.extractRegulationRefs(text, article.Number)...)
 	refs = append(refs, e.extractTreatyRefs(text, article.Number)...)
 	refs = append(refs, e.extractDecisionRefs(text, article.Number)...)
+
+	// Extract internal references (House Rules-style)
+	refs = append(refs, e.extractHouseRuleRefs(text, article.Number)...)
 
 	// Extract external references (US-style)
 	refs = append(refs, e.extractUSExternalRefs(text, article.Number)...)
@@ -645,6 +662,66 @@ func (e *ReferenceExtractor) extractUSSectionRefs(text string, sourceArticle int
 			ArticleNum:    articleNum,
 			SectionNum:    codePrefix*1000 + sectionNum,
 		})
+	}
+
+	return refs
+}
+
+// extractHouseRuleRefs extracts House Rules-style internal references:
+// "clause N of rule X", "rule X", "clause N".
+func (e *ReferenceExtractor) extractHouseRuleRefs(text string, sourceArticle int) []*Reference {
+	var refs []*Reference
+
+	// "clause 5 of rule XX" or "clause 1(a)(1) of rule X"
+	clauseOfRuleMatches := e.houseClauseOfRulePattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range clauseOfRuleMatches {
+		rawText := text[match[0]:match[1]]
+		clauseNum := text[match[2]:match[3]]
+		ruleNum := text[match[8]:match[9]]
+		clauseNumInt, _ := strconv.Atoi(clauseNum)
+
+		ref := &Reference{
+			Type:          ReferenceTypeInternal,
+			Target:        TargetArticle,
+			RawText:       rawText,
+			Identifier:    "Rule " + ruleNum + " clause " + clauseNum,
+			SourceArticle: sourceArticle,
+			ArticleNum:    clauseNumInt,
+			ChapterNum:    ruleNum,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+		}
+		refs = append(refs, ref)
+	}
+
+	// "rule XX" (standalone, but skip if already part of "clause N of rule X")
+	ruleMatches := e.houseRuleRefPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range ruleMatches {
+		// Skip if this match is part of a "clause of rule" match
+		alreadyCovered := false
+		for _, corMatch := range clauseOfRuleMatches {
+			if match[0] >= corMatch[0] && match[1] <= corMatch[1] {
+				alreadyCovered = true
+				break
+			}
+		}
+		if alreadyCovered {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		ruleNum := text[match[2]:match[3]]
+		ref := &Reference{
+			Type:          ReferenceTypeInternal,
+			Target:        TargetChapter,
+			RawText:       rawText,
+			Identifier:    "Rule " + ruleNum,
+			SourceArticle: sourceArticle,
+			ChapterNum:    ruleNum,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+		}
+		refs = append(refs, ref)
 	}
 
 	return refs

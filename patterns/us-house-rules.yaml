@@ -1,0 +1,102 @@
+# US House of Representatives Rules Format Pattern
+# Detects and parses procedural rules of the US House of Representatives
+
+name: "US House of Representatives Rules"
+format_id: "us-house-rules"
+version: "1.0.0"
+jurisdiction: "US-Federal"
+
+detection:
+  required_indicators:
+    - pattern: '(?m)^RULE\s+[IVXLCDM]+\s*$'
+      weight: 30
+    - pattern: '(?i)\bHouse\s+of\s+Representatives\b'
+      weight: 25
+
+  optional_indicators:
+    - pattern: '(?i)\bSpeaker\b'
+      weight: 8
+    - pattern: '(?i)\bcommittee\s+on\b'
+      weight: 10
+    - pattern: '(?i)\bclause\s+\d+'
+      weight: 12
+    - pattern: '(?i)\bMember,\s+Delegate'
+      weight: 8
+    - pattern: '(?i)\bResident\s+Commissioner\b'
+      weight: 10
+    - pattern: '(?i)\bOne\s+Hundred\s+\w+\s+Congress\b'
+      weight: 15
+    - pattern: '(?i)\bstanding\s+committees?\b'
+      weight: 8
+    - pattern: '(?i)\bquorum\b'
+      weight: 5
+
+  negative_indicators:
+    - pattern: '\bEuropean\s+(Union|Parliament|Commission)\b'
+      weight: -20
+    - pattern: '\bDirective\s+\d{4}/\d+/(EC|EU)\b'
+      weight: -25
+    - pattern: '\bCALIFORNIA\b'
+      weight: -15
+    - pattern: '\bSection\s+\d+\.\d+'
+      weight: -10
+
+structure:
+  hierarchy:
+    - type: "chapter"
+      pattern: '(?m)^RULE\s+([IVXLCDM]+)\s*$'
+      number_group: 1
+      title_follows: true
+
+    - type: "article"
+      pattern: '^(\d+)\.\s+'
+      number_group: 1
+
+    - type: "subsection"
+      pattern: '^\(([a-z])\)\s+'
+      number_group: 1
+
+    - type: "paragraph"
+      pattern: '^\((\d+)\)\s+'
+      number_group: 1
+
+    - type: "subparagraph"
+      pattern: '^\(([A-Z])\)\s+'
+      number_group: 1
+
+definitions: {}
+
+references:
+  internal:
+    - pattern: '(?i)clause\s+(\d+)(?:\(([a-z])\))?(?:\((\d+)\))?\s+of\s+rule\s+([IVXLCDM]+)'
+      target: "article"
+      groups:
+        clause: 1
+        subsection: 2
+        paragraph: 3
+        rule: 4
+
+    - pattern: '(?i)rule\s+([IVXLCDM]+)'
+      target: "chapter"
+      groups:
+        number: 1
+
+    - pattern: '(?i)clause\s+(\d+)'
+      target: "article"
+      groups:
+        clause: 1
+
+  external:
+    - pattern: '(\d+)\s+U\.?S\.?C\.?\s*§?\s*(\d+[a-z]?(?:-\d+)?)'
+      type: "usc"
+      uri_template: "https://www.law.cornell.edu/uscode/text/{title}/{section}"
+      groups:
+        title: 1
+        section: 2
+
+    - pattern: 'Public\s+Law\s+(\d+)-(\d+)'
+      type: "public_law"
+      uri_template: "https://www.congress.gov/public-laws/{congress}/pl{number}"
+      groups:
+        congress: 1
+        number: 2

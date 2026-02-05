@@ -19,6 +19,7 @@ import (
 	"github.com/coolbeans/regula/pkg/extract"
 	"github.com/coolbeans/regula/pkg/fetch"
 	"github.com/coolbeans/regula/pkg/library"
+	"github.com/coolbeans/regula/pkg/pattern"
 	"github.com/coolbeans/regula/pkg/linkcheck"
 	"github.com/coolbeans/regula/pkg/playground"
 	"github.com/coolbeans/regula/pkg/query"
@@ -200,7 +201,7 @@ Example:
 			defer file.Close()
 
 			parseStart := time.Now()
-			parser := extract.NewParser()
+			parser := newParserWithPatterns()
 			doc, err := parser.Parse(file)
 			if err != nil {
 				return fmt.Errorf("failed to parse document: %w", err)
@@ -256,7 +257,7 @@ Example:
 
 			// Step 5: Resolve references
 			fmt.Print("  5. Resolving cross-references... ")
-			resolver := extract.NewReferenceResolver(baseURI, "GDPR")
+			resolver := extract.NewReferenceResolver(baseURI, extractDocID(source))
 			resolver.IndexDocument(doc)
 			resolved := resolver.ResolveAll(references)
 			report := extract.GenerateReport(resolved)
@@ -780,7 +781,7 @@ func loadAndIngest(source string) error {
 	}
 	defer file.Close()
 
-	parser := extract.NewParser()
+	parser := newParserWithPatterns()
 	doc, err := parser.Parse(file)
 	if err != nil {
 		return fmt.Errorf("failed to parse document: %w", err)
@@ -793,7 +794,7 @@ func loadAndIngest(source string) error {
 	defExtractor := extract.NewDefinitionExtractor()
 	refExtractor := extract.NewReferenceExtractor()
 	semExtractor := extract.NewSemanticExtractor()
-	resolver := extract.NewReferenceResolver(baseURI, "GDPR")
+	resolver := extract.NewReferenceResolver(baseURI, extractDocID(source))
 	resolver.IndexDocument(doc)
 
 	_, err = builder.BuildComplete(doc, defExtractor, refExtractor, resolver, semExtractor)
@@ -933,7 +934,7 @@ Example:
 			}
 			defer file.Close()
 
-			parser := extract.NewParser()
+			parser := newParserWithPatterns()
 			doc, err := parser.Parse(file)
 			if err != nil {
 				return fmt.Errorf("failed to parse document: %w", err)
@@ -948,7 +949,7 @@ Example:
 			refs := refExtractor.ExtractFromDocument(doc)
 
 			// Create resolver and index document
-			resolver := extract.NewReferenceResolver(baseURI, "GDPR")
+			resolver := extract.NewReferenceResolver(baseURI, extractDocID(source))
 			resolver.IndexDocument(doc)
 
 			// Resolve all references
@@ -1417,7 +1418,7 @@ Examples:
 			}
 			defer file.Close()
 
-			parser := extract.NewParser()
+			parser := newParserWithPatterns()
 			doc, err := parser.Parse(file)
 			if err != nil {
 				return fmt.Errorf("failed to parse document: %w", err)
@@ -1430,7 +1431,7 @@ Examples:
 			defExtractor := extract.NewDefinitionExtractor()
 			refExtractor := extract.NewReferenceExtractor()
 			semExtractor := extract.NewSemanticExtractor()
-			resolver := extract.NewReferenceResolver(baseURI, "GDPR")
+			resolver := extract.NewReferenceResolver(baseURI, extractDocID(source))
 			resolver.IndexDocument(doc)
 
 			_, err = builder.BuildComplete(doc, defExtractor, refExtractor, resolver, semExtractor)
@@ -1797,7 +1798,7 @@ Example:
 					return fmt.Errorf("failed to open %s: %w", sourcePath, err)
 				}
 
-				parser := extract.NewParser()
+				parser := newParserWithPatterns()
 				doc, err := parser.Parse(file)
 				file.Close()
 				if err != nil {
@@ -1949,7 +1950,7 @@ Example:
 				return fmt.Errorf("failed to open source: %w", err)
 			}
 
-			parser := extract.NewParser()
+			parser := newParserWithPatterns()
 			doc, err := parser.Parse(file)
 			file.Close()
 			if err != nil {
@@ -2049,6 +2050,21 @@ Example:
 }
 
 // extractDocID extracts a document identifier from a file path.
+// newParserWithPatterns creates a parser with the pattern registry loaded from
+// the patterns directory. Falls back to a plain parser if patterns cannot be loaded.
+func newParserWithPatterns() *extract.Parser {
+	registry := pattern.NewRegistry()
+	// Try common pattern directory locations relative to the binary
+	for _, dir := range []string{"patterns", "../../patterns", "../patterns"} {
+		if _, err := os.Stat(dir); err == nil {
+			if err := registry.LoadDirectory(dir); err == nil {
+				return extract.NewParserWithRegistry(registry)
+			}
+		}
+	}
+	return extract.NewParser()
+}
+
 func extractDocID(sourcePath string) string {
 	baseName := filepath.Base(sourcePath)
 	// Remove extension
