@@ -538,6 +538,457 @@ func sortConflicts(conflicts []Conflict) {
 	})
 }
 
+// DetectRightsConflicts analyzes a computed diff against the knowledge graph to
+// find rights-related conflicts. It examines:
+//   - Modified entries: checks if proposed text narrows existing rights
+//   - Removed entries: checks if repealed rights are depended on by other provisions
+//   - Added entries: checks for conflicts between new rights and existing obligations,
+//     and reports new/expanded rights as informational
+//
+// Results are sorted by severity (errors first, then warnings, then info).
+func DetectRightsConflicts(diff *DraftDiff, impact *DraftImpactResult, libraryPath string) ([]Conflict, error) {
+	if diff == nil {
+		return nil, fmt.Errorf("diff is nil")
+	}
+
+	lib, err := library.Open(libraryPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open library: %w", err)
+	}
+
+	var conflicts []Conflict
+	tripleStoreCache := make(map[string]*store.TripleStore)
+
+	// Modified entries: check for rights narrowing
+	for _, entry := range diff.Modified {
+		tripleStore, loadErr := loadOrCacheTripleStore(lib, entry.TargetDocumentID, tripleStoreCache)
+		if loadErr != nil {
+			continue
+		}
+		narrowingConflicts := detectRightsNarrowing(entry, tripleStore)
+		conflicts = append(conflicts, narrowingConflicts...)
+	}
+
+	// Removed entries: check for repealed rights with dependents
+	for _, entry := range diff.Removed {
+		tripleStore, loadErr := loadOrCacheTripleStore(lib, entry.TargetDocumentID, tripleStoreCache)
+		if loadErr != nil {
+			continue
+		}
+		repealedConflicts := detectRepealedRights(entry, tripleStore)
+		conflicts = append(conflicts, repealedConflicts...)
+	}
+
+	// Added entries: check for rights-obligation conflicts and rights expansion
+	for _, entry := range diff.Added {
+		tripleStore, loadErr := loadOrCacheTripleStore(lib, entry.TargetDocumentID, tripleStoreCache)
+		if loadErr != nil {
+			continue
+		}
+		addedConflicts := detectRightsObligationConflicts(entry, tripleStore)
+		conflicts = append(conflicts, addedConflicts...)
+
+		expansionConflicts := detectRightsExpansion(entry, tripleStore)
+		conflicts = append(conflicts, expansionConflicts...)
+	}
+
+	sortConflicts(conflicts)
+	return conflicts, nil
+}
+
+// detectRightsNarrowing checks if a modified provision's proposed text narrows
+// any existing rights on that provision. A right is narrowed when the proposed
+// amendment adds qualifiers, exceptions, or limiting language.
+func detectRightsNarrowing(entry DiffEntry, tripleStore *store.TripleStore) []Conflict {
+	var conflicts []Conflict
+
+	rightTriples := tripleStore.Find(entry.TargetURI, store.PropGrantsRight, "")
+	for _, rightTriple := range rightTriples {
+		rightURI := rightTriple.Object
+		existingText := getRightText(rightURI, tripleStore)
+		if existingText == "" {
+			continue
+		}
+
+		proposedText := entry.ProposedText
+		if proposedText == "" {
+			proposedText = entry.Amendment.InsertText
+		}
+
+		if proposedText != "" && DetectRightsNarrowing(existingText, proposedText) {
+			conflicts = append(conflicts, Conflict{
+				Type:              ConflictRightsNarrowing,
+				Severity:          classifyConflictSeverity(ConflictRightsNarrowing),
+				SourceAmendment:   entry.Amendment,
+				ExistingProvision: rightURI,
+				ExistingText:      existingText,
+				ProposedText:      proposedText,
+				Description: fmt.Sprintf(
+					"proposed amendment narrows existing right in %s: qualifying or limiting language detected",
+					extractURILabel(rightURI),
+				),
+			})
+		}
+	}
+
+	return conflicts
+}
+
+// detectRepealedRights checks if repealing a provision would remove rights that
+// other provisions depend on. A right is considered at risk when its parent
+// provision is repealed but other provisions reference it.
+func detectRepealedRights(entry DiffEntry, tripleStore *store.TripleStore) []Conflict {
+	var conflicts []Conflict
+
+	rightTriples := tripleStore.Find(entry.TargetURI, store.PropGrantsRight, "")
+	for _, rightTriple := range rightTriples {
+		rightURI := rightTriple.Object
+		dependentURIs := FindDependentRights(rightURI, tripleStore)
+
+		if len(dependentURIs) > 0 {
+			existingText := getRightText(rightURI, tripleStore)
+			dependentLabels := make([]string, 0, len(dependentURIs))
+			for _, depURI := range dependentURIs {
+				dependentLabels = append(dependentLabels, extractURILabel(depURI))
+			}
+
+			conflicts = append(conflicts, Conflict{
+				Type:              ConflictRightsNarrowing,
+				Severity:          ConflictWarning,
+				SourceAmendment:   entry.Amendment,
+				ExistingProvision: rightURI,
+				ExistingText:      existingText,
+				Description: fmt.Sprintf(
+					"repealing %s removes right %s depended on by: %s",
+					extractURILabel(entry.TargetURI),
+					extractURILabel(rightURI),
+					strings.Join(dependentLabels, ", "),
+				),
+			})
+		}
+	}
+
+	return conflicts
+}
+
+// detectRightsObligationConflicts checks if a new provision introduces rights
+// that conflict with existing obligations. A conflict occurs when a new right's
+// scope opposes an existing obligation's directive.
+func detectRightsObligationConflicts(entry DiffEntry, tripleStore *store.TripleStore) []Conflict {
+	var conflicts []Conflict
+
+	proposedText := entry.ProposedText
+	if proposedText == "" {
+		proposedText = entry.Amendment.InsertText
+	}
+	if proposedText == "" {
+		return conflicts
+	}
+
+	// Extract right-granting keywords from the proposed text
+	rightKeywords := extractRightKeywords(proposedText)
+	if len(rightKeywords) == 0 {
+		return conflicts
+	}
+
+	// Find all existing obligations in the store
+	allObligationTriples := tripleStore.Find("", store.RDFType, store.ClassObligation)
+	for _, obligTriple := range allObligationTriples {
+		existingObligURI := obligTriple.Subject
+		existingObligText := getObligationText(existingObligURI, tripleStore)
+		if existingObligText == "" {
+			continue
+		}
+
+		obligationType := getObligationType(existingObligURI, tripleStore)
+		for _, rightKeyword := range rightKeywords {
+			if DetectRightsObligationConflict(rightKeyword, obligationType) {
+				parentURI := getObligationParent(existingObligURI, tripleStore)
+				conflicts = append(conflicts, Conflict{
+					Type:              ConflictRightsContradiction,
+					Severity:          classifyConflictSeverity(ConflictRightsContradiction),
+					SourceAmendment:   entry.Amendment,
+					ExistingProvision: existingObligURI,
+					ExistingText:      existingObligText,
+					ProposedText:      proposedText,
+					Description: fmt.Sprintf(
+						"proposed right '%s' conflicts with existing obligation in %s",
+						rightKeyword,
+						extractURILabel(parentURI),
+					),
+				})
+				break // One conflict per obligation is sufficient
+			}
+		}
+	}
+
+	return conflicts
+}
+
+// detectRightsExpansion checks if a new provision introduces or broadens rights,
+// flagging them as informational findings.
+func detectRightsExpansion(entry DiffEntry, tripleStore *store.TripleStore) []Conflict {
+	var conflicts []Conflict
+
+	proposedText := entry.ProposedText
+	if proposedText == "" {
+		proposedText = entry.Amendment.InsertText
+	}
+	if proposedText == "" {
+		return conflicts
+	}
+
+	rightKeywords := extractRightKeywords(proposedText)
+	if len(rightKeywords) == 0 {
+		return conflicts
+	}
+
+	// Check if these rights already exist (if so, skip — not new)
+	allRightTriples := tripleStore.Find("", store.RDFType, store.ClassRight)
+	existingRightTypes := make(map[string]bool)
+	for _, rightTriple := range allRightTriples {
+		rightType := getRightType(rightTriple.Subject, tripleStore)
+		if rightType != "" {
+			existingRightTypes[strings.ToLower(rightType)] = true
+		}
+	}
+
+	for _, rightKeyword := range rightKeywords {
+		normalizedKeyword := strings.ToLower(rightKeyword)
+		if !existingRightTypes[normalizedKeyword] {
+			conflicts = append(conflicts, Conflict{
+				Type:            ConflictRightsExpansion,
+				Severity:        classifyConflictSeverity(ConflictRightsExpansion),
+				SourceAmendment: entry.Amendment,
+				ProposedText:    proposedText,
+				Description: fmt.Sprintf(
+					"proposed legislation introduces new right: %s",
+					rightKeyword,
+				),
+			})
+		}
+	}
+
+	return conflicts
+}
+
+// DetectRightsNarrowing checks if proposed text narrows an existing right by
+// adding qualifying language, exceptions, or limiting phrases. It returns true
+// if the proposed text contains narrowing indicators that restrict the scope of
+// the existing right.
+func DetectRightsNarrowing(existingRight, proposedText string) bool {
+	normalizedExisting := strings.ToLower(strings.Join(strings.Fields(existingRight), " "))
+	normalizedProposed := strings.ToLower(strings.Join(strings.Fields(proposedText), " "))
+
+	// Check if the proposed text adds narrowing qualifiers not present in existing
+	for _, qualifier := range narrowingQualifiers {
+		if strings.Contains(normalizedProposed, qualifier) && !strings.Contains(normalizedExisting, qualifier) {
+			return true
+		}
+	}
+
+	// Check if the proposed text removes affirmative right-granting language
+	for _, rightPhrase := range rightGrantingPhrases {
+		if strings.Contains(normalizedExisting, rightPhrase) && !strings.Contains(normalizedProposed, rightPhrase) {
+			// The existing text grants the right but the proposed text drops it
+			return true
+		}
+	}
+
+	return false
+}
+
+// DetectRightsObligationConflict checks if a right type semantically conflicts
+// with an obligation type. For example, a "right to access" may conflict with
+// a "DataMinimizationObligation" that restricts data availability.
+func DetectRightsObligationConflict(rightKeyword, obligationType string) bool {
+	normalizedRight := strings.ToLower(rightKeyword)
+	normalizedObligation := strings.ToLower(obligationType)
+
+	for _, pair := range rightsObligationConflictPairs {
+		rightMatch := false
+		obligationMatch := false
+
+		for _, rightTerm := range pair.rightTerms {
+			if strings.Contains(normalizedRight, rightTerm) {
+				rightMatch = true
+				break
+			}
+		}
+
+		for _, obligationTerm := range pair.obligationTerms {
+			if strings.Contains(normalizedObligation, obligationTerm) {
+				obligationMatch = true
+				break
+			}
+		}
+
+		if rightMatch && obligationMatch {
+			return true
+		}
+	}
+
+	return false
+}
+
+// FindDependentRights finds provisions that reference or depend on the provision
+// containing the given right. It returns URIs of provisions that would be
+// affected if the right is removed.
+func FindDependentRights(rightURI string, tripleStore *store.TripleStore) []string {
+	// Find the parent provision of this right
+	parentTriples := tripleStore.Find(rightURI, store.PropPartOf, "")
+	if len(parentTriples) == 0 {
+		return nil
+	}
+	parentURI := parentTriples[0].Object
+
+	var dependentURIs []string
+	seen := make(map[string]bool)
+
+	// Find provisions that reference the parent provision
+	incomingRefTriples := tripleStore.Find("", store.PropReferences, parentURI)
+	for _, triple := range incomingRefTriples {
+		if !seen[triple.Subject] && triple.Subject != parentURI {
+			seen[triple.Subject] = true
+			dependentURIs = append(dependentURIs, triple.Subject)
+		}
+	}
+
+	// Check inverse references
+	referencedByTriples := tripleStore.Find(parentURI, store.PropReferencedBy, "")
+	for _, triple := range referencedByTriples {
+		if !seen[triple.Object] && triple.Object != parentURI {
+			seen[triple.Object] = true
+			dependentURIs = append(dependentURIs, triple.Object)
+		}
+	}
+
+	return dependentURIs
+}
+
+// narrowingQualifiers are phrases that indicate a right is being narrowed or
+// restricted when added to proposed legislative text.
+var narrowingQualifiers = []string{
+	"except when",
+	"except where",
+	"except in cases",
+	"unless",
+	"provided that",
+	"subject to",
+	"limited to",
+	"only if",
+	"only when",
+	"only where",
+	"shall not apply",
+	"does not apply",
+	"notwithstanding",
+	"restricted to",
+	"may not exercise",
+}
+
+// rightGrantingPhrases are phrases that indicate a provision grants a right.
+var rightGrantingPhrases = []string{
+	"has the right",
+	"shall have the right",
+	"is entitled to",
+	"shall be entitled",
+	"may request",
+	"may obtain",
+	"right to access",
+	"right to erasure",
+	"right to rectification",
+	"right to object",
+	"right to data portability",
+}
+
+// rightsObligationConflictPair defines a semantic conflict between a right type
+// and an obligation type based on keyword matching.
+type rightsObligationConflictPair struct {
+	rightTerms      []string
+	obligationTerms []string
+}
+
+// rightsObligationConflictPairs defines known semantic conflicts between rights
+// and obligations. When a right matches any right term and an obligation matches
+// any obligation term in the same pair, a conflict is detected.
+var rightsObligationConflictPairs = []rightsObligationConflictPair{
+	{
+		rightTerms:      []string{"access", "information", "disclosure"},
+		obligationTerms: []string{"minimization", "restrict", "confidential", "nondisclosure"},
+	},
+	{
+		rightTerms:      []string{"erasure", "deletion", "forget"},
+		obligationTerms: []string{"retention", "preserve", "record", "maintain"},
+	},
+	{
+		rightTerms:      []string{"portability", "transfer", "export"},
+		obligationTerms: []string{"localization", "restrict transfer", "restrict export"},
+	},
+	{
+		rightTerms:      []string{"object", "refuse", "opt out"},
+		obligationTerms: []string{"mandatory", "compulsory", "required participation"},
+	},
+}
+
+// extractRightKeywords extracts right-granting keywords from legislative text
+// by matching phrases that indicate a right is being granted or established.
+func extractRightKeywords(text string) []string {
+	normalizedText := strings.ToLower(strings.Join(strings.Fields(text), " "))
+	var keywords []string
+	seen := make(map[string]bool)
+
+	for _, pattern := range rightKeywordPatterns {
+		matches := pattern.FindAllStringSubmatch(normalizedText, -1)
+		for _, match := range matches {
+			if len(match) >= 2 {
+				keyword := strings.TrimSpace(match[1])
+				if !seen[keyword] {
+					seen[keyword] = true
+					keywords = append(keywords, keyword)
+				}
+			}
+		}
+	}
+
+	return keywords
+}
+
+// rightKeywordPatterns match legislative phrases that grant rights.
+var rightKeywordPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)right\s+to\s+(\w+(?:\s+\w+)?)`),
+	regexp.MustCompile(`(?i)right\s+of\s+(\w+(?:\s+\w+)?)`),
+	regexp.MustCompile(`(?i)entitled\s+to\s+(\w+(?:\s+\w+)?)`),
+	regexp.MustCompile(`(?i)may\s+(access|request|obtain|transfer|object|refuse|erasure|rectif\w+|portability)`),
+}
+
+// getRightText retrieves the text content of a right URI from the triple store.
+func getRightText(rightURI string, tripleStore *store.TripleStore) string {
+	textTriples := tripleStore.Find(rightURI, store.PropText, "")
+	if len(textTriples) > 0 {
+		return textTriples[0].Object
+	}
+	return ""
+}
+
+// getRightType retrieves the right type of a right URI from the triple store.
+func getRightType(rightURI string, tripleStore *store.TripleStore) string {
+	typeTriples := tripleStore.Find(rightURI, "reg:rightType", "")
+	if len(typeTriples) > 0 {
+		return typeTriples[0].Object
+	}
+	return ""
+}
+
+// getObligationType retrieves the obligation type of an obligation URI from the
+// triple store.
+func getObligationType(obligationURI string, tripleStore *store.TripleStore) string {
+	typeTriples := tripleStore.Find(obligationURI, "reg:obligationType", "")
+	if len(typeTriples) > 0 {
+		return typeTriples[0].Object
+	}
+	return ""
+}
+
 // getObligationText retrieves the text content of an obligation URI from the
 // triple store.
 func getObligationText(obligationURI string, tripleStore *store.TripleStore) string {
