@@ -3614,6 +3614,7 @@ Commands:
   ingest    Parse a draft bill and display its structure and amendments
   diff      Compute structural diff against the USC knowledge graph
   impact    Run impact analysis against the USC knowledge graph
+  conflicts Run conflict and consistency analysis
 
 Examples:
   regula draft ingest --bill draft-hr-1234.txt
@@ -3621,12 +3622,15 @@ Examples:
   regula draft diff --bill draft-hr-1234.txt --path .regula
   regula draft diff --bill draft-hr-1234.txt --format csv
   regula draft impact --bill draft-hr-1234.txt --depth 2
-  regula draft impact --bill draft-hr-1234.txt --format dot --output impact.dot`,
+  regula draft impact --bill draft-hr-1234.txt --format dot --output impact.dot
+  regula draft conflicts --bill draft-hr-1234.txt
+  regula draft conflicts --bill draft-hr-1234.txt --severity error`,
 	}
 
 	cmd.AddCommand(draftIngestCmd())
 	cmd.AddCommand(draftDiffCmd())
 	cmd.AddCommand(draftImpactCmd())
+	cmd.AddCommand(draftConflictsCmd())
 
 	return cmd
 }
@@ -4303,4 +4307,466 @@ func truncateImpactLabel(label string, maxLen int) string {
 		return label
 	}
 	return label[:maxLen-3] + "..."
+}
+
+func draftConflictsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "conflicts",
+		Short: "Run conflict and consistency analysis for a draft bill",
+		Long: `Run conflict and consistency analysis for a draft bill against the USC
+knowledge graph. Detects obligation conflicts, rights conflicts, and
+temporal consistency issues.
+
+Analysis types:
+  - Obligation conflicts: contradictions, duplicates, orphaned obligations
+  - Rights conflicts: narrowing, contradictions with obligations, expansions
+  - Temporal issues: gaps, contradictions, retroactive application, sunsets
+
+Output formats:
+  table   Styled summary grouped by severity (default)
+  json    Full analysis results as indented JSON
+
+Severity levels:
+  error   Direct contradictions that must be resolved
+  warning Potential conflicts that should be reviewed
+  info    Informational findings (duplicates, expansions)
+
+Examples:
+  regula draft conflicts --bill draft-hr-1234.txt
+  regula draft conflicts --bill draft-hr-1234.txt --format json
+  regula draft conflicts --bill draft-hr-1234.txt --severity error
+  regula draft conflicts --bill draft-hr-1234.txt --skip-temporal`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			billPath, _ := cmd.Flags().GetString("bill")
+			libraryPath, _ := cmd.Flags().GetString("path")
+			formatFlag, _ := cmd.Flags().GetString("format")
+			severityFilter, _ := cmd.Flags().GetString("severity")
+			skipTemporal, _ := cmd.Flags().GetBool("skip-temporal")
+
+			if billPath == "" {
+				return fmt.Errorf("--bill flag is required: specify the path to a draft bill file")
+			}
+
+			bill, err := parseBillWithAmendments(billPath)
+			if err != nil {
+				return err
+			}
+
+			diffResult, err := draft.ComputeDiff(bill, libraryPath)
+			if err != nil {
+				return fmt.Errorf("diff computation failed: %w", err)
+			}
+
+			impactResult, err := draft.AnalyzeDraftImpact(diffResult, libraryPath, 2)
+			if err != nil {
+				return fmt.Errorf("impact analysis failed: %w", err)
+			}
+
+			// Run conflict detection
+			conflictReport, err := draft.DetectObligationConflicts(diffResult, impactResult, libraryPath)
+			if err != nil {
+				return fmt.Errorf("obligation conflict detection failed: %w", err)
+			}
+
+			// Run rights conflict detection
+			rightsConflicts, err := draft.DetectRightsConflicts(diffResult, impactResult, libraryPath)
+			if err != nil {
+				return fmt.Errorf("rights conflict detection failed: %w", err)
+			}
+
+			// Run temporal consistency analysis (unless skipped)
+			var temporalFindings []draft.TemporalFinding
+			if !skipTemporal {
+				temporalFindings, err = draft.AnalyzeTemporalConsistency(diffResult, libraryPath)
+				if err != nil {
+					return fmt.Errorf("temporal analysis failed: %w", err)
+				}
+			}
+
+			// Build combined analysis result
+			analysisResult := buildConflictAnalysisResult(bill, conflictReport, rightsConflicts, temporalFindings)
+
+			// Apply severity filter
+			if severityFilter != "all" && severityFilter != "" {
+				analysisResult = filterAnalysisBySeverity(analysisResult, severityFilter)
+			}
+
+			switch formatFlag {
+			case "json":
+				data, marshalErr := json.MarshalIndent(analysisResult, "", "  ")
+				if marshalErr != nil {
+					return fmt.Errorf("failed to marshal JSON: %w", marshalErr)
+				}
+				fmt.Println(string(data))
+			default:
+				fmt.Print(formatConflictsTable(analysisResult))
+			}
+
+			// Exit code 1 if any errors found (useful for CI/pipeline integration)
+			if analysisResult.Summary.Errors > 0 {
+				os.Exit(1)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("bill", "", "Path to draft bill file (required)")
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+	cmd.Flags().String("format", "table", "Output format (table, json)")
+	cmd.Flags().String("severity", "all", "Filter by severity (error, warning, info, all)")
+	cmd.Flags().Bool("skip-temporal", false, "Skip temporal consistency analysis")
+
+	return cmd
+}
+
+// ConflictAnalysisResult aggregates all conflict and consistency analysis
+// results for a draft bill.
+type ConflictAnalysisResult struct {
+	Bill             *draft.DraftBill       `json:"bill"`
+	Conflicts        []ConflictEntry        `json:"conflicts"`
+	TemporalFindings []TemporalEntry        `json:"temporal_findings"`
+	Summary          ConflictAnalysisSummary `json:"summary"`
+}
+
+// ConflictEntry represents a unified conflict entry for CLI output.
+type ConflictEntry struct {
+	Category    string               `json:"category"`
+	Type        string               `json:"type"`
+	Severity    draft.ConflictSeverity `json:"severity"`
+	Description string               `json:"description"`
+	DraftText   string               `json:"draft_text,omitempty"`
+	ExistingText string              `json:"existing_text,omitempty"`
+	Provision   string               `json:"provision,omitempty"`
+}
+
+// TemporalEntry represents a temporal finding for CLI output.
+type TemporalEntry struct {
+	Type        string               `json:"type"`
+	Severity    draft.ConflictSeverity `json:"severity"`
+	Description string               `json:"description"`
+	Provisions  []string             `json:"provisions,omitempty"`
+}
+
+// ConflictAnalysisSummary provides aggregate counts for the analysis.
+type ConflictAnalysisSummary struct {
+	TotalFindings    int `json:"total_findings"`
+	Errors           int `json:"errors"`
+	Warnings         int `json:"warnings"`
+	Infos            int `json:"infos"`
+	ObligationIssues int `json:"obligation_issues"`
+	RightsIssues     int `json:"rights_issues"`
+	TemporalIssues   int `json:"temporal_issues"`
+}
+
+// buildConflictAnalysisResult combines obligation conflicts, rights conflicts,
+// and temporal findings into a unified analysis result.
+func buildConflictAnalysisResult(
+	bill *draft.DraftBill,
+	conflictReport *draft.ConflictReport,
+	rightsConflicts []draft.Conflict,
+	temporalFindings []draft.TemporalFinding,
+) *ConflictAnalysisResult {
+	result := &ConflictAnalysisResult{
+		Bill:             bill,
+		Conflicts:        []ConflictEntry{},
+		TemporalFindings: []TemporalEntry{},
+	}
+
+	// Add obligation conflicts
+	if conflictReport != nil {
+		for _, conflict := range conflictReport.Conflicts {
+			result.Conflicts = append(result.Conflicts, ConflictEntry{
+				Category:     "obligation",
+				Type:         conflict.Type.String(),
+				Severity:     conflict.Severity,
+				Description:  conflict.Description,
+				DraftText:    conflict.ProposedText,
+				ExistingText: conflict.ExistingText,
+				Provision:    conflict.ExistingProvision,
+			})
+		}
+	}
+
+	// Add rights conflicts
+	for _, conflict := range rightsConflicts {
+		result.Conflicts = append(result.Conflicts, ConflictEntry{
+			Category:     "rights",
+			Type:         conflict.Type.String(),
+			Severity:     conflict.Severity,
+			Description:  conflict.Description,
+			DraftText:    conflict.ProposedText,
+			ExistingText: conflict.ExistingText,
+			Provision:    conflict.ExistingProvision,
+		})
+	}
+
+	// Add temporal findings
+	for _, finding := range temporalFindings {
+		result.TemporalFindings = append(result.TemporalFindings, TemporalEntry{
+			Type:        finding.Type.String(),
+			Severity:    finding.Severity,
+			Description: finding.Description,
+			Provisions:  finding.Provisions,
+		})
+	}
+
+	// Sort conflicts by severity (errors first)
+	sortConflictEntries(result.Conflicts)
+
+	// Compute summary
+	result.Summary = computeConflictAnalysisSummary(result)
+
+	return result
+}
+
+// sortConflictEntries sorts conflicts by severity (errors first, then warnings,
+// then info).
+func sortConflictEntries(conflicts []ConflictEntry) {
+	// Simple bubble sort to maintain stability; conflicts are typically small
+	for i := 0; i < len(conflicts); i++ {
+		for j := i + 1; j < len(conflicts); j++ {
+			if conflicts[j].Severity < conflicts[i].Severity {
+				conflicts[i], conflicts[j] = conflicts[j], conflicts[i]
+			}
+		}
+	}
+}
+
+// computeConflictAnalysisSummary aggregates counts from the analysis result.
+func computeConflictAnalysisSummary(result *ConflictAnalysisResult) ConflictAnalysisSummary {
+	summary := ConflictAnalysisSummary{}
+
+	for _, conflict := range result.Conflicts {
+		switch conflict.Severity {
+		case draft.ConflictError:
+			summary.Errors++
+		case draft.ConflictWarning:
+			summary.Warnings++
+		case draft.ConflictInfo:
+			summary.Infos++
+		}
+
+		if conflict.Category == "obligation" {
+			summary.ObligationIssues++
+		} else if conflict.Category == "rights" {
+			summary.RightsIssues++
+		}
+	}
+
+	for _, finding := range result.TemporalFindings {
+		switch finding.Severity {
+		case draft.ConflictError:
+			summary.Errors++
+		case draft.ConflictWarning:
+			summary.Warnings++
+		case draft.ConflictInfo:
+			summary.Infos++
+		}
+		summary.TemporalIssues++
+	}
+
+	summary.TotalFindings = len(result.Conflicts) + len(result.TemporalFindings)
+	return summary
+}
+
+// filterAnalysisBySeverity returns a copy of the analysis result containing
+// only findings matching the specified severity level.
+func filterAnalysisBySeverity(result *ConflictAnalysisResult, severityFilter string) *ConflictAnalysisResult {
+	targetSeverity := parseSeverityFilter(severityFilter)
+	if targetSeverity < 0 {
+		return result // Invalid filter, return all
+	}
+
+	filtered := &ConflictAnalysisResult{
+		Bill:             result.Bill,
+		Conflicts:        []ConflictEntry{},
+		TemporalFindings: []TemporalEntry{},
+	}
+
+	for _, conflict := range result.Conflicts {
+		if conflict.Severity == draft.ConflictSeverity(targetSeverity) {
+			filtered.Conflicts = append(filtered.Conflicts, conflict)
+		}
+	}
+
+	for _, finding := range result.TemporalFindings {
+		if finding.Severity == draft.ConflictSeverity(targetSeverity) {
+			filtered.TemporalFindings = append(filtered.TemporalFindings, finding)
+		}
+	}
+
+	filtered.Summary = computeConflictAnalysisSummary(filtered)
+	return filtered
+}
+
+// parseSeverityFilter converts a severity string to its integer value.
+func parseSeverityFilter(severity string) int {
+	switch strings.ToLower(severity) {
+	case "error":
+		return int(draft.ConflictError)
+	case "warning":
+		return int(draft.ConflictWarning)
+	case "info":
+		return int(draft.ConflictInfo)
+	default:
+		return -1
+	}
+}
+
+// formatConflictsTable formats the conflict analysis result as a styled table.
+func formatConflictsTable(result *ConflictAnalysisResult) string {
+	var builder strings.Builder
+	bill := result.Bill
+
+	billLabel := bill.BillNumber
+	if bill.ShortTitle != "" {
+		billLabel += " — " + bill.ShortTitle
+	} else if bill.Title != "" {
+		billLabel += " — " + bill.Title
+	}
+
+	builder.WriteString(fmt.Sprintf("\nDraft Conflict Analysis: %s\n", billLabel))
+	builder.WriteString(strings.Repeat("═", 70) + "\n")
+
+	summary := result.Summary
+	summaryParts := []string{}
+	if summary.Errors > 0 {
+		summaryParts = append(summaryParts, fmt.Sprintf("%d error(s)", summary.Errors))
+	}
+	if summary.Warnings > 0 {
+		summaryParts = append(summaryParts, fmt.Sprintf("%d warning(s)", summary.Warnings))
+	}
+	if summary.Infos > 0 {
+		summaryParts = append(summaryParts, fmt.Sprintf("%d info", summary.Infos))
+	}
+
+	if summary.TotalFindings == 0 {
+		builder.WriteString("  No conflicts or issues found.\n")
+		builder.WriteString(strings.Repeat("═", 70) + "\n")
+		return builder.String()
+	}
+
+	builder.WriteString(fmt.Sprintf("  Findings: %d (%s)\n\n", summary.TotalFindings, strings.Join(summaryParts, ", ")))
+
+	// Group and display by severity
+	if summary.Errors > 0 {
+		builder.WriteString("  ERRORS:\n")
+		builder.WriteString("  " + strings.Repeat("─", 58) + "\n")
+		for _, conflict := range result.Conflicts {
+			if conflict.Severity == draft.ConflictError {
+				builder.WriteString(formatConflictEntry(conflict))
+			}
+		}
+		for _, finding := range result.TemporalFindings {
+			if finding.Severity == draft.ConflictError {
+				builder.WriteString(formatTemporalEntry(finding))
+			}
+		}
+		builder.WriteString("\n")
+	}
+
+	if summary.Warnings > 0 {
+		builder.WriteString("  WARNINGS:\n")
+		builder.WriteString("  " + strings.Repeat("─", 58) + "\n")
+		for _, conflict := range result.Conflicts {
+			if conflict.Severity == draft.ConflictWarning {
+				builder.WriteString(formatConflictEntry(conflict))
+			}
+		}
+		for _, finding := range result.TemporalFindings {
+			if finding.Severity == draft.ConflictWarning {
+				builder.WriteString(formatTemporalEntry(finding))
+			}
+		}
+		builder.WriteString("\n")
+	}
+
+	if summary.Infos > 0 {
+		builder.WriteString("  INFO:\n")
+		builder.WriteString("  " + strings.Repeat("─", 58) + "\n")
+		for _, conflict := range result.Conflicts {
+			if conflict.Severity == draft.ConflictInfo {
+				builder.WriteString(formatConflictEntry(conflict))
+			}
+		}
+		for _, finding := range result.TemporalFindings {
+			if finding.Severity == draft.ConflictInfo {
+				builder.WriteString(formatTemporalEntry(finding))
+			}
+		}
+		builder.WriteString("\n")
+	}
+
+	builder.WriteString(strings.Repeat("═", 70) + "\n")
+	return builder.String()
+}
+
+// formatConflictEntry formats a single conflict entry for table display.
+func formatConflictEntry(conflict ConflictEntry) string {
+	var builder strings.Builder
+	severityTag := strings.ToUpper(conflict.Severity.String())
+	typeLabel := formatConflictTypeLabel(conflict.Type)
+
+	builder.WriteString(fmt.Sprintf("    [%s] %s\n", severityTag, typeLabel))
+	builder.WriteString(fmt.Sprintf("      %s\n", truncateConflictText(conflict.Description, 60)))
+
+	if conflict.ExistingText != "" && conflict.DraftText != "" {
+		builder.WriteString(fmt.Sprintf("      Existing: %s\n", truncateConflictText(conflict.ExistingText, 50)))
+		builder.WriteString(fmt.Sprintf("      Proposed: %s\n", truncateConflictText(conflict.DraftText, 50)))
+	}
+
+	return builder.String()
+}
+
+// formatTemporalEntry formats a single temporal finding for table display.
+func formatTemporalEntry(finding TemporalEntry) string {
+	var builder strings.Builder
+	severityTag := strings.ToUpper(finding.Severity.String())
+	typeLabel := formatTemporalTypeLabel(finding.Type)
+
+	builder.WriteString(fmt.Sprintf("    [%s] %s\n", severityTag, typeLabel))
+	builder.WriteString(fmt.Sprintf("      %s\n", truncateConflictText(finding.Description, 60)))
+
+	return builder.String()
+}
+
+// formatConflictTypeLabel converts a conflict type string to a human-readable label.
+func formatConflictTypeLabel(conflictType string) string {
+	labels := map[string]string{
+		"obligation_contradiction": "Obligation contradiction",
+		"obligation_duplicate":     "Duplicate obligation",
+		"obligation_orphaned":      "Orphaned obligation",
+		"rights_narrowing":         "Rights narrowing",
+		"rights_contradiction":     "Rights-obligation conflict",
+		"rights_expansion":         "Rights expansion",
+	}
+	if label, ok := labels[conflictType]; ok {
+		return label
+	}
+	return conflictType
+}
+
+// formatTemporalTypeLabel converts a temporal type string to a human-readable label.
+func formatTemporalTypeLabel(temporalType string) string {
+	labels := map[string]string{
+		"temporal_gap":           "Temporal gap",
+		"temporal_contradiction": "Temporal contradiction",
+		"temporal_retroactive":   "Retroactive application",
+		"temporal_sunset":        "Sunset clause",
+	}
+	if label, ok := labels[temporalType]; ok {
+		return label
+	}
+	return temporalType
+}
+
+// truncateConflictText truncates text for conflict table display.
+func truncateConflictText(text string, maxLen int) string {
+	// Normalize whitespace
+	normalized := strings.Join(strings.Fields(text), " ")
+	if len(normalized) <= maxLen {
+		return normalized
+	}
+	return normalized[:maxLen-3] + "..."
 }
