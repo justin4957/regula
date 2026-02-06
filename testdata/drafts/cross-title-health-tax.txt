@@ -1,0 +1,67 @@
+119th CONGRESS
+1st SESSION
+
+H.R. 6234
+
+AN ACT
+To amend the Internal Revenue Code of 1986 and the Patient Protection and Affordable Care Act to expand eligibility for premium tax credits and strengthen health insurance affordability provisions.
+
+Be it enacted by the Senate and House of Representatives of the United States of America in Congress assembled,
+
+SECTION 1. SHORT TITLE.
+This Act may be cited as the "Health Insurance Affordability Improvement Act of 2026".
+
+SEC. 2. FINDINGS AND PURPOSE.
+(a) FINDINGS.—Congress finds that—
+(1) the premium tax credit under section 36B of the Internal Revenue Code of 1986 has helped millions of Americans obtain affordable health insurance;
+(2) rising health care costs continue to strain household budgets;
+(3) enhanced coordination between tax credits and cost-sharing reduction programs will improve health insurance affordability;
+(4) cross-title amendments are necessary to ensure consistency between the Internal Revenue Code and the Patient Protection and Affordable Care Act.
+(b) PURPOSE.—The purpose of this Act is to expand eligibility for premium tax credits and improve coordination of health insurance affordability programs.
+
+SEC. 3. AMENDMENTS TO PREMIUM TAX CREDITS.
+(a) EXPANSION OF CREDIT.—Section 36B of title 26, United States Code, is amended—
+(1) in striking in subsection (b)(3)(A)(i) "400 percent" and inserting "500 percent";
+(2) by striking subsection (c)(1)(A) and inserting the following:
+"(A) APPLICABLE PERCENTAGE.—The applicable percentage for any taxable year shall be determined in accordance with the following table:
+"In the case of household income (expressed as a percent of poverty line) within the following income tier:
+"Up to 150 percent...........................0.0 percent
+"150 percent up to 200 percent...............2.0 percent
+"200 percent up to 250 percent...............4.0 percent
+"250 percent up to 300 percent...............6.0 percent
+"300 percent up to 400 percent...............8.5 percent
+"400 percent up to 500 percent...............10.0 percent."; and
+(3) by adding at the end of subsection (c) the following new paragraph:
+"(6) ENHANCED CREDIT FOR ESSENTIAL WORKERS.—
+"(A) IN GENERAL.—In the case of an applicable taxpayer who is an essential worker, the applicable percentage determined under paragraph (1) shall be reduced by 2 percentage points (but not below zero).
+"(B) ESSENTIAL WORKER.—For purposes of this paragraph, the term 'essential worker' means an individual who is employed in—
+"(i) health care;
+"(ii) emergency services;
+"(iii) food and agriculture;
+"(iv) transportation and logistics; or
+"(v) any other sector designated by the Secretary as essential.".
+
+SEC. 4. AMENDMENTS TO COST-SHARING REDUCTION PROGRAM.
+Section 18071 of title 42, United States Code, is amended by adding at the end the following new subsection:
+"(g) ENHANCED COST-SHARING REDUCTIONS.—
+"(1) IN GENERAL.—For plan years beginning after December 31, 2026, the Secretary shall provide enhanced cost-sharing reductions to eligible insureds.
+"(2) ELIGIBLE INSURED.—For purposes of this subsection, an eligible insured is an individual who—
+"(A) is enrolled in a qualified health plan through an Exchange;
+"(B) has household income that does not exceed 300 percent of the poverty line; and
+"(C) is not eligible for minimum essential coverage (other than coverage in the individual market).
+"(3) ENHANCED REDUCTION AMOUNTS.—The Secretary shall ensure that the cost-sharing reductions provided under this subsection result in—
+"(A) for individuals with household income up to 150 percent of the poverty line, an actuarial value of at least 98 percent;
+"(B) for individuals with household income between 150 and 200 percent of the poverty line, an actuarial value of at least 94 percent; and
+"(C) for individuals with household income between 200 and 300 percent of the poverty line, an actuarial value of at least 87 percent.
+"(4) COORDINATION WITH PREMIUM TAX CREDITS.—The Secretary of Health and Human Services shall coordinate with the Secretary of the Treasury to ensure that the enhanced cost-sharing reductions under this subsection are appropriately integrated with the premium tax credits under section 36B of the Internal Revenue Code of 1986.".
+
+SEC. 5. REPORTING REQUIREMENTS.
+(a) ANNUAL REPORT.—Not later than March 1 of each year, the Secretary of Health and Human Services, in consultation with the Secretary of the Treasury, shall submit to Congress a report on—
+(1) the number of individuals receiving premium tax credits under section 36B of the Internal Revenue Code of 1986;
+(2) the number of individuals receiving cost-sharing reductions under section 18071 of title 42, United States Code;
+(3) the average amount of premium tax credits and cost-sharing reductions provided; and
+(4) recommendations for improving health insurance affordability.
+
+SEC. 6. EFFECTIVE DATE.
+(a) PREMIUM TAX CREDIT AMENDMENTS.—The amendments made by section 3 shall apply to taxable years beginning after December 31, 2026.
+(b) COST-SHARING REDUCTION AMENDMENTS.—The amendments made by section 4 shall apply to plan years beginning after December 31, 2026.

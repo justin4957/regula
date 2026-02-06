@@ -1,0 +1,62 @@
+119th CONGRESS
+1st SESSION
+
+H.R. 4521
+
+AN ACT
+To amend title 11, United States Code, to provide protections for cryptocurrency and digital asset holdings in bankruptcy proceedings.
+
+Be it enacted by the Senate and House of Representatives of the United States of America in Congress assembled,
+
+SECTION 1. SHORT TITLE.
+This Act may be cited as the "Digital Asset Bankruptcy Protection Act of 2026".
+
+SEC. 2. FINDINGS.
+Congress finds the following:
+(1) Cryptocurrency and digital assets have become a significant form of property held by individuals and businesses.
+(2) The treatment of digital assets in bankruptcy proceedings is currently unclear, creating uncertainty for debtors and creditors.
+(3) Clear rules are needed to protect the interests of all parties in bankruptcy cases involving digital assets.
+(4) Digital assets present unique custody and valuation challenges that require specific statutory guidance.
+
+SEC. 3. DEFINITIONS.
+Section 101 of title 11, United States Code, is amended by adding at the end the following:
+"(56) The term 'digital asset' means—
+"(A) a cryptocurrency, including Bitcoin, Ether, and other blockchain-based tokens;
+"(B) a non-fungible token (NFT);
+"(C) a stablecoin; or
+"(D) any other asset that exists only in digital form and is secured using cryptographic technology.
+"(57) The term 'digital asset custodian' means any person or entity that holds private keys or other means of access to digital assets on behalf of another person.".
+
+SEC. 4. DIGITAL ASSET PROTECTIONS IN BANKRUPTCY.
+Title 11, United States Code, is amended by inserting after section 523 the following new section:
+"SEC. 523A. DIGITAL ASSET PROTECTIONS.
+"(a) TREATMENT OF DIGITAL ASSETS.—
+"(1) IN GENERAL.—Digital assets held by a debtor shall be treated as property of the estate under section 541.
+"(2) VALUATION.—The value of digital assets shall be determined as of the date of the filing of the petition, based on the fair market value as reported by a major digital asset exchange.
+"(b) CUSTOMER DIGITAL ASSETS.—
+"(1) SEGREGATION REQUIREMENT.—A digital asset custodian that is a debtor shall maintain customer digital assets in accounts that are segregated from the custodian's own assets.
+"(2) NOT PROPERTY OF THE ESTATE.—Customer digital assets held by a digital asset custodian that are properly segregated under paragraph (1) shall not be considered property of the estate.
+"(3) PRIORITY.—Claims of customers for return of digital assets held by a digital asset custodian shall have priority over all other unsecured claims.
+"(c) SELF-CUSTODY PROTECTIONS.—
+"(1) PRIVATE KEY PROTECTION.—A debtor shall not be required to disclose private keys or seed phrases to the trustee except as necessary to—
+"(A) verify the existence and value of digital assets; or
+"(B) transfer digital assets to the estate after a court order.
+"(2) SECURITY MEASURES.—The trustee shall implement reasonable security measures to protect any private keys or access credentials obtained from the debtor.
+"(d) EXEMPTIONS.—
+"(1) IN GENERAL.—A debtor may exempt from property of the estate digital assets with a value not to exceed $25,000.
+"(2) ADJUSTMENT.—The dollar amount in paragraph (1) shall be adjusted every 3 years to account for inflation.
+"(e) OBLIGATIONS OF DIGITAL ASSET CUSTODIANS.—
+"(1) DISCLOSURE.—A digital asset custodian shall disclose to the trustee within 14 days of the commencement of the case—
+"(A) all digital assets held on behalf of the debtor;
+"(B) the value of such assets as of the petition date; and
+"(C) any security interests or liens on such assets.
+"(2) COOPERATION.—A digital asset custodian shall cooperate with the trustee in the administration of digital assets that are property of the estate.".
+
+SEC. 5. CONFORMING AMENDMENTS.
+(a) Section 522(d) of title 11, United States Code, is amended by adding at the end the following:
+"(13) The debtor's interest in digital assets, not to exceed $25,000 in value.".
+(b) Section 541(a) of title 11, United States Code, is amended by adding at the end the following:
+"(8) Digital assets in which the debtor has an interest, subject to the protections provided in section 523A.".
+
+SEC. 6. EFFECTIVE DATE.
+This Act shall take effect on the date that is 90 days after the date of enactment of this Act and shall apply to cases commenced under title 11, United States Code, on or after such date.

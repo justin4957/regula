@@ -228,6 +228,11 @@ func (recognizer *Recognizer) ExtractAmendments(sectionText string) ([]Amendment
 			blockEnd = len(sectionText)
 		}
 
+		// Ensure blockEnd is after the current anchor
+		if blockEnd <= anchorLocation[1] {
+			blockEnd = len(sectionText)
+		}
+
 		afterAnchorText := sectionText[anchorLocation[1]:blockEnd]
 
 		// Parse target reference from preamble
