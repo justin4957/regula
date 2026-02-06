@@ -3624,13 +3624,16 @@ Examples:
   regula draft impact --bill draft-hr-1234.txt --depth 2
   regula draft impact --bill draft-hr-1234.txt --format dot --output impact.dot
   regula draft conflicts --bill draft-hr-1234.txt
-  regula draft conflicts --bill draft-hr-1234.txt --severity error`,
+  regula draft conflicts --bill draft-hr-1234.txt --severity error
+  regula draft simulate --bill draft-hr-1234.txt --scenario consent_withdrawal
+  regula draft simulate --list-scenarios`,
 	}
 
 	cmd.AddCommand(draftIngestCmd())
 	cmd.AddCommand(draftDiffCmd())
 	cmd.AddCommand(draftImpactCmd())
 	cmd.AddCommand(draftConflictsCmd())
+	cmd.AddCommand(draftSimulateCmd())
 
 	return cmd
 }
@@ -4769,4 +4772,354 @@ func truncateConflictText(text string, maxLen int) string {
 		return normalized
 	}
 	return normalized[:maxLen-3] + "..."
+}
+
+// draftSimulateCmd creates the 'regula draft simulate' command.
+func draftSimulateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "simulate",
+		Short: "Run compliance scenario simulation",
+		Long: `Run compliance scenarios against current law and proposed law (with draft overlay)
+and display side-by-side comparison.
+
+This command parses a draft bill, applies it as an overlay to the existing USC
+knowledge graph, and compares scenario match results between baseline (current law)
+and proposed (current law + draft amendments).
+
+Available scenarios:
+  consent_withdrawal  - Data subject withdraws consent for processing
+  access_request      - Data subject requests access to their personal data
+  erasure_request     - Data subject requests deletion of their personal data
+  data_breach         - Personal data breach handling scenario
+
+Use --list-scenarios to see all available scenarios with descriptions.
+
+Examples:
+  regula draft simulate --list-scenarios
+  regula draft simulate --bill draft-hr-1234.txt --scenario consent_withdrawal
+  regula draft simulate --bill draft-hr-1234.txt --scenario access_request --format json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			listScenarios, _ := cmd.Flags().GetBool("list-scenarios")
+			billPath, _ := cmd.Flags().GetString("bill")
+			scenarioName, _ := cmd.Flags().GetString("scenario")
+			libraryPath, _ := cmd.Flags().GetString("path")
+			formatFlag, _ := cmd.Flags().GetString("format")
+
+			// Handle --list-scenarios
+			if listScenarios {
+				fmt.Print(formatScenarioList())
+				return nil
+			}
+
+			// Validate required flags
+			if billPath == "" {
+				return fmt.Errorf("--bill flag is required: specify the path to a draft bill file")
+			}
+			if scenarioName == "" {
+				return fmt.Errorf("--scenario flag is required: specify a scenario name (use --list-scenarios to see available)")
+			}
+
+			// Get the scenario
+			scenario, ok := simulate.PredefinedScenarios[scenarioName]
+			if !ok {
+				return fmt.Errorf("unknown scenario '%s' (use --list-scenarios to see available)", scenarioName)
+			}
+
+			// Parse the bill with amendments
+			bill, err := parseBillWithAmendments(billPath)
+			if err != nil {
+				return err
+			}
+
+			// Compute diff against the library
+			diffResult, err := draft.ComputeDiff(bill, libraryPath)
+			if err != nil {
+				return fmt.Errorf("diff computation failed: %w", err)
+			}
+
+			// Open the library to get base store and URI
+			lib, err := library.Open(libraryPath)
+			if err != nil {
+				return fmt.Errorf("failed to open library: %w", err)
+			}
+
+			// Apply draft overlay
+			overlay, err := draft.ApplyDraftOverlay(diffResult, libraryPath)
+			if err != nil {
+				return fmt.Errorf("failed to apply draft overlay: %w", err)
+			}
+
+			// Load a base store for comparison (merge all document stores)
+			baseStore, err := loadMergedTripleStore(lib, diffResult)
+			if err != nil {
+				return fmt.Errorf("failed to load base store: %w", err)
+			}
+
+			// Compare scenarios
+			comparison, err := draft.CompareScenarios(
+				scenarioName,
+				scenario,
+				baseStore,
+				overlay.OverlayStore,
+				lib.BaseURI(),
+				bill,
+			)
+			if err != nil {
+				return fmt.Errorf("scenario comparison failed: %w", err)
+			}
+
+			// Output based on format
+			switch formatFlag {
+			case "json":
+				output := draft.FormatScenarioComparison(comparison, "json")
+				fmt.Println(output)
+			default:
+				output := formatSimulateTable(comparison, bill)
+				fmt.Print(output)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().Bool("list-scenarios", false, "List available scenarios")
+	cmd.Flags().String("bill", "", "Path to draft bill file")
+	cmd.Flags().String("scenario", "", "Scenario name to simulate")
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+	cmd.Flags().String("format", "table", "Output format (table, json)")
+
+	return cmd
+}
+
+// formatScenarioList formats the list of available scenarios.
+func formatScenarioList() string {
+	var sb strings.Builder
+
+	sb.WriteString("Available Scenarios\n")
+	sb.WriteString(strings.Repeat("=", 60) + "\n\n")
+
+	scenarios := []struct {
+		id   string
+		name string
+		desc string
+	}{
+		{"consent_withdrawal", "Consent Withdrawal", "Data subject withdraws previously given consent for data processing"},
+		{"access_request", "Data Access Request", "Data subject requests access to their personal data"},
+		{"erasure_request", "Data Erasure Request", "Data subject requests erasure of their personal data"},
+		{"data_breach", "Data Breach", "Personal data breach occurs and must be handled"},
+	}
+
+	for _, s := range scenarios {
+		sb.WriteString(fmt.Sprintf("  %-20s  %s\n", s.id, s.name))
+		sb.WriteString(fmt.Sprintf("  %-20s  %s\n\n", "", s.desc))
+	}
+
+	sb.WriteString("Usage:\n")
+	sb.WriteString("  regula draft simulate --bill <path> --scenario <id>\n")
+
+	return sb.String()
+}
+
+// loadMergedTripleStore loads and merges triple stores for all documents affected by the diff.
+func loadMergedTripleStore(lib *library.Library, diffResult *draft.DraftDiff) (*store.TripleStore, error) {
+	merged := store.NewTripleStore()
+
+	// Collect unique document IDs from the diff
+	docIDs := make(map[string]bool)
+	for _, entry := range diffResult.Added {
+		docIDs[entry.TargetDocumentID] = true
+	}
+	for _, entry := range diffResult.Removed {
+		docIDs[entry.TargetDocumentID] = true
+	}
+	for _, entry := range diffResult.Modified {
+		docIDs[entry.TargetDocumentID] = true
+	}
+	for _, entry := range diffResult.Redesignated {
+		docIDs[entry.TargetDocumentID] = true
+	}
+
+	// If no documents affected, try to load a default document
+	if len(docIDs) == 0 {
+		// List all documents in the library
+		docs := lib.ListDocuments()
+		for _, doc := range docs {
+			docIDs[doc.ID] = true
+		}
+	}
+
+	// Load and merge each document's triple store
+	for docID := range docIDs {
+		docStore, err := lib.LoadTripleStore(docID)
+		if err != nil {
+			continue // Skip documents that can't be loaded
+		}
+		merged.MergeFrom(docStore)
+	}
+
+	return merged, nil
+}
+
+// formatSimulateTable formats the scenario comparison as a styled table.
+func formatSimulateTable(comparison *draft.ScenarioComparison, bill *draft.DraftBill) string {
+	var sb strings.Builder
+
+	// Header
+	sb.WriteString(fmt.Sprintf("Scenario Comparison: %s\n", comparison.Scenario))
+
+	billLabel := bill.BillNumber
+	if bill.ShortTitle != "" {
+		billLabel += " — " + bill.ShortTitle
+	} else if bill.Title != "" {
+		billLabel += " — " + bill.Title
+	}
+	sb.WriteString(fmt.Sprintf("Bill: %s\n", billLabel))
+	sb.WriteString(strings.Repeat("═", 66) + "\n\n")
+
+	// Summary table
+	baselineCount := 0
+	proposedCount := 0
+	baselineObligations := 0
+	proposedObligations := 0
+	baselineRights := 0
+	proposedRights := 0
+
+	if comparison.Baseline != nil && comparison.Baseline.Summary != nil {
+		baselineCount = comparison.Baseline.Summary.TotalMatches
+		baselineObligations = len(comparison.Baseline.Summary.ObligationsInvolved)
+		baselineRights = len(comparison.Baseline.Summary.RightsInvolved)
+	}
+	if comparison.Proposed != nil && comparison.Proposed.Summary != nil {
+		proposedCount = comparison.Proposed.Summary.TotalMatches
+		proposedObligations = len(comparison.Proposed.Summary.ObligationsInvolved)
+		proposedRights = len(comparison.Proposed.Summary.RightsInvolved)
+	}
+
+	sb.WriteString(fmt.Sprintf("                        %-15s %-15s\n", "CURRENT LAW", "PROPOSED LAW"))
+	sb.WriteString("  " + strings.Repeat("─", 62) + "\n")
+
+	// Applicable provisions
+	provDiff := ""
+	if proposedCount > baselineCount {
+		provDiff = fmt.Sprintf(" (+%d)", proposedCount-baselineCount)
+	} else if proposedCount < baselineCount {
+		provDiff = fmt.Sprintf(" (-%d)", baselineCount-proposedCount)
+	}
+	sb.WriteString(fmt.Sprintf("  Applicable provisions:  %-15d %d%s\n", baselineCount, proposedCount, provDiff))
+
+	// Obligations triggered
+	obligDiff := ""
+	if proposedObligations > baselineObligations {
+		obligDiff = fmt.Sprintf(" (+%d)", proposedObligations-baselineObligations)
+	} else if proposedObligations < baselineObligations {
+		obligDiff = fmt.Sprintf(" (-%d)", baselineObligations-proposedObligations)
+	}
+	sb.WriteString(fmt.Sprintf("  Obligations triggered:  %-15d %d%s\n", baselineObligations, proposedObligations, obligDiff))
+
+	// Rights involved
+	rightsDiff := ""
+	if proposedRights > baselineRights {
+		rightsDiff = fmt.Sprintf(" (+%d)", proposedRights-baselineRights)
+	} else if proposedRights < baselineRights {
+		rightsDiff = fmt.Sprintf(" (-%d)", baselineRights-proposedRights)
+	}
+	sb.WriteString(fmt.Sprintf("  Rights involved:        %-15d %d%s\n", baselineRights, proposedRights, rightsDiff))
+	sb.WriteString("\n")
+
+	// Newly applicable provisions
+	sb.WriteString(fmt.Sprintf("  NEWLY APPLICABLE (+%d):\n", len(comparison.NewlyApplicable)))
+	if len(comparison.NewlyApplicable) == 0 {
+		sb.WriteString("    (none)\n")
+	} else {
+		for _, diff := range comparison.NewlyApplicable {
+			label := diff.Label
+			if label == "" {
+				label = extractSimulateURILabel(diff.URI)
+			}
+			sb.WriteString(fmt.Sprintf("    [%-7s] %s\n", diff.ProposedRelevance, label))
+		}
+	}
+	sb.WriteString("\n")
+
+	// No longer applicable provisions
+	sb.WriteString(fmt.Sprintf("  NO LONGER APPLICABLE (-%d):\n", len(comparison.NoLongerApplicable)))
+	if len(comparison.NoLongerApplicable) == 0 {
+		sb.WriteString("    (none)\n")
+	} else {
+		for _, diff := range comparison.NoLongerApplicable {
+			label := diff.Label
+			if label == "" {
+				label = extractSimulateURILabel(diff.URI)
+			}
+			sb.WriteString(fmt.Sprintf("    [%-7s] %s\n", diff.BaselineRelevance, label))
+		}
+	}
+	sb.WriteString("\n")
+
+	// Changed relevance
+	sb.WriteString(fmt.Sprintf("  CHANGED RELEVANCE (%d):\n", len(comparison.ChangedRelevance)))
+	if len(comparison.ChangedRelevance) == 0 {
+		sb.WriteString("    (none)\n")
+	} else {
+		for _, diff := range comparison.ChangedRelevance {
+			label := diff.Label
+			if label == "" {
+				label = extractSimulateURILabel(diff.URI)
+			}
+			sb.WriteString(fmt.Sprintf("    %s: %s → %s\n", label, diff.BaselineRelevance, diff.ProposedRelevance))
+		}
+	}
+	sb.WriteString("\n")
+
+	// Obligation diff
+	if comparison.ObligationsDiff.Added > 0 || comparison.ObligationsDiff.Removed > 0 {
+		sb.WriteString("  OBLIGATION DIFF:\n")
+		if comparison.ObligationsDiff.Added > 0 {
+			sb.WriteString(fmt.Sprintf("    + %d new obligation type(s)\n", comparison.ObligationsDiff.Added))
+		}
+		if comparison.ObligationsDiff.Removed > 0 {
+			sb.WriteString(fmt.Sprintf("    - %d obligation type(s) removed\n", comparison.ObligationsDiff.Removed))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Rights diff
+	if comparison.RightsDiff.Added > 0 || comparison.RightsDiff.Removed > 0 {
+		sb.WriteString("  RIGHTS DIFF:\n")
+		if comparison.RightsDiff.Added > 0 {
+			sb.WriteString(fmt.Sprintf("    + %d new right type(s)\n", comparison.RightsDiff.Added))
+		}
+		if comparison.RightsDiff.Removed > 0 {
+			sb.WriteString(fmt.Sprintf("    - %d right type(s) removed\n", comparison.RightsDiff.Removed))
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString(strings.Repeat("═", 66) + "\n")
+
+	return sb.String()
+}
+
+// extractSimulateURILabel extracts a human-readable label from a URI.
+func extractSimulateURILabel(uri string) string {
+	if uri == "" {
+		return ""
+	}
+
+	// Check for fragment first (#)
+	if idx := strings.LastIndex(uri, "#"); idx != -1 {
+		return uri[idx+1:]
+	}
+	// Then check for colon (e.g., "GDPR:Art6" -> "Art6")
+	// But skip colons that are part of URL scheme (://)
+	if idx := strings.LastIndex(uri, ":"); idx != -1 {
+		if idx+2 < len(uri) && uri[idx+1:idx+3] != "//" {
+			return uri[idx+1:]
+		}
+	}
+	// Finally check for path separator
+	if idx := strings.LastIndex(uri, "/"); idx != -1 {
+		return uri[idx+1:]
+	}
+	return uri
 }
