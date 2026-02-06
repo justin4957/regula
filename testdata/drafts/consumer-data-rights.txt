@@ -1,0 +1,53 @@
+119th CONGRESS
+1st SESSION
+
+H.R. 3156
+
+AN ACT
+To amend the Federal Trade Commission Act to establish consumer data rights and provide consumers with greater control over their personal information.
+
+Be it enacted by the Senate and House of Representatives of the United States of America in Congress assembled,
+
+SECTION 1. SHORT TITLE.
+This Act may be cited as the "Consumer Data Rights Act of 2026".
+
+SEC. 2. FINDINGS AND PURPOSE.
+(a) FINDINGS.—Congress finds that—
+(1) consumers have a fundamental interest in controlling how their personal data is collected, used, and shared;
+(2) existing Federal law does not provide comprehensive data rights for consumers;
+(3) the Federal Trade Commission has authority to protect consumers from unfair and deceptive practices related to data collection.
+(b) PURPOSE.—The purpose of this Act is to establish clear consumer data rights that shall be enforced by the Federal Trade Commission.
+
+SEC. 3. AMENDMENTS TO FEDERAL TRADE COMMISSION ACT.
+(a) CONSUMER DATA RIGHTS.—Section 45 of title 15, United States Code, is amended by adding at the end the following new subsection:
+"(n) CONSUMER DATA RIGHTS.—
+"(1) RIGHT TO ACCESS.—A consumer shall have the right to access personal data collected about the consumer by any covered entity.
+"(2) RIGHT TO CORRECTION.—A consumer shall have the right to request correction of inaccurate personal data held by a covered entity.
+"(3) RIGHT TO DELETION.—A consumer shall have the right to request deletion of personal data held by a covered entity, subject to reasonable exceptions for legal obligations and legitimate business purposes.
+"(4) RIGHT TO PORTABILITY.—A consumer shall have the right to obtain their personal data in a structured, commonly used, and machine-readable format.
+"(5) RIGHT TO OPT-OUT.—A consumer shall have the right to opt out of the sale or sharing of personal data with third parties.
+"(6) COVERED ENTITY DEFINED.—For purposes of this subsection, the term 'covered entity' means any person or entity that—
+"(A) is subject to the jurisdiction of the Commission under this Act; and
+"(B) collects, processes, or maintains personal data of consumers.
+"(7) RESPONSE REQUIREMENTS.—A covered entity shall respond to a consumer request under this subsection within 45 days of receipt of the request.".
+
+SEC. 4. ENFORCEMENT AND PENALTIES.
+Title 15, United States Code, is amended by inserting after section 45a the following new section:
+"SEC. 45b. CONSUMER DATA RIGHTS ENFORCEMENT.
+"(a) ENFORCEMENT BY COMMISSION.—The Commission shall enforce the consumer data rights established under section 45(n) as if a violation of such rights were an unfair or deceptive act or practice under section 45(a).
+"(b) CIVIL PENALTIES.—
+"(1) IN GENERAL.—Any covered entity that violates the consumer data rights established under section 45(n) shall be liable for a civil penalty of not more than $50,000 for each violation.
+"(2) KNOWING VIOLATIONS.—Any covered entity that knowingly violates the consumer data rights established under section 45(n) shall be liable for a civil penalty of not more than $100,000 for each violation.
+"(c) PRIVATE RIGHT OF ACTION.—
+"(1) IN GENERAL.—Any consumer whose data rights under section 45(n) have been violated may bring a civil action in any court of competent jurisdiction.
+"(2) DAMAGES.—A consumer who prevails in an action under this subsection may recover—
+"(A) actual damages;
+"(B) statutory damages of not less than $100 and not more than $1,000 per violation; and
+"(C) reasonable attorney's fees and costs.
+"(d) STATE ENFORCEMENT.—Nothing in this section shall preempt any State from enforcing State laws that provide greater protection to consumers than the protections provided under section 45(n).".
+
+SEC. 5. RULEMAKING.
+Not later than 1 year after the date of enactment of this Act, the Federal Trade Commission shall promulgate rules to implement the consumer data rights established under section 45(n) of title 15, United States Code, as added by this Act.
+
+SEC. 6. EFFECTIVE DATE.
+The amendments made by this Act shall take effect on the date that is 18 months after the date of enactment of this Act.

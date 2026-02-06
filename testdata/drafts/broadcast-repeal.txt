@@ -1,0 +1,51 @@
+119th CONGRESS
+1st SESSION
+
+H.R. 5892
+
+AN ACT
+To repeal obsolete broadcast regulations in the Communications Act of 1934 and modernize telecommunications law for the digital age.
+
+Be it enacted by the Senate and House of Representatives of the United States of America in Congress assembled,
+
+SECTION 1. SHORT TITLE.
+This Act may be cited as the "Broadcast Regulation Modernization Act of 2026".
+
+SEC. 2. FINDINGS.
+Congress finds the following:
+(1) The Communications Act of 1934 was enacted to regulate radio broadcasting at a time when spectrum scarcity justified extensive government oversight.
+(2) Technological advances, including digital broadcasting, cable television, satellite communications, and internet streaming, have fundamentally transformed the media landscape.
+(3) Many provisions of the Communications Act applicable to broadcast licensees are obsolete and impose unnecessary regulatory burdens.
+(4) Modernizing the regulatory framework will promote innovation and competition in the communications industry.
+(5) The Federal Communications Commission retains authority to address any market failures that may arise from deregulation.
+
+SEC. 3. REPEAL OF OBSOLETE BROADCAST PROVISIONS.
+(a) REPEAL OF SECTION 312.—Section 312 of title 47, United States Code (relating to administrative sanctions), is repealed.
+(b) REPEAL OF SECTION 313.—Section 313 of title 47, United States Code (relating to application of antitrust laws to manufacture, sale, and trade in radio apparatus), is repealed.
+(c) REPEAL OF SECTION 314.—Section 314 of title 47, United States Code (relating to competition in commerce and pooling of patents), is repealed.
+(d) REPEAL OF SECTION 315.—Section 315 of title 47, United States Code (relating to candidates for public office and facilities for use of stations), is repealed.
+
+SEC. 4. CONFORMING AMENDMENTS.
+(a) TABLE OF SECTIONS.—The table of sections for subchapter III of chapter 5 of title 47, United States Code, is amended by striking the items relating to sections 312, 313, 314, and 315.
+(b) CROSS-REFERENCE AMENDMENTS.—
+(1) Section 307(c) of title 47, United States Code, is amended by striking "and section 312".
+(2) Section 309(k) of title 47, United States Code, is amended by striking "or section 312(a)".
+(3) Section 310(d) of title 47, United States Code, is amended by striking ", subject to section 312,".
+(4) Section 326 of title 47, United States Code, is amended by striking "Except as otherwise provided in section 315,".
+(5) Section 399b(a) of title 47, United States Code, is amended by striking "Notwithstanding section 312 or 315,".
+
+SEC. 5. TRANSITION PROVISIONS.
+(a) PENDING PROCEEDINGS.—Any administrative proceeding pending under section 312, 313, 314, or 315 of title 47, United States Code, as of the date of enactment of this Act, shall be concluded under the law in effect before such date.
+(b) EXISTING ORDERS.—Any order issued under section 312, 313, 314, or 315 of title 47, United States Code, that is in effect as of the date of enactment of this Act shall remain in effect until the expiration of such order.
+(c) RULEMAKING.—Not later than 180 days after the date of enactment of this Act, the Federal Communications Commission shall—
+(1) review all regulations promulgated under sections 312, 313, 314, and 315 of title 47, United States Code; and
+(2) repeal or modify such regulations as appropriate to conform to the amendments made by this Act.
+
+SEC. 6. SAVINGS CLAUSE.
+Nothing in this Act shall be construed to affect—
+(a) the authority of the Federal Communications Commission to enforce other provisions of the Communications Act of 1934;
+(b) the application of general antitrust laws to the communications industry; or
+(c) any State law governing broadcast facilities not preempted by Federal law.
+
+SEC. 7. EFFECTIVE DATE.
+Except as otherwise provided in this Act, this Act shall take effect on the date that is 1 year after the date of enactment of this Act.
