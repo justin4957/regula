@@ -3615,6 +3615,8 @@ Commands:
   diff      Compute structural diff against the USC knowledge graph
   impact    Run impact analysis against the USC knowledge graph
   conflicts Run conflict and consistency analysis
+  simulate  Run compliance scenario simulation
+  report    Generate comprehensive legislative impact report
 
 Examples:
   regula draft ingest --bill draft-hr-1234.txt
@@ -3626,7 +3628,9 @@ Examples:
   regula draft conflicts --bill draft-hr-1234.txt
   regula draft conflicts --bill draft-hr-1234.txt --severity error
   regula draft simulate --bill draft-hr-1234.txt --scenario consent_withdrawal
-  regula draft simulate --list-scenarios`,
+  regula draft simulate --list-scenarios
+  regula draft report --bill draft-hr-1234.txt --format markdown
+  regula draft report --bill draft-hr-1234.txt --format html --output report.html`,
 	}
 
 	cmd.AddCommand(draftIngestCmd())
@@ -3634,6 +3638,7 @@ Examples:
 	cmd.AddCommand(draftImpactCmd())
 	cmd.AddCommand(draftConflictsCmd())
 	cmd.AddCommand(draftSimulateCmd())
+	cmd.AddCommand(draftReportCmd())
 
 	return cmd
 }
@@ -5122,4 +5127,217 @@ func extractSimulateURILabel(uri string) string {
 		return uri[idx+1:]
 	}
 	return uri
+}
+
+func draftReportCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "report",
+		Short: "Generate comprehensive legislative impact report",
+		Long: `Generate a full legislative impact report for a draft bill.
+
+This command runs the complete analysis pipeline:
+  1. Parse draft bill and extract amendments
+  2. Compute structural diff against USC knowledge graph
+  3. Analyze transitive impact across provisions
+  4. Detect obligation and rights conflicts
+  5. Analyze temporal consistency
+  6. Run scenario comparisons (optional)
+  7. Generate formatted report
+
+The report aggregates all findings into a single document with:
+  - Executive summary with key metrics
+  - Risk level assessment (low/medium/high)
+  - Structural changes (modified/repealed/added provisions)
+  - Impact analysis (direct and transitive effects)
+  - Conflict findings (errors/warnings/info)
+  - Temporal analysis (gaps, contradictions, retroactive application)
+  - Scenario comparisons (baseline vs proposed)
+  - Visualization (DOT graph for Markdown/HTML)
+
+Exit codes reflect risk level:
+  0 = low risk
+  1 = medium risk
+  2 = high risk
+
+Examples:
+  # Full report to markdown (default)
+  regula draft report --bill draft-hr-1234.txt --path .regula
+
+  # HTML report to file
+  regula draft report --bill draft-hr-1234.txt --format html --output report.html
+
+  # Quick analysis without scenarios
+  regula draft report --bill draft-hr-1234.txt --skip-scenarios
+
+  # JSON for programmatic consumption
+  regula draft report --bill draft-hr-1234.txt --format json > report.json
+
+  # Deep impact analysis
+  regula draft report --bill draft-hr-1234.txt --depth 5`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			billPath, _ := cmd.Flags().GetString("bill")
+			libraryPath, _ := cmd.Flags().GetString("path")
+			formatFlag, _ := cmd.Flags().GetString("format")
+			outputPath, _ := cmd.Flags().GetString("output")
+			depthFlag, _ := cmd.Flags().GetInt("depth")
+			scenariosFlag, _ := cmd.Flags().GetString("scenarios")
+			skipTemporal, _ := cmd.Flags().GetBool("skip-temporal")
+			skipScenarios, _ := cmd.Flags().GetBool("skip-scenarios")
+
+			// Validate required flags
+			if billPath == "" {
+				return fmt.Errorf("--bill flag is required: specify the path to a draft bill file")
+			}
+
+			// Parse the bill with amendments
+			bill, err := parseBillWithAmendments(billPath)
+			if err != nil {
+				return err
+			}
+
+			// Build report options
+			options := draft.ReportOptions{
+				IncludeDiff:          true,
+				IncludeImpact:        true,
+				ImpactDepth:          depthFlag,
+				IncludeConflicts:     true,
+				IncludeTemporal:      !skipTemporal,
+				IncludeVisualization: formatFlag != "json", // Skip DOT for JSON
+				Scenarios:            []string{},
+			}
+
+			// Parse scenarios flag
+			if !skipScenarios && scenariosFlag != "none" {
+				if scenariosFlag == "all" {
+					for scenarioID := range simulate.PredefinedScenarios {
+						options.Scenarios = append(options.Scenarios, scenarioID)
+					}
+				} else if scenariosFlag != "" {
+					options.Scenarios = strings.Split(scenariosFlag, ",")
+					for i, s := range options.Scenarios {
+						options.Scenarios[i] = strings.TrimSpace(s)
+					}
+				}
+			}
+
+			// Generate the report
+			report, err := draft.GenerateReport(bill, libraryPath, options)
+			if err != nil {
+				// GenerateReport may return partial report with error
+				if report == nil {
+					return fmt.Errorf("report generation failed: %w", err)
+				}
+				// Log warning but continue with partial report
+				fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+			}
+
+			// Run scenario comparisons if requested
+			if len(options.Scenarios) > 0 && report.Diff != nil {
+				scenarioResults, scenarioErr := runReportScenarios(report, libraryPath, options.Scenarios)
+				if scenarioErr != nil {
+					fmt.Fprintf(os.Stderr, "Warning: scenario comparison failed: %v\n", scenarioErr)
+				} else {
+					report.ScenarioResults = scenarioResults
+				}
+			}
+
+			// Render the report in the requested format
+			var output string
+			var renderErr error
+			switch strings.ToLower(formatFlag) {
+			case "json":
+				output, renderErr = draft.RenderReportJSON(report)
+			case "html":
+				output, renderErr = draft.RenderReportHTML(report)
+			case "markdown", "md":
+				fallthrough
+			default:
+				output, renderErr = draft.RenderReportMarkdown(report)
+			}
+
+			if renderErr != nil {
+				return fmt.Errorf("failed to render report: %w", renderErr)
+			}
+
+			// Write output
+			if outputPath != "" {
+				if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+					return fmt.Errorf("failed to write output file: %w", err)
+				}
+				fmt.Fprintf(os.Stderr, "Report written to %s\n", outputPath)
+			} else {
+				fmt.Print(output)
+			}
+
+			// Exit with code based on risk level
+			switch report.RiskLevel {
+			case draft.RiskMedium:
+				os.Exit(1)
+			case draft.RiskHigh:
+				os.Exit(2)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("bill", "", "Path to draft bill file (required)")
+	cmd.Flags().String("path", defaultLibraryPath(), "Library directory path")
+	cmd.Flags().String("format", "markdown", "Output format: markdown, json, html")
+	cmd.Flags().String("output", "", "Output file path (default: stdout)")
+	cmd.Flags().Int("depth", 2, "Transitive impact analysis depth")
+	cmd.Flags().String("scenarios", "none", "Scenarios to test (comma-separated, 'all', or 'none')")
+	cmd.Flags().Bool("skip-temporal", false, "Skip temporal consistency analysis")
+	cmd.Flags().Bool("skip-scenarios", false, "Skip scenario comparison (faster)")
+
+	return cmd
+}
+
+// runReportScenarios runs scenario comparisons for the report.
+func runReportScenarios(report *draft.LegislativeImpactReport, libraryPath string, scenarioIDs []string) ([]*draft.ScenarioComparison, error) {
+	if report.Diff == nil {
+		return nil, fmt.Errorf("diff is nil")
+	}
+
+	lib, err := library.Open(libraryPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open library: %w", err)
+	}
+
+	// Apply draft overlay
+	overlay, err := draft.ApplyDraftOverlay(report.Diff, libraryPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply draft overlay: %w", err)
+	}
+
+	// Load base store
+	baseStore, err := loadMergedTripleStore(lib, report.Diff)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load base store: %w", err)
+	}
+
+	var results []*draft.ScenarioComparison
+
+	for _, scenarioID := range scenarioIDs {
+		scenario, ok := simulate.PredefinedScenarios[scenarioID]
+		if !ok {
+			continue // Skip unknown scenarios
+		}
+
+		comparison, compareErr := draft.CompareScenarios(
+			scenarioID,
+			scenario,
+			baseStore,
+			overlay.OverlayStore,
+			lib.BaseURI(),
+			report.Bill,
+		)
+		if compareErr != nil {
+			continue // Skip failed comparisons
+		}
+
+		results = append(results, comparison)
+	}
+
+	return results, nil
 }
