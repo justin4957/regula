@@ -131,6 +131,7 @@ regula/
 - **Compliance simulation**: "What-if" scenario evaluation
 - **Conflict detection**: Find contradictory provisions
 - **Audit provenance**: Track reasoning chains for decisions
+- **Draft legislation analysis**: Parse Congressional bills, compute diffs against existing law, detect conflicts, and generate impact reports
 
 ## Quick Start
 
@@ -195,6 +196,31 @@ regula query --source testdata/gdpr.txt \
 # List all defined terms
 regula query --source testdata/gdpr.txt \
   "SELECT ?term ?text WHERE { ?term rdf:type reg:DefinedTerm . ?term reg:term ?text }"
+```
+
+## Draft Legislation Analysis
+
+Analyze Congressional bills against the existing US Code knowledge graph:
+
+```bash
+# Parse a draft bill and display structure
+regula draft ingest --bill testdata/drafts/hr1234.txt
+
+# Compute diff against existing law
+regula draft diff --bill testdata/drafts/hr1234.txt --path .regula
+
+# Run impact analysis (transitive dependencies)
+regula draft impact --bill testdata/drafts/hr1234.txt --depth 2
+
+# Detect obligation and rights conflicts
+regula draft conflicts --bill testdata/drafts/hr1234.txt
+
+# Run scenario simulation (baseline vs proposed)
+regula draft simulate --bill testdata/drafts/hr1234.txt --scenario consent_withdrawal
+
+# Generate full legislative impact report
+regula draft report --bill testdata/drafts/hr1234.txt --format markdown
+regula draft report --bill testdata/drafts/hr1234.txt --format html --output report.html
 ```
 
 ## Future Commands (Planned)

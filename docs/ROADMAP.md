@@ -655,6 +655,84 @@ go test ./... -count=1 && go vet ./...
 
 ---
 
+## Milestone 8: Draft Legislation Analysis (Epic #167)
+
+### Goal
+
+End-to-end analysis pipeline for draft Congressional bills that computes structural diffs against the existing USC knowledge graph, detects conflicts, runs impact analysis, and generates comprehensive legislative impact reports.
+
+### Epic Summary
+
+Epic #167 tracked 5 phases covering the complete draft legislation workflow:
+
+| Phase | Issues | Title | Status |
+|-------|--------|-------|--------|
+| 1 | #152, #153 | Draft Parser & Amendment Recognition | Closed |
+| 2 | #154, #155 | Broken Cross-Reference Detection & Impact Visualization | Closed |
+| 3 | #158, #159 | Obligation Conflict Detection & Temporal Consistency | Closed |
+| 4 | #160, #161, #162, #163 | Scenario Simulation & Comparison | Closed |
+| 5 | #164, #165, #166, #168, #169, #170 | Report Generation & CLI Integration | Closed |
+
+### Capabilities Delivered
+
+**Phase 1: Draft Parser & Diff Engine**
+- Bill parser: Extracts metadata, sections, and amendment instructions
+- Amendment recognizer: 6 amendment types (strike-insert, repeal, add, redesignate, etc.)
+- Target resolver: Maps USC citations to knowledge graph URIs
+- Diff engine: Classifies changes as Added/Removed/Modified/Redesignated
+
+**Phase 2: Impact Analysis & Visualization**
+- Broken cross-reference detection: Finds references to repealed/modified provisions
+- Transitive impact analysis: Configurable depth for dependency propagation
+- DOT graph generation: Visualize impact as Graphviz diagrams
+- Title filtering: Limit analysis to specific USC titles
+
+**Phase 3: Conflict & Temporal Analysis**
+- Obligation conflicts: Contradictions, duplicates, orphaned obligations
+- Rights conflicts: Narrowing, contradictions, expansions
+- Temporal consistency: Gaps, retroactive application, sunset clauses
+- Severity classification: Error/Warning/Info levels
+
+**Phase 4: Scenario Simulation**
+- Predefined scenarios: consent_withdrawal, access_request, erasure_request, data_breach
+- Graph overlay: Apply draft amendments as temporary layer
+- Baseline vs Proposed comparison: Side-by-side obligation/rights delta
+- Custom scenario support: YAML-based scenario definitions
+
+**Phase 5: Reporting & Export**
+- Report aggregation: Combines all analysis into single document
+- Risk level assessment: Low/Medium/High based on findings
+- Multi-format rendering: Markdown, JSON, HTML (self-contained)
+- CLI integration: `regula draft report` with exit codes
+
+### CLI Commands
+
+```bash
+regula draft ingest --bill <file>           # Parse bill structure
+regula draft diff --bill <file>             # Compute diff vs USC
+regula draft impact --bill <file>           # Run impact analysis
+regula draft conflicts --bill <file>        # Detect conflicts
+regula draft simulate --bill <file>         # Run scenarios
+regula draft report --bill <file>           # Generate full report
+```
+
+### Validation
+
+```bash
+# Run all draft package tests
+go test ./pkg/draft/... -v -count=1
+
+# Test CLI commands
+go build -o regula ./cmd/regula
+regula draft report --bill testdata/drafts/crypto-bankruptcy.txt --format markdown
+regula draft report --bill testdata/drafts/hr1234.txt --format html --output /tmp/report.html
+
+# Verify exit codes
+regula draft report --bill testdata/drafts/crypto-bankruptcy.txt; echo "Exit: $?"
+```
+
+---
+
 ## Post-MVP Roadmap
 
 After MVP validation, potential enhancements:
