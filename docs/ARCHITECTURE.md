@@ -448,6 +448,142 @@ For each resolved target, the engine also counts:
 - **Cross-references**: provisions referencing or referenced by the target (via `reg:references` and `reg:referencedBy`)
 - **Unresolved targets**: amendments targeting provisions not found in the knowledge graph
 
+### Full Analysis Pipeline
+
+The complete draft legislation analysis pipeline chains multiple stages:
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           DRAFT BILL INPUT                                    │
+│                     (testdata/drafts/hr1234.txt)                              │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Stage 1: PARSE                                              parser.go        │
+│  ─────────────────────────────────────────────────────────────────────────── │
+│  ParseBillFromFile() → DraftBill{Metadata, []DraftSection}                    │
+│  ExtractAmendments() → Amendments attached to each section                    │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Stage 2: DIFF                                                 diff.go        │
+│  ─────────────────────────────────────────────────────────────────────────── │
+│  ComputeDiff() → DraftDiff{Added, Removed, Modified, Redesignated}            │
+│  ResolveAmendmentTarget() → Maps USC citations to graph URIs                  │
+│  CountAffectedTriples() → Counts triples impacted per amendment               │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Stage 3: IMPACT                                              impact.go       │
+│  ─────────────────────────────────────────────────────────────────────────── │
+│  AnalyzeDraftImpact() → DraftImpactResult                                     │
+│    • DirectlyAffected: Provisions directly referenced                         │
+│    • TransitivelyAffected: Provisions at depth 2+ via cross-refs              │
+│    • ObligationsAffected: Obligations on impacted provisions                  │
+│    • RightsAffected: Rights on impacted provisions                            │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Stage 4: BROKEN CROSS-REFS                                   crossref.go     │
+│  ─────────────────────────────────────────────────────────────────────────── │
+│  DetectBrokenCrossRefs() → []BrokenReference                                  │
+│    • References to repealed provisions                                        │
+│    • References to modified provisions (warning)                              │
+│    • Severity classification (error/warning/info)                             │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Stage 5: CONFLICTS                                          conflicts.go     │
+│  ─────────────────────────────────────────────────────────────────────────── │
+│  DetectObligationConflicts() → ConflictReport                                 │
+│    • ObligationContradiction: "shall" vs "shall not"                          │
+│    • ObligationDuplicate: Same obligation in multiple places                  │
+│    • ObligationOrphaned: Obligations on repealed provisions                   │
+│    • RightsNarrowing/Contradiction/Expansion                                  │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Stage 6: TEMPORAL                                           temporal.go      │
+│  ─────────────────────────────────────────────────────────────────────────── │
+│  AnalyzeTemporalConsistency() → TemporalAnalysisResult                        │
+│    • TemporalGap: Missing effective dates                                     │
+│    • TemporalContradiction: Conflicting temporal clauses                      │
+│    • TemporalRetroactive: Retroactive application                             │
+│    • TemporalSunset: Sunset/expiration clauses                                │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Stage 7: SCENARIOS                               scenario.go, compare.go     │
+│  ─────────────────────────────────────────────────────────────────────────── │
+│  ListScenarios() → []Scenario (consent_withdrawal, access_request, etc.)      │
+│  ApplyOverlay() → Temporary graph with draft amendments applied               │
+│  CompareScenarioResults() → ScenarioComparison{Baseline, Proposed, Delta}     │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Stage 8: REPORT                                              report.go       │
+│  ─────────────────────────────────────────────────────────────────────────── │
+│  GenerateReport() → LegislativeImpactReport                                   │
+│    • ExecutiveSummary: Key metrics aggregated                                 │
+│    • RiskLevel: Low/Medium/High based on findings                             │
+│    • StructuralChanges, ImpactAnalysis, Conflicts, TemporalAnalysis           │
+│  ComputeRiskLevel() → HIGH if errors, MEDIUM if warnings, LOW otherwise       │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Stage 9: RENDER                                              render.go       │
+│  ─────────────────────────────────────────────────────────────────────────── │
+│  RenderReportMarkdown() → GitHub-flavored Markdown with tables, emojis        │
+│  RenderReportJSON() → Indented JSON with RFC3339 timestamps                   │
+│  RenderReportHTML() → Self-contained HTML with inline CSS, color coding       │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+                                  ▼
+                           OUTPUT DOCUMENT
+                    (Markdown / JSON / HTML Report)
+```
+
+### Package Structure
+
+```
+pkg/draft/
+├── types.go         # Core types: DraftBill, DraftSection, Amendment, DraftDiff
+├── parser.go        # Bill parser and section extraction
+├── patterns.go      # Amendment pattern recognizer (6 types)
+├── diff.go          # Diff engine: ComputeDiff, ResolveAmendmentTarget
+├── impact.go        # Impact analysis: AnalyzeDraftImpact, transitive closure
+├── crossref.go      # Broken cross-reference detection
+├── visualization.go # DOT graph generation for impact visualization
+├── conflicts.go     # Obligation and rights conflict detection
+├── temporal.go      # Temporal consistency analysis
+├── scenario.go      # Scenario definitions and matching
+├── compare.go       # Baseline vs Proposed comparison
+├── report.go        # Report aggregation and risk assessment
+└── render.go        # Multi-format rendering (Markdown, JSON, HTML)
+```
+
+### Integration with Existing Packages
+
+The draft package integrates with:
+
+| Package | Integration Point |
+|---------|-------------------|
+| `pkg/library` | Document storage, triple store loading |
+| `pkg/store` | RDF predicates (`reg:references`, `reg:imposesObligation`, etc.) |
+| `pkg/extract` | Pattern parsing, reference extraction |
+| `pkg/analysis` | Cross-reference analysis patterns |
+| `pkg/simulate` | Scenario matching foundations |
+| `pkg/query` | SPARQL query execution for impact analysis |
+
 ---
 
 ## Query Engine

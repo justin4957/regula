@@ -1712,6 +1712,227 @@ regula playground run top-chapters-by-sections --path .regula --limit 10 --offse
 regula playground run definition-reuse --path .regula --timing
 ```
 
+## Draft Legislation Analysis Tests
+
+The draft legislation analysis system (`pkg/draft/`) provides end-to-end analysis of Congressional bills against the existing USC knowledge graph. The pipeline includes parsing, diff computation, impact analysis, conflict detection, temporal analysis, scenario simulation, and report generation.
+
+### Running All Draft Tests
+
+```bash
+# Run all draft package tests
+go test ./pkg/draft/... -v -count=1
+
+# Run with coverage
+go test ./pkg/draft/... -coverprofile=draft-coverage.out -count=1
+go tool cover -func=draft-coverage.out
+```
+
+### Draft Bill Parser Tests (`pkg/draft/parser_test.go`, `pkg/draft/patterns_test.go`)
+
+Tests for parsing Congressional bill structure and recognizing amendment patterns.
+
+```bash
+# Run parser tests
+go test ./pkg/draft/... -run "TestNewParser|TestParse|TestSection|TestShortTitle|TestBill|TestAmendments" -v
+
+# Run amendment pattern recognition tests
+go test ./pkg/draft/... -run "TestNewRecognizer|TestClassify|TestParseTarget|TestExtractAmendments" -v
+```
+
+| Test | Purpose |
+|------|---------|
+| `TestNewParser` | Parser constructor compiles all regex patterns |
+| `TestParseFullBill` | Full bill with metadata, sections, and amendment text |
+| `TestParseMinimalBill` | Minimal bill with single section |
+| `TestParseBillFromFile` | File loading round-trip |
+| `TestSectionBoundaries` | Multiple sections correctly split at SEC. boundaries |
+| `TestShortTitleExtraction` | Short title extracted from "may be cited as" pattern |
+| `TestNewRecognizer` | Recognizer constructor compiles all 15 regex patterns |
+| `TestClassifyAmendmentType` | All 6 amendment types classified |
+| `TestParseTargetReference` | USC target extraction (5 subtests) |
+| `TestExtractAmendments_StrikeInsert` | Strike-and-insert pattern extraction |
+| `TestExtractAmendments_Repeal` | Section repeal recognition |
+| `TestExtractAmendments_AddNewSection` | New section insertion |
+| `TestExtractAmendments_Redesignate` | Paragraph/subsection redesignation |
+| `TestExtractAmendments_MultipleInOneSection` | Compound amendments |
+
+### Draft Diff Computation Tests (`pkg/draft/diff_test.go`)
+
+Tests for computing structural diffs between draft amendments and existing law.
+
+```bash
+# Run diff tests
+go test ./pkg/draft/... -run "TestComputeDiff|TestResolveAmendment|TestCountAffected|TestFindCross" -v
+```
+
+| Test | Purpose |
+|------|---------|
+| `TestComputeDiff_SingleModification` | Strike-and-insert classified as Modified |
+| `TestComputeDiff_Repeal` | Repeal classified as Removed |
+| `TestComputeDiff_AddNewSection` | New section classified as Added |
+| `TestComputeDiff_MultipleAmendments` | Mixed amendment types separated correctly |
+| `TestComputeDiff_UnresolvedTarget` | Non-existent targets collected in UnresolvedTargets |
+| `TestResolveAmendmentTarget` | Target resolution to knowledge graph URIs |
+| `TestCountAffectedTriples` | Counts triples where target URI appears |
+| `TestFindCrossReferences` | Bidirectional cross-reference lookup |
+
+### Draft Impact Analysis Tests (`pkg/draft/impact_test.go`, `pkg/draft/crossref_test.go`)
+
+Tests for transitive impact analysis and broken cross-reference detection.
+
+```bash
+# Run impact analysis tests
+go test ./pkg/draft/... -run "TestAnalyzeDraftImpact|TestCollect|TestTransitive|TestDirect" -v
+
+# Run broken cross-reference tests
+go test ./pkg/draft/... -run "TestDetectBrokenCrossRefs|TestBrokenRef" -v
+
+# Run visualization tests
+go test ./pkg/draft/... -run "TestRender|TestGenerateDOT|TestVisualize" -v
+```
+
+| Test | Purpose |
+|------|---------|
+| `TestAnalyzeDraftImpact_Basic` | Basic impact analysis with diff input |
+| `TestAnalyzeDraftImpact_TransitiveDepth` | Configurable depth for transitive closure |
+| `TestAnalyzeDraftImpact_TitleFilter` | USC title filtering |
+| `TestCollectDirectlyAffected` | Direct provision impact |
+| `TestCollectTransitivelyAffected` | Transitive impact propagation |
+| `TestDetectBrokenCrossRefs` | Cross-references to removed provisions |
+| `TestBrokenRefSeverity` | Severity classification (error vs warning) |
+| `TestGenerateDOT` | Graphviz DOT output generation |
+| `TestRenderImpactVisualization` | Impact graph rendering |
+
+### Draft Conflict Analysis Tests (`pkg/draft/conflicts_test.go`, `pkg/draft/temporal_test.go`)
+
+Tests for obligation conflicts, rights conflicts, and temporal consistency.
+
+```bash
+# Run conflict detection tests
+go test ./pkg/draft/... -run "TestDetectObligation|TestDetectRights|TestConflict" -v
+
+# Run temporal analysis tests
+go test ./pkg/draft/... -run "TestAnalyzeTemporal|TestTemporal|TestGap|TestSunset" -v
+```
+
+| Test | Purpose |
+|------|---------|
+| `TestDetectObligationContradiction` | Conflicting "shall"/"shall not" obligations |
+| `TestDetectObligationDuplicate` | Duplicate obligation detection |
+| `TestDetectObligationOrphaned` | Obligations on repealed provisions |
+| `TestConflictSeverity` | Severity mapping (error/warning/info) |
+| `TestAnalyzeTemporalConsistency` | Temporal consistency checks |
+| `TestTemporalGap` | Gap detection in effective dates |
+| `TestTemporalContradiction` | Contradictory temporal clauses |
+| `TestTemporalRetroactive` | Retroactive application detection |
+| `TestTemporalSunset` | Sunset clause identification |
+
+### Draft Scenario Testing (`pkg/draft/scenario_test.go`, `pkg/draft/compare_test.go`)
+
+Tests for scenario simulation and baseline vs proposed comparison.
+
+```bash
+# Run scenario tests
+go test ./pkg/draft/... -run "TestScenario|TestListScenarios|TestApplyOverlay" -v
+
+# Run comparison tests
+go test ./pkg/draft/... -run "TestCompare|TestBaseline|TestProposed" -v
+```
+
+| Test | Purpose |
+|------|---------|
+| `TestListScenarios` | All predefined scenarios returned |
+| `TestGetScenario` | Scenario lookup by name |
+| `TestApplyOverlay` | Draft amendments applied as graph overlay |
+| `TestCompareScenarioResults` | Baseline vs proposed comparison |
+| `TestScenarioMatch` | Scenario matching against provisions |
+| `TestCompareObligationChanges` | Obligation delta detection |
+| `TestCompareRightsChanges` | Rights delta detection |
+
+### Draft Report Generation Tests (`pkg/draft/report_test.go`, `pkg/draft/render_test.go`)
+
+Tests for report aggregation and multi-format rendering.
+
+```bash
+# Run report generation tests
+go test ./pkg/draft/... -run "TestGenerateReport|TestComputeRiskLevel|TestSummarize" -v
+
+# Run renderer tests
+go test ./pkg/draft/... -run "TestRenderReport|TestRenderMarkdown|TestRenderJSON|TestRenderHTML" -v
+```
+
+| Test | Purpose |
+|------|---------|
+| `TestGenerateReport` | Full pipeline aggregation |
+| `TestComputeRiskLevel` | Risk level calculation (low/medium/high) |
+| `TestSummarizeReport` | Executive summary generation |
+| `TestRenderReportMarkdown` | Markdown output with tables and emojis |
+| `TestRenderReportJSON` | JSON serialization with RFC3339 timestamps |
+| `TestRenderReportHTML` | Self-contained HTML with inline CSS |
+| `TestHTMLXSSEscaping` | XSS-safe HTML output |
+| `TestRiskLevelColors` | Color coding by risk level |
+
+### Draft Integration Tests (`pkg/draft/integration_test.go`)
+
+End-to-end integration tests with real bill files.
+
+```bash
+# Run integration tests
+go test ./pkg/draft/... -run "TestIntegration" -v
+```
+
+| Test | Purpose |
+|------|---------|
+| `TestIntegration_FullPipeline` | Parse → Diff → Impact → Conflicts → Report |
+| `TestIntegration_RealBillFile` | Test with `testdata/drafts/hr1234.txt` |
+| `TestIntegration_CryptoBankruptcy` | Test with `testdata/drafts/crypto-bankruptcy.txt` |
+
+### CLI Manual Testing
+
+```bash
+# Build CLI
+go build -o regula ./cmd/regula
+
+# Parse and display bill structure
+regula draft ingest --bill testdata/drafts/hr1234.txt
+regula draft ingest --bill testdata/drafts/hr1234.txt --format json
+
+# Compute diff against knowledge graph
+regula draft diff --bill testdata/drafts/hr1234.txt --path .regula
+regula draft diff --bill testdata/drafts/hr1234.txt --format json
+
+# Run impact analysis
+regula draft impact --bill testdata/drafts/hr1234.txt --path .regula
+regula draft impact --bill testdata/drafts/hr1234.txt --depth 3 --format json
+regula draft impact --bill testdata/drafts/hr1234.txt --format dot --output impact.dot
+
+# Run conflict analysis
+regula draft conflicts --bill testdata/drafts/hr1234.txt --path .regula
+regula draft conflicts --bill testdata/drafts/hr1234.txt --severity error
+regula draft conflicts --bill testdata/drafts/hr1234.txt --format json
+
+# Run scenario simulation
+regula draft simulate --list-scenarios
+regula draft simulate --bill testdata/drafts/hr1234.txt --scenario consent_withdrawal
+regula draft simulate --bill testdata/drafts/hr1234.txt --scenario access_request --format json
+
+# Generate full report
+regula draft report --bill testdata/drafts/hr1234.txt --format markdown
+regula draft report --bill testdata/drafts/hr1234.txt --format json
+regula draft report --bill testdata/drafts/hr1234.txt --format html --output report.html
+regula draft report --bill testdata/drafts/hr1234.txt --skip-scenarios --skip-temporal
+```
+
+### Test Data
+
+| File | Description |
+|------|-------------|
+| `testdata/drafts/hr1234.txt` | H.R. 1234 — Children's Online Privacy Protection Modernization Act |
+| `testdata/drafts/s456_minimal.txt` | S. 456 — AI small business study bill (minimal) |
+| `testdata/drafts/crypto-bankruptcy.txt` | Digital Asset Bankruptcy Protection Act of 2026 |
+| `testdata/drafts/consumer-data-rights.txt` | Consumer Data Rights Extension Act of 2026 |
+| `testdata/drafts/public-health-reporting.txt` | Public Health Reporting Modernization Act |
+
 ## Troubleshooting Tests
 
 ### Common Issues
