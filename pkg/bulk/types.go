@@ -207,12 +207,14 @@ func ResolveSource(sourceName string, config DownloadConfig) (Source, error) {
 		return NewCaliforniaSource(config), nil
 	case "archive":
 		return NewInternetArchiveSource(config), nil
+	case "parliamentary":
+		return NewParliamentarySource(config), nil
 	default:
-		return nil, fmt.Errorf("unknown source: %s (available: uscode, cfr, california, archive)", sourceName)
+		return nil, fmt.Errorf("unknown source: %s (available: uscode, cfr, california, archive, parliamentary)", sourceName)
 	}
 }
 
 // AllSourceNames returns the list of registered source names.
 func AllSourceNames() []string {
-	return []string{"uscode", "cfr", "california", "archive"}
+	return []string{"uscode", "cfr", "california", "archive", "parliamentary"}
 }
