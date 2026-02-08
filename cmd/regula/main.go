@@ -74,6 +74,7 @@ It ingests regulatory documents and produces:
 	rootCmd.AddCommand(bulkCmd())
 	rootCmd.AddCommand(draftCmd())
 	rootCmd.AddCommand(searchCmd())
+	rootCmd.AddCommand(navigateCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -5726,4 +5727,185 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func navigateCmd() *cobra.Command {
+	var sourcePath string
+	var action string
+	var listActions bool
+	var discover bool
+	var formatOutput string
+
+	cmd := &cobra.Command{
+		Use:   "navigate",
+		Short: "Navigate procedural paths through House Rules",
+		Long: `Generate step-by-step procedural guides for legislative actions.
+
+Given a legislative action (e.g., "introduce a bill", "propose an amendment"),
+traces the relevant rules to show the procedural steps required.
+
+Examples:
+  # Show steps for introducing a bill
+  regula navigate --source house-rules-119th.txt --action "introduce a bill"
+
+  # Use short alias for action
+  regula navigate --source house-rules-119th.txt --action vote
+
+  # Discover additional related clauses
+  regula navigate --source house-rules-119th.txt --action amend --discover
+
+  # List all available actions
+  regula navigate --list-actions
+
+  # Output as JSON
+  regula navigate --source house-rules-119th.txt --action debate --format json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Handle --list-actions (no source required)
+			if listActions {
+				return outputActionList(formatOutput)
+			}
+
+			if sourcePath == "" {
+				return fmt.Errorf("--source flag is required")
+			}
+
+			if action == "" {
+				return fmt.Errorf("--action flag is required (or use --list-actions)")
+			}
+
+			// Read the source file
+			data, err := os.ReadFile(sourcePath)
+			if err != nil {
+				return fmt.Errorf("failed to read source file: %w", err)
+			}
+
+			// Parse House Rules
+			searcher := extract.NewKeywordSearcher()
+			searcher.ParseHouseRules(string(data))
+
+			// Create pathfinder
+			pathfinder := extract.NewPathfinder(searcher)
+
+			// Navigate
+			var path *extract.ProceduralPath
+			if discover {
+				path, err = pathfinder.NavigateWithDiscovery(action)
+			} else {
+				path, err = pathfinder.Navigate(action)
+			}
+			if err != nil {
+				return err
+			}
+
+			// Output
+			return outputProceduralPath(path, formatOutput)
+		},
+	}
+
+	cmd.Flags().StringVar(&sourcePath, "source", "", "Path to House Rules source file")
+	cmd.Flags().StringVar(&action, "action", "", "Legislative action to navigate (e.g., 'introduce-bill', 'vote', 'amend')")
+	cmd.Flags().BoolVar(&listActions, "list-actions", false, "List all available procedural actions")
+	cmd.Flags().BoolVar(&discover, "discover", false, "Discover additional related clauses via keyword search")
+	cmd.Flags().StringVar(&formatOutput, "format", "text", "Output format (text, json)")
+
+	return cmd
+}
+
+// outputActionList prints the list of available procedural actions.
+func outputActionList(format string) error {
+	pathfinder := extract.NewPathfinder(nil)
+	scenarios := pathfinder.ListScenarios()
+
+	if format == "json" {
+		type actionInfo struct {
+			Action      string   `json:"action"`
+			Title       string   `json:"title"`
+			Description string   `json:"description"`
+			Related     []string `json:"related_actions"`
+		}
+		var actionList []actionInfo
+		for _, s := range scenarios {
+			actionList = append(actionList, actionInfo{
+				Action:      s.Action,
+				Title:       s.Title,
+				Description: s.Description,
+				Related:     s.RelatedActions,
+			})
+		}
+		data, err := json.MarshalIndent(actionList, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+
+	// Text format
+	fmt.Println("Available Procedural Actions")
+	fmt.Println(strings.Repeat("═", 60))
+
+	for _, s := range scenarios {
+		fmt.Printf("\n%s (%s)\n", s.Title, s.Action)
+		fmt.Printf("  %s\n", s.Description)
+		if len(s.RelatedActions) > 0 {
+			fmt.Printf("  Related: %s\n", strings.Join(s.RelatedActions, ", "))
+		}
+	}
+
+	fmt.Printf("\nTotal: %d actions\n", len(scenarios))
+	fmt.Println("\nUsage: regula navigate --source <file> --action <action>")
+	return nil
+}
+
+// outputProceduralPath prints the procedural path.
+func outputProceduralPath(path *extract.ProceduralPath, format string) error {
+	if format == "json" {
+		type stepJSON struct {
+			StepNumber  int      `json:"step_number"`
+			Title       string   `json:"title"`
+			Rule        string   `json:"rule"`
+			Clause      string   `json:"clause"`
+			ClauseTitle string   `json:"clause_title,omitempty"`
+			Description string   `json:"description"`
+			Excerpt     string   `json:"excerpt,omitempty"`
+			References  []string `json:"references,omitempty"`
+		}
+		type pathJSON struct {
+			Action         string     `json:"action"`
+			Title          string     `json:"title"`
+			Description    string     `json:"description"`
+			Steps          []stepJSON `json:"steps"`
+			RelatedActions []string   `json:"related_actions"`
+		}
+
+		output := pathJSON{
+			Action:         path.Action,
+			Title:          path.Title,
+			Description:    path.Description,
+			RelatedActions: path.RelatedActions,
+		}
+		for _, step := range path.Steps {
+			output.Steps = append(output.Steps, stepJSON{
+				StepNumber:  step.StepNumber,
+				Title:       step.Title,
+				Rule:        step.Rule,
+				Clause:      step.Clause,
+				ClauseTitle: step.ClauseTitle,
+				Description: step.Description,
+				Excerpt:     step.Excerpt,
+				References:  step.References,
+			})
+		}
+
+		data, err := json.MarshalIndent(output, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+
+	// Text format
+	fmt.Print(path.String())
+	return nil
 }
