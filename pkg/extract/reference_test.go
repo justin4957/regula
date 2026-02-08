@@ -940,3 +940,423 @@ func getIdentifiers(refs []*Reference) []string {
 	}
 	return ids
 }
+
+// Parliamentary Authority Reference Tests
+
+func TestParliamentaryAuthorityRefs_JeffersonsManual(t *testing.T) {
+	tests := []struct {
+		name       string
+		text       string
+		wantCount  int
+		wantID     string
+		wantDoc    string
+		wantSecNum int
+	}{
+		{
+			name:       "Jefferson's Manual standalone",
+			text:       "The rules of parliamentary practice comprised by Jefferson's Manual shall govern the House.",
+			wantCount:  1,
+			wantID:     "Jefferson's Manual",
+			wantDoc:    "JeffersonsManual",
+			wantSecNum: 0,
+		},
+		{
+			name:       "Jefferson's Manual with section number",
+			text:       "See Jefferson's Manual, sec. 53 for guidance on this procedure.",
+			wantCount:  1,
+			wantID:     "Jefferson's Manual § 53",
+			wantDoc:    "JeffersonsManual",
+			wantSecNum: 53,
+		},
+		{
+			name:       "Section of Jefferson's Manual",
+			text:       "As described in section 285 of Jefferson's Manual.",
+			wantCount:  1,
+			wantID:     "Jefferson's Manual § 285",
+			wantDoc:    "JeffersonsManual",
+			wantSecNum: 285,
+		},
+		{
+			name:       "Jeffersons Manual without apostrophe",
+			text:       "The procedures in Jeffersons Manual apply.",
+			wantCount:  1,
+			wantID:     "Jefferson's Manual",
+			wantDoc:    "JeffersonsManual",
+			wantSecNum: 0,
+		},
+	}
+
+	extractor := NewReferenceExtractor()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			article := &Article{Number: 1, Text: tc.text}
+			refs := extractor.ExtractFromArticle(article)
+
+			// Filter to manual references
+			var manualRefs []*Reference
+			for _, ref := range refs {
+				if ref.Target == TargetManual {
+					manualRefs = append(manualRefs, ref)
+				}
+			}
+
+			if len(manualRefs) != tc.wantCount {
+				t.Errorf("Expected %d manual refs, got %d", tc.wantCount, len(manualRefs))
+				return
+			}
+
+			if tc.wantCount > 0 {
+				ref := manualRefs[0]
+				if ref.Identifier != tc.wantID {
+					t.Errorf("Expected identifier %q, got %q", tc.wantID, ref.Identifier)
+				}
+				if ref.ExternalDoc != tc.wantDoc {
+					t.Errorf("Expected ExternalDoc %q, got %q", tc.wantDoc, ref.ExternalDoc)
+				}
+				if ref.SectionNum != tc.wantSecNum {
+					t.Errorf("Expected SectionNum %d, got %d", tc.wantSecNum, ref.SectionNum)
+				}
+				if ref.Type != ReferenceTypeExternal {
+					t.Errorf("Expected external reference type")
+				}
+			}
+		})
+	}
+}
+
+func TestParliamentaryAuthorityRefs_CannonsPrecedents(t *testing.T) {
+	tests := []struct {
+		name       string
+		text       string
+		wantCount  int
+		wantID     string
+		wantDoc    string
+		wantVolume string
+		wantSecNum int
+	}{
+		{
+			name:       "Cannon's Precedents standalone",
+			text:       "See Cannon's Precedents for historical guidance.",
+			wantCount:  1,
+			wantID:     "Cannon's Precedents",
+			wantDoc:    "CannonsPrecedents",
+			wantVolume: "",
+			wantSecNum: 0,
+		},
+		{
+			name:       "Cannon's Precedents with volume and section",
+			text:       "Cannon's Precedents, vol. 8, sec. 3449 describes this procedure.",
+			wantCount:  1,
+			wantID:     "Cannon's Precedents vol. 8 § 3449",
+			wantDoc:    "CannonsPrecedents",
+			wantVolume: "8",
+			wantSecNum: 3449,
+		},
+		{
+			name:       "Short Cannon citation",
+			text:       "As established in 8 Cannon § 3449.",
+			wantCount:  1,
+			wantID:     "Cannon's Precedents vol. 8 § 3449",
+			wantDoc:    "CannonsPrecedents",
+			wantVolume: "8",
+			wantSecNum: 3449,
+		},
+		{
+			name:       "Cannon's Precedents volume only",
+			text:       "See 6 Cannon's Precedents for details.",
+			wantCount:  1,
+			wantID:     "Cannon's Precedents vol. 6",
+			wantDoc:    "CannonsPrecedents",
+			wantVolume: "6",
+			wantSecNum: 0,
+		},
+	}
+
+	extractor := NewReferenceExtractor()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			article := &Article{Number: 1, Text: tc.text}
+			refs := extractor.ExtractFromArticle(article)
+
+			// Filter to precedent references
+			var precedentRefs []*Reference
+			for _, ref := range refs {
+				if ref.Target == TargetPrecedent && ref.ExternalDoc == "CannonsPrecedents" {
+					precedentRefs = append(precedentRefs, ref)
+				}
+			}
+
+			if len(precedentRefs) != tc.wantCount {
+				t.Errorf("Expected %d Cannon refs, got %d", tc.wantCount, len(precedentRefs))
+				return
+			}
+
+			if tc.wantCount > 0 {
+				ref := precedentRefs[0]
+				if ref.Identifier != tc.wantID {
+					t.Errorf("Expected identifier %q, got %q", tc.wantID, ref.Identifier)
+				}
+				if ref.DocNumber != tc.wantVolume {
+					t.Errorf("Expected volume %q, got %q", tc.wantVolume, ref.DocNumber)
+				}
+				if ref.SectionNum != tc.wantSecNum {
+					t.Errorf("Expected SectionNum %d, got %d", tc.wantSecNum, ref.SectionNum)
+				}
+			}
+		})
+	}
+}
+
+func TestParliamentaryAuthorityRefs_DeschlersPrecedents(t *testing.T) {
+	tests := []struct {
+		name        string
+		text        string
+		wantCount   int
+		wantID      string
+		wantDoc     string
+		wantChapter string
+		wantSecNum  int
+	}{
+		{
+			name:        "Deschler's Precedents standalone",
+			text:        "Consult Deschler's Precedents for interpretation.",
+			wantCount:   1,
+			wantID:      "Deschler's Precedents",
+			wantDoc:     "DeschlersPrecedents",
+			wantChapter: "",
+			wantSecNum:  0,
+		},
+		{
+			name:        "Deschler's Precedents with chapter and section",
+			text:        "See Deschler's Precedents, ch. 21, § 18 for this rule.",
+			wantCount:   1,
+			wantID:      "Deschler's Precedents ch. 21 § 18",
+			wantDoc:     "DeschlersPrecedents",
+			wantChapter: "21",
+			wantSecNum:  18,
+		},
+		{
+			name:        "Deschler's Precedents chapter only",
+			text:        "Deschler's Precedents, chapter 15 covers this topic.",
+			wantCount:   1,
+			wantID:      "Deschler's Precedents ch. 15",
+			wantDoc:     "DeschlersPrecedents",
+			wantChapter: "15",
+			wantSecNum:  0,
+		},
+	}
+
+	extractor := NewReferenceExtractor()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			article := &Article{Number: 1, Text: tc.text}
+			refs := extractor.ExtractFromArticle(article)
+
+			// Filter to Deschler's refs
+			var deschlerRefs []*Reference
+			for _, ref := range refs {
+				if ref.Target == TargetPrecedent && ref.ExternalDoc == "DeschlersPrecedents" {
+					deschlerRefs = append(deschlerRefs, ref)
+				}
+			}
+
+			if len(deschlerRefs) != tc.wantCount {
+				t.Errorf("Expected %d Deschler refs, got %d", tc.wantCount, len(deschlerRefs))
+				return
+			}
+
+			if tc.wantCount > 0 {
+				ref := deschlerRefs[0]
+				if ref.Identifier != tc.wantID {
+					t.Errorf("Expected identifier %q, got %q", tc.wantID, ref.Identifier)
+				}
+				if ref.ChapterNum != tc.wantChapter {
+					t.Errorf("Expected chapter %q, got %q", tc.wantChapter, ref.ChapterNum)
+				}
+				if ref.SectionNum != tc.wantSecNum {
+					t.Errorf("Expected SectionNum %d, got %d", tc.wantSecNum, ref.SectionNum)
+				}
+			}
+		})
+	}
+}
+
+func TestParliamentaryAuthorityRefs_DeschlerBrown(t *testing.T) {
+	tests := []struct {
+		name        string
+		text        string
+		wantCount   int
+		wantID      string
+		wantChapter string
+	}{
+		{
+			name:        "Deschler-Brown Precedents standalone",
+			text:        "See Deschler-Brown Precedents for modern interpretation.",
+			wantCount:   1,
+			wantID:      "Deschler-Brown Precedents",
+			wantChapter: "",
+		},
+		{
+			name:        "Deschler-Brown Precedent with chapter",
+			text:        "Deschler-Brown Precedent ch. 29 applies here.",
+			wantCount:   1,
+			wantID:      "Deschler-Brown Precedents ch. 29",
+			wantChapter: "29",
+		},
+	}
+
+	extractor := NewReferenceExtractor()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			article := &Article{Number: 1, Text: tc.text}
+			refs := extractor.ExtractFromArticle(article)
+
+			// Filter to Deschler-Brown refs
+			var dbRefs []*Reference
+			for _, ref := range refs {
+				if ref.ExternalDoc == "DeschlerBrownPrecedents" {
+					dbRefs = append(dbRefs, ref)
+				}
+			}
+
+			if len(dbRefs) != tc.wantCount {
+				t.Errorf("Expected %d Deschler-Brown refs, got %d", tc.wantCount, len(dbRefs))
+				return
+			}
+
+			if tc.wantCount > 0 {
+				ref := dbRefs[0]
+				if ref.Identifier != tc.wantID {
+					t.Errorf("Expected identifier %q, got %q", tc.wantID, ref.Identifier)
+				}
+				if ref.ChapterNum != tc.wantChapter {
+					t.Errorf("Expected chapter %q, got %q", tc.wantChapter, ref.ChapterNum)
+				}
+			}
+		})
+	}
+}
+
+func TestParliamentaryAuthorityRefs_HindsPrecedents(t *testing.T) {
+	tests := []struct {
+		name       string
+		text       string
+		wantCount  int
+		wantID     string
+		wantVolume string
+		wantSecNum int
+	}{
+		{
+			name:       "Hinds' Precedents standalone",
+			text:       "Hinds' Precedents provides historical context.",
+			wantCount:  1,
+			wantID:     "Hinds' Precedents",
+			wantVolume: "",
+			wantSecNum: 0,
+		},
+		{
+			name:       "Hinds' Precedents with volume and section",
+			text:       "5 Hinds' Precedents § 5445 establishes this rule.",
+			wantCount:  1,
+			wantID:     "Hinds' Precedents vol. 5 § 5445",
+			wantVolume: "5",
+			wantSecNum: 5445,
+		},
+	}
+
+	extractor := NewReferenceExtractor()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			article := &Article{Number: 1, Text: tc.text}
+			refs := extractor.ExtractFromArticle(article)
+
+			// Filter to Hinds refs
+			var hindsRefs []*Reference
+			for _, ref := range refs {
+				if ref.ExternalDoc == "HindsPrecedents" {
+					hindsRefs = append(hindsRefs, ref)
+				}
+			}
+
+			if len(hindsRefs) != tc.wantCount {
+				t.Errorf("Expected %d Hinds refs, got %d", tc.wantCount, len(hindsRefs))
+				return
+			}
+
+			if tc.wantCount > 0 {
+				ref := hindsRefs[0]
+				if ref.Identifier != tc.wantID {
+					t.Errorf("Expected identifier %q, got %q", tc.wantID, ref.Identifier)
+				}
+				if ref.DocNumber != tc.wantVolume {
+					t.Errorf("Expected volume %q, got %q", tc.wantVolume, ref.DocNumber)
+				}
+				if ref.SectionNum != tc.wantSecNum {
+					t.Errorf("Expected SectionNum %d, got %d", tc.wantSecNum, ref.SectionNum)
+				}
+			}
+		})
+	}
+}
+
+func TestParliamentaryAuthorityRefs_PrecedentsOfHouse(t *testing.T) {
+	extractor := NewReferenceExtractor()
+
+	text := "The Precedents of the House establish that this action is proper."
+	article := &Article{Number: 1, Text: text}
+	refs := extractor.ExtractFromArticle(article)
+
+	// Filter to House precedents
+	var houseRefs []*Reference
+	for _, ref := range refs {
+		if ref.ExternalDoc == "HousePrecedents" {
+			houseRefs = append(houseRefs, ref)
+		}
+	}
+
+	if len(houseRefs) != 1 {
+		t.Errorf("Expected 1 House precedent ref, got %d", len(houseRefs))
+		return
+	}
+
+	ref := houseRefs[0]
+	if ref.Identifier != "Precedents of the House" {
+		t.Errorf("Expected identifier 'Precedents of the House', got %q", ref.Identifier)
+	}
+	if ref.Type != ReferenceTypeExternal {
+		t.Error("Expected external reference type")
+	}
+	if ref.Target != TargetPrecedent {
+		t.Errorf("Expected target 'precedent', got %q", ref.Target)
+	}
+}
+
+func TestParliamentaryAuthorityRefs_HouseRulesIntegration(t *testing.T) {
+	// Test with actual House Rules text mentioning Jefferson's Manual
+	text := `The rules of parliamentary practice comprised by
+Jefferson's Manual shall govern the House in all cases to which they are
+applicable and in which they are not inconsistent with the Rules and orders
+of the House.`
+
+	extractor := NewReferenceExtractor()
+	article := &Article{Number: 29, Text: text}
+	refs := extractor.ExtractFromArticle(article)
+
+	// Should find Jefferson's Manual reference
+	var found bool
+	for _, ref := range refs {
+		if ref.Target == TargetManual && ref.ExternalDoc == "JeffersonsManual" {
+			found = true
+			t.Logf("Found: %s (raw: %q)", ref.Identifier, ref.RawText)
+		}
+	}
+
+	if !found {
+		t.Error("Expected to find Jefferson's Manual reference in House Rules text")
+	}
+}

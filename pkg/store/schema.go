@@ -285,6 +285,13 @@ const (
 
 	// PropDelegatesTo indicates delegation of power.
 	PropDelegatesTo = "reg:delegatesTo"
+
+	// PropInterpretedBy indicates a provision is interpreted by a parliamentary authority.
+	// Example: <HouseRules:RuleXXIX> reg:interpretedBy <JeffersonsManual:Sec53>
+	PropInterpretedBy = "reg:interpretedBy"
+
+	// PropInterprets indicates a parliamentary authority interprets a provision (inverse).
+	PropInterprets = "reg:interprets"
 )
 
 // Semantic Properties - Legal meaning and effects.
