@@ -30,6 +30,10 @@ const (
 	TargetRegulation ReferenceTarget = "regulation"
 	TargetTreaty     ReferenceTarget = "treaty"
 	TargetDecision   ReferenceTarget = "decision"
+
+	// Parliamentary authority targets
+	TargetPrecedent ReferenceTarget = "precedent"
+	TargetManual    ReferenceTarget = "manual"
 )
 
 // Reference represents a detected cross-reference in the text.
@@ -113,6 +117,16 @@ type ReferenceExtractor struct {
 	houseRuleRefPattern      *regexp.Regexp // rule XX
 	houseClauseRefPattern    *regexp.Regexp // clause 5
 
+	// External reference patterns (Parliamentary authorities)
+	jeffersonsManualPattern      *regexp.Regexp // Jefferson's Manual, section 53
+	jeffersonsManualShortPattern *regexp.Regexp // Jefferson's Manual (standalone)
+	cannonsPattern               *regexp.Regexp // Cannon's Precedents, vol. 8, sec. 3449
+	cannonsCitePattern           *regexp.Regexp // 8 Cannon § 3449
+	deschlerPattern              *regexp.Regexp // Deschler's Precedents, ch. 21, § 18
+	deschlerBrownPattern         *regexp.Regexp // Deschler-Brown Precedent ch. 29
+	precedentsOfHousePattern     *regexp.Regexp // Precedents of the House
+	hindsPattern                 *regexp.Regexp // Hinds' Precedents (older)
+
 	// Temporal reference patterns
 	asAmendedByPattern         *regexp.Regexp // as amended by {document}
 	asAmendedPattern           *regexp.Regexp // as amended / as amended accordingly
@@ -187,6 +201,24 @@ func NewReferenceExtractor() *ReferenceExtractor {
 		houseRuleRefPattern: regexp.MustCompile(`(?i)\brule\s+([IVXLCDM]+)\b`),
 		// "clause 5" (standalone clause reference)
 		houseClauseRefPattern: regexp.MustCompile(`(?i)\bclause\s+(\d+)\b`),
+
+		// External references (Parliamentary authorities)
+		// "Jefferson's Manual" with optional section: "Jefferson's Manual, sec. 53" or "section 53 of Jefferson's Manual"
+		jeffersonsManualPattern: regexp.MustCompile(`(?i)(?:(?:sec(?:tion)?\.?\s*(\d+)\s+of\s+)?Jefferson'?s\s+Manual(?:,?\s+sec(?:tion)?\.?\s*(\d+))?)`),
+		// "Jefferson's Manual" standalone (for general references)
+		jeffersonsManualShortPattern: regexp.MustCompile(`(?i)Jefferson'?s\s+Manual`),
+		// "Cannon's Precedents" with volume and section: "Cannon's Precedents, vol. 8, sec. 3449" or "8 Cannon's Precedents § 3449"
+		cannonsPattern: regexp.MustCompile(`(?i)(?:(\d+)\s+)?Cannon'?s\s+Precedents(?:,?\s*(?:vol(?:ume)?\.?\s*(\d+)))?(?:,?\s*(?:sec(?:tion)?\.?|§)\s*(\d+))?`),
+		// Short citation: "8 Cannon § 3449"
+		cannonsCitePattern: regexp.MustCompile(`(?i)(\d+)\s+Cannon\s+(?:§|sec\.?)\s*(\d+)`),
+		// "Deschler's Precedents" with chapter and section: "Deschler's Precedents, ch. 21, § 18"
+		deschlerPattern: regexp.MustCompile(`(?i)Deschler'?s\s+Precedents(?:,?\s*ch(?:apter)?\.?\s*(\d+))?(?:,?\s*(?:§|sec(?:tion)?\.?)\s*(\d+))?`),
+		// "Deschler-Brown Precedent(s)" with optional chapter
+		deschlerBrownPattern: regexp.MustCompile(`(?i)Deschler-Brown\s+Precedents?(?:,?\s*ch(?:apter)?\.?\s*(\d+))?`),
+		// "Precedents of the House" (generic reference to House precedents)
+		precedentsOfHousePattern: regexp.MustCompile(`(?i)Precedents\s+of\s+the\s+House`),
+		// "Hinds' Precedents" (older 5-volume set)
+		hindsPattern: regexp.MustCompile(`(?i)(?:(\d+)\s+)?Hinds'?\s+Precedents(?:,?\s*(?:§|sec\.?)\s*(\d+))?`),
 
 		// External references (EU-style)
 		// "Directive 95/46/EC" or "Directive (EU) 2016/680"
@@ -287,6 +319,9 @@ func (e *ReferenceExtractor) ExtractFromArticle(article *Article) []*Reference {
 
 	// Extract external references (US-style)
 	refs = append(refs, e.extractUSExternalRefs(text, article.Number)...)
+
+	// Extract external references (Parliamentary authorities)
+	refs = append(refs, e.extractParliamentaryAuthorityRefs(text, article.Number)...)
 
 	// Extract temporal references
 	refs = append(refs, e.extractTemporalRefs(text, article.Number)...)
@@ -812,6 +847,248 @@ func (e *ReferenceExtractor) extractUSExternalRefs(text string, sourceArticle in
 			ExternalDoc:   "PublicLaw",
 			DocYear:       congress,
 			DocNumber:     lawNum,
+		})
+	}
+
+	return refs
+}
+
+// extractParliamentaryAuthorityRefs extracts references to parliamentary authorities:
+// Jefferson's Manual, Cannon's Precedents, Deschler's Precedents, Deschler-Brown Precedents,
+// Hinds' Precedents, and general House precedents.
+func (e *ReferenceExtractor) extractParliamentaryAuthorityRefs(text string, sourceArticle int) []*Reference {
+	var refs []*Reference
+
+	// Jefferson's Manual with section: "Jefferson's Manual, sec. 53" or "section 53 of Jefferson's Manual"
+	matches := e.jeffersonsManualPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		rawText := text[match[0]:match[1]]
+
+		// Extract section number from either capture group
+		var sectionNum string
+		if match[2] != -1 && match[3] != -1 {
+			sectionNum = text[match[2]:match[3]] // "section N of Jefferson's Manual"
+		} else if match[4] != -1 && match[5] != -1 {
+			sectionNum = text[match[4]:match[5]] // "Jefferson's Manual, sec. N"
+		}
+
+		identifier := "Jefferson's Manual"
+		if sectionNum != "" {
+			identifier += " § " + sectionNum
+		}
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeExternal,
+			Target:        TargetManual,
+			RawText:       rawText,
+			Identifier:    identifier,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ExternalDoc:   "JeffersonsManual",
+			SectionNum:    mustAtoi(sectionNum),
+		})
+	}
+
+	// Cannon's Precedents: "Cannon's Precedents, vol. 8, sec. 3449" or "8 Cannon's Precedents § 3449"
+	matches = e.cannonsPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		var volumeNum, sectionNum string
+
+		// Volume from prefix or vol. X
+		if match[2] != -1 && match[3] != -1 {
+			volumeNum = text[match[2]:match[3]]
+		} else if match[4] != -1 && match[5] != -1 {
+			volumeNum = text[match[4]:match[5]]
+		}
+
+		// Section number
+		if match[6] != -1 && match[7] != -1 {
+			sectionNum = text[match[6]:match[7]]
+		}
+
+		identifier := "Cannon's Precedents"
+		if volumeNum != "" {
+			identifier += " vol. " + volumeNum
+		}
+		if sectionNum != "" {
+			identifier += " § " + sectionNum
+		}
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeExternal,
+			Target:        TargetPrecedent,
+			RawText:       rawText,
+			Identifier:    identifier,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ExternalDoc:   "CannonsPrecedents",
+			DocNumber:     volumeNum,
+			SectionNum:    mustAtoi(sectionNum),
+		})
+	}
+
+	// Short Cannon citation: "8 Cannon § 3449"
+	matches = e.cannonsCitePattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		volumeNum := text[match[2]:match[3]]
+		sectionNum := text[match[4]:match[5]]
+
+		identifier := "Cannon's Precedents vol. " + volumeNum + " § " + sectionNum
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeExternal,
+			Target:        TargetPrecedent,
+			RawText:       rawText,
+			Identifier:    identifier,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ExternalDoc:   "CannonsPrecedents",
+			DocNumber:     volumeNum,
+			SectionNum:    mustAtoi(sectionNum),
+		})
+	}
+
+	// Deschler's Precedents: "Deschler's Precedents, ch. 21, § 18"
+	matches = e.deschlerPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		var chapterNum, sectionNum string
+
+		if match[2] != -1 && match[3] != -1 {
+			chapterNum = text[match[2]:match[3]]
+		}
+		if match[4] != -1 && match[5] != -1 {
+			sectionNum = text[match[4]:match[5]]
+		}
+
+		identifier := "Deschler's Precedents"
+		if chapterNum != "" {
+			identifier += " ch. " + chapterNum
+		}
+		if sectionNum != "" {
+			identifier += " § " + sectionNum
+		}
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeExternal,
+			Target:        TargetPrecedent,
+			RawText:       rawText,
+			Identifier:    identifier,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ExternalDoc:   "DeschlersPrecedents",
+			ChapterNum:    chapterNum,
+			SectionNum:    mustAtoi(sectionNum),
+		})
+	}
+
+	// Deschler-Brown Precedents: "Deschler-Brown Precedent ch. 29"
+	matches = e.deschlerBrownPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		var chapterNum string
+
+		if match[2] != -1 && match[3] != -1 {
+			chapterNum = text[match[2]:match[3]]
+		}
+
+		identifier := "Deschler-Brown Precedents"
+		if chapterNum != "" {
+			identifier += " ch. " + chapterNum
+		}
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeExternal,
+			Target:        TargetPrecedent,
+			RawText:       rawText,
+			Identifier:    identifier,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ExternalDoc:   "DeschlerBrownPrecedents",
+			ChapterNum:    chapterNum,
+		})
+	}
+
+	// Hinds' Precedents: "5 Hinds' Precedents § 5445" or "Hinds' Precedents"
+	matches = e.hindsPattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+		var volumeNum, sectionNum string
+
+		if match[2] != -1 && match[3] != -1 {
+			volumeNum = text[match[2]:match[3]]
+		}
+		if match[4] != -1 && match[5] != -1 {
+			sectionNum = text[match[4]:match[5]]
+		}
+
+		identifier := "Hinds' Precedents"
+		if volumeNum != "" {
+			identifier += " vol. " + volumeNum
+		}
+		if sectionNum != "" {
+			identifier += " § " + sectionNum
+		}
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeExternal,
+			Target:        TargetPrecedent,
+			RawText:       rawText,
+			Identifier:    identifier,
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ExternalDoc:   "HindsPrecedents",
+			DocNumber:     volumeNum,
+			SectionNum:    mustAtoi(sectionNum),
+		})
+	}
+
+	// Generic "Precedents of the House"
+	matches = e.precedentsOfHousePattern.FindAllStringSubmatchIndex(text, -1)
+	for _, match := range matches {
+		if e.isOverlapping(match[0], match[1], refs) {
+			continue
+		}
+
+		rawText := text[match[0]:match[1]]
+
+		refs = append(refs, &Reference{
+			Type:          ReferenceTypeExternal,
+			Target:        TargetPrecedent,
+			RawText:       rawText,
+			Identifier:    "Precedents of the House",
+			SourceArticle: sourceArticle,
+			TextOffset:    match[0],
+			TextLength:    match[1] - match[0],
+			ExternalDoc:   "HousePrecedents",
 		})
 	}
 
