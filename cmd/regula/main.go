@@ -73,6 +73,7 @@ It ingests regulatory documents and produces:
 	rootCmd.AddCommand(playgroundCmd())
 	rootCmd.AddCommand(bulkCmd())
 	rootCmd.AddCommand(draftCmd())
+	rootCmd.AddCommand(searchCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -5340,4 +5341,186 @@ func runReportScenarios(report *draft.LegislativeImpactReport, libraryPath strin
 	}
 
 	return results, nil
+}
+
+// searchCmd returns the search command for finding committee jurisdictions.
+func searchCmd() *cobra.Command {
+	var sourcePath string
+	var committeeQuery string
+	var listCommittees bool
+	var formatOutput string
+
+	cmd := &cobra.Command{
+		Use:   "search",
+		Short: "Search for committee jurisdictions in House Rules",
+		Long: `Search for committees with jurisdiction over a specific topic.
+
+Uses Rule X, clause 1 of the House Rules to find which committee
+has jurisdiction over a given subject matter.
+
+Examples:
+  # Find committees with cybersecurity jurisdiction
+  regula search --source house-rules-119th.txt --committee cybersecurity
+
+  # Find committees handling energy policy
+  regula search --source house-rules-119th.txt --committee energy
+
+  # List all committees and their jurisdictions
+  regula search --source house-rules-119th.txt --list-committees
+
+  # Output as JSON
+  regula search --source house-rules-119th.txt --committee banking --format json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if sourcePath == "" {
+				return fmt.Errorf("--source flag is required")
+			}
+
+			// Read the source file
+			data, err := os.ReadFile(sourcePath)
+			if err != nil {
+				return fmt.Errorf("failed to read source file: %w", err)
+			}
+			text := string(data)
+
+			// Find Rule X section
+			ruleXStart := strings.Index(text, "RULE X")
+			if ruleXStart == -1 {
+				return fmt.Errorf("could not find Rule X in document")
+			}
+
+			// Find Rule XI to delimit
+			ruleXEnd := strings.Index(text[ruleXStart+6:], "RULE XI")
+			if ruleXEnd == -1 {
+				ruleXEnd = len(text) - ruleXStart
+			} else {
+				ruleXEnd += ruleXStart + 6
+			}
+
+			ruleXText := text[ruleXStart:ruleXEnd]
+
+			// Extract committees
+			extractor := extract.NewCommitteeJurisdictionExtractor()
+			committees := extractor.ExtractFromRuleX(ruleXText)
+
+			if len(committees) == 0 {
+				return fmt.Errorf("no committees found in Rule X")
+			}
+
+			// Handle --list-committees
+			if listCommittees {
+				return outputCommitteeList(committees, formatOutput)
+			}
+
+			// Handle --committee search
+			if committeeQuery == "" {
+				return fmt.Errorf("--committee flag is required (or use --list-committees)")
+			}
+
+			matches := extract.SearchCommitteeByTopic(committees, committeeQuery)
+			if len(matches) == 0 {
+				fmt.Printf("No committees found with jurisdiction over %q\n", committeeQuery)
+				return nil
+			}
+
+			return outputSearchResults(matches, committeeQuery, formatOutput)
+		},
+	}
+
+	cmd.Flags().StringVar(&sourcePath, "source", "", "Path to House Rules source file")
+	cmd.Flags().StringVar(&committeeQuery, "committee", "", "Topic to search for in committee jurisdictions")
+	cmd.Flags().BoolVar(&listCommittees, "list-committees", false, "List all committees and their jurisdictions")
+	cmd.Flags().StringVar(&formatOutput, "format", "table", "Output format (table, json)")
+
+	return cmd
+}
+
+// outputCommitteeList prints the list of all committees.
+func outputCommitteeList(committees []extract.CommitteeJurisdiction, format string) error {
+	if format == "json" {
+		data, err := json.MarshalIndent(committees, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+
+	// Table format
+	fmt.Println("Congressional Committees (from Rule X)")
+	fmt.Println(strings.Repeat("═", 70))
+
+	for _, committee := range committees {
+		fmt.Printf("\n[%s] %s\n", committee.Letter, committee.Name)
+		fmt.Printf("    Source: %s\n", committee.SourceClause)
+		fmt.Printf("    Jurisdictions: %d topics\n", len(committee.Topics))
+
+		// Show first 5 topics
+		shown := 0
+		for _, topic := range committee.Topics {
+			if shown >= 5 {
+				remaining := len(committee.Topics) - 5
+				fmt.Printf("      ... and %d more\n", remaining)
+				break
+			}
+			topicText := topic.Text
+			if len(topicText) > 60 {
+				topicText = topicText[:57] + "..."
+			}
+			fmt.Printf("      (%s) %s\n", topic.Number, topicText)
+			shown++
+		}
+	}
+
+	fmt.Printf("\nTotal: %d committees\n", len(committees))
+	return nil
+}
+
+// outputSearchResults prints the search results.
+func outputSearchResults(matches []extract.CommitteeJurisdictionMatch, query, format string) error {
+	if format == "json" {
+		type jsonMatch struct {
+			Committee    string `json:"committee"`
+			Jurisdiction string `json:"jurisdiction"`
+			Source       string `json:"source"`
+		}
+		var jsonMatches []jsonMatch
+		for _, m := range matches {
+			jsonMatches = append(jsonMatches, jsonMatch{
+				Committee:    m.Committee.Name,
+				Jurisdiction: m.MatchedTopic.Text,
+				Source:       m.SourceRef,
+			})
+		}
+		data, err := json.MarshalIndent(jsonMatches, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+
+	// Table format
+	fmt.Printf("Committees with jurisdiction over %q\n", query)
+	fmt.Println(strings.Repeat("═", 70))
+
+	// Group by committee
+	byCommittee := make(map[string][]extract.CommitteeJurisdictionMatch)
+	for _, m := range matches {
+		byCommittee[m.Committee.Name] = append(byCommittee[m.Committee.Name], m)
+	}
+
+	for committeeName, committeeMatches := range byCommittee {
+		fmt.Printf("\n%s\n", committeeName)
+		for _, m := range committeeMatches {
+			jurisdictionText := m.MatchedTopic.Text
+			if len(jurisdictionText) > 60 {
+				jurisdictionText = jurisdictionText[:57] + "..."
+			}
+			fmt.Printf("  Jurisdiction: %q\n", jurisdictionText)
+			fmt.Printf("  Source: %s\n", m.SourceRef)
+		}
+	}
+
+	fmt.Printf("\nTotal: %d matches across %d committees\n", len(matches), len(byCommittee))
+	return nil
 }
