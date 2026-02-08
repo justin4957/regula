@@ -1,0 +1,106 @@
+# US Senate Standing Rules Format Pattern
+# Detects and parses standing rules of the United States Senate
+
+name: "US Senate Standing Rules"
+format_id: "us-senate-rules"
+version: "1.0.0"
+jurisdiction: "US-Federal"
+
+detection:
+  required_indicators:
+    - pattern: '(?m)^RULE\s+[IVXLCDM]+\s*[.\-]'
+      weight: 30
+    - pattern: '(?i)\bSenate\b'
+      weight: 20
+
+  optional_indicators:
+    - pattern: '(?i)\bPresiding\s+Officer\b'
+      weight: 12
+    - pattern: '(?i)\bSenator\b'
+      weight: 10
+    - pattern: '(?i)\bcloture\b'
+      weight: 15
+    - pattern: '(?i)\bfilibuster\b'
+      weight: 12
+    - pattern: '(?i)\bunanimous\s+consent\b'
+      weight: 12
+    - pattern: '(?i)\bcommittee\s+on\b'
+      weight: 8
+    - pattern: '(?i)\bstanding\s+committees?\b'
+      weight: 10
+    - pattern: '(?i)\bquorum\b'
+      weight: 5
+    - pattern: '(?i)\bpresent\s+and\s+voting\b'
+      weight: 8
+
+  negative_indicators:
+    - pattern: '\bHouse\s+of\s+Representatives\b'
+      weight: -15
+    - pattern: '\bSpeaker\b'
+      weight: -10
+    - pattern: '\bDelegate\b'
+      weight: -8
+    - pattern: '\bResident\s+Commissioner\b'
+      weight: -12
+
+structure:
+  hierarchy:
+    - type: "chapter"
+      pattern: '(?m)^RULE\s+([IVXLCDM]+)\s*[.\-]'
+      number_group: 1
+      title_follows: true
+
+    - type: "article"
+      pattern: '^(\d+)\.\s+'
+      number_group: 1
+
+    - type: "subsection"
+      pattern: '^\(([a-z])\)\s+'
+      number_group: 1
+
+    - type: "paragraph"
+      pattern: '^\((\d+)\)\s+'
+      number_group: 1
+
+definitions: {}
+
+references:
+  internal:
+    - pattern: '(?i)paragraph\s+(\d+)(?:\(([a-z])\))?\s+of\s+rule\s+([IVXLCDM]+)'
+      target: "article"
+      groups:
+        paragraph: 1
+        subsection: 2
+        rule: 3
+
+    - pattern: '(?i)rule\s+([IVXLCDM]+)'
+      target: "chapter"
+      groups:
+        number: 1
+
+    - pattern: '(?i)paragraph\s+(\d+)'
+      target: "article"
+      groups:
+        number: 1
+
+  external:
+    - pattern: '(\d+)\s+U\.?S\.?C\.?\s*§?\s*(\d+[a-z]?(?:-\d+)?)'
+      type: "usc"
+      uri_template: "https://www.law.cornell.edu/uscode/text/{title}/{section}"
+      groups:
+        title: 1
+        section: 2
+
+    - pattern: 'Public\s+Law\s+(\d+)-(\d+)'
+      type: "public_law"
+      uri_template: "https://www.congress.gov/public-laws/{congress}/pl{number}"
+      groups:
+        congress: 1
+        number: 2
+
+    # Cross-chamber reference to House Rules
+    - pattern: '(?i)House\s+Rule\s+([IVXLCDM]+)'
+      type: "house_rule"
+      uri_template: "https://rules.house.gov/rule/{rule}"
+      groups:
+        rule: 1

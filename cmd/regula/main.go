@@ -3356,12 +3356,13 @@ func bulkCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bulk",
 		Short: "Bulk download and ingest legislation from official sources",
-		Long: `Download and ingest legislation data in bulk from 4 official sources:
+		Long: `Download and ingest legislation data in bulk from 5 official sources:
 
-  uscode      US Code XML from uscode.house.gov (54 titles)
-  cfr         Code of Federal Regulations from govinfo.gov (50 titles)
-  california  California codes from leginfo.legislature.ca.gov (30 codes)
-  archive     State code archives from Internet Archive govlaw collection
+  uscode        US Code XML from uscode.house.gov (54 titles)
+  cfr           Code of Federal Regulations from govinfo.gov (50 titles)
+  california    California codes from leginfo.legislature.ca.gov (30 codes)
+  archive       State code archives from Internet Archive govlaw collection
+  parliamentary Congressional rules: House Rules, Senate Rules, Joint Rules
 
 Workflow:
   1. regula bulk list <source>          List available datasets
@@ -3386,13 +3387,14 @@ func bulkListCmd() *cobra.Command {
 		Short: "List available datasets from a bulk source",
 		Long: `List all available datasets from a bulk legislation source.
 
-Sources: uscode, cfr, california, archive
+Sources: uscode, cfr, california, archive, parliamentary
 
 Examples:
   regula bulk list uscode         List all 54 US Code titles
   regula bulk list cfr            List all 50 CFR titles
   regula bulk list california     List all 30 California codes
-  regula bulk list archive        List Internet Archive govlaw items`,
+  regula bulk list archive        List Internet Archive govlaw items
+  regula bulk list parliamentary  List House Rules, Senate Rules, Joint Rules`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sourceName := args[0]
@@ -3434,13 +3436,14 @@ func bulkDownloadCmd() *cobra.Command {
 Files are downloaded with resume support: existing files are skipped.
 A manifest.json tracks all completed downloads.
 
-Sources: uscode, cfr, california, archive
+Sources: uscode, cfr, california, archive, parliamentary
 
 Examples:
   regula bulk download uscode                     Download all 54 USC title ZIPs
   regula bulk download uscode --titles 42,26      Download specific titles
   regula bulk download cfr --year 2024            Download all CFR for 2024
   regula bulk download california --titles CIV,PEN Download specific CA codes
+  regula bulk download parliamentary              Download all congressional rules
   regula bulk download uscode --dry-run           Show what would be downloaded`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

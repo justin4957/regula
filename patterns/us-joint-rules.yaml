@@ -1,0 +1,83 @@
+# US Joint Rules of Congress Format Pattern
+# Detects and parses joint rules governing both chambers of Congress
+
+name: "US Joint Rules of Congress"
+format_id: "us-joint-rules"
+version: "1.0.0"
+jurisdiction: "US-Federal"
+
+detection:
+  required_indicators:
+    - pattern: '(?i)Joint\s+Rule'
+      weight: 40
+    - pattern: '(?i)\bCongress\b'
+      weight: 15
+
+  optional_indicators:
+    - pattern: '(?i)\bHouse\s+and\s+Senate\b'
+      weight: 15
+    - pattern: '(?i)\bboth\s+Houses\b'
+      weight: 12
+    - pattern: '(?i)\bjoint\s+session\b'
+      weight: 15
+    - pattern: '(?i)\bjoint\s+meeting\b'
+      weight: 12
+    - pattern: '(?i)\bconference\s+committee\b'
+      weight: 10
+    - pattern: '(?i)\belectoral\s+vote\b'
+      weight: 12
+    - pattern: '(?i)\bVice\s+President\b'
+      weight: 8
+    - pattern: '(?i)\bPresident\s+pro\s+tempore\b'
+      weight: 10
+
+  negative_indicators:
+    - pattern: '\bEuropean\b'
+      weight: -20
+    - pattern: '\bState\s+Legislature\b'
+      weight: -15
+
+structure:
+  hierarchy:
+    - type: "chapter"
+      pattern: '(?i)(?:Joint\s+)?Rule\s+([IVXLCDM]+|\d+)'
+      number_group: 1
+      title_follows: true
+
+    - type: "article"
+      pattern: '^(\d+)\.\s+'
+      number_group: 1
+
+    - type: "subsection"
+      pattern: '^\(([a-z])\)\s+'
+      number_group: 1
+
+definitions: {}
+
+references:
+  internal:
+    - pattern: '(?i)(?:Joint\s+)?Rule\s+([IVXLCDM]+|\d+)'
+      target: "chapter"
+      groups:
+        number: 1
+
+  external:
+    - pattern: '(\d+)\s+U\.?S\.?C\.?\s*§?\s*(\d+[a-z]?(?:-\d+)?)'
+      type: "usc"
+      uri_template: "https://www.law.cornell.edu/uscode/text/{title}/{section}"
+      groups:
+        title: 1
+        section: 2
+
+    # Cross-chamber references
+    - pattern: '(?i)House\s+Rule\s+([IVXLCDM]+)'
+      type: "house_rule"
+      uri_template: "https://rules.house.gov/rule/{rule}"
+      groups:
+        rule: 1
+
+    - pattern: '(?i)Senate\s+Rule\s+([IVXLCDM]+)'
+      type: "senate_rule"
+      uri_template: "https://www.rules.senate.gov/rules-of-the-senate"
+      groups:
+        rule: 1

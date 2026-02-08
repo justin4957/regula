@@ -87,15 +87,16 @@ func TestResolveSource(t *testing.T) {
 func TestAllSourceNames(t *testing.T) {
 	sourceNames := AllSourceNames()
 
-	if len(sourceNames) != 4 {
-		t.Fatalf("expected 4 source names, got %d", len(sourceNames))
+	if len(sourceNames) != 5 {
+		t.Fatalf("expected 5 source names, got %d", len(sourceNames))
 	}
 
 	expectedNames := map[string]bool{
-		"uscode":     false,
-		"cfr":        false,
-		"california": false,
-		"archive":    false,
+		"uscode":       false,
+		"cfr":          false,
+		"california":   false,
+		"archive":      false,
+		"parliamentary": false,
 	}
 
 	for _, name := range sourceNames {
