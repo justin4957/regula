@@ -5347,30 +5347,50 @@ func runReportScenarios(report *draft.LegislativeImpactReport, libraryPath strin
 func searchCmd() *cobra.Command {
 	var sourcePath string
 	var committeeQuery string
+	var keywordQuery string
+	var templateName string
 	var listCommittees bool
+	var listTemplates bool
 	var formatOutput string
+	var limitResults int
 
 	cmd := &cobra.Command{
 		Use:   "search",
-		Short: "Search for committee jurisdictions in House Rules",
-		Long: `Search for committees with jurisdiction over a specific topic.
+		Short: "Search for committee jurisdictions or procedural keywords in House Rules",
+		Long: `Search House Rules by committee jurisdiction or procedural keyword.
 
+COMMITTEE SEARCH (Rule X):
 Uses Rule X, clause 1 of the House Rules to find which committee
 has jurisdiction over a given subject matter.
+
+KEYWORD SEARCH (all rules):
+Searches across all House Rules for procedural concepts. Use --keyword
+for free-text search or --template for pre-built procedural queries.
 
 Examples:
   # Find committees with cybersecurity jurisdiction
   regula search --source house-rules-119th.txt --committee cybersecurity
 
-  # Find committees handling energy policy
-  regula search --source house-rules-119th.txt --committee energy
+  # Search for "quorum" across all rules
+  regula search --source house-rules-119th.txt --keyword quorum
+
+  # Use a pre-built template for voting procedures
+  regula search --source house-rules-119th.txt --template voting
+
+  # List available templates
+  regula search --list-templates
 
   # List all committees and their jurisdictions
   regula search --source house-rules-119th.txt --list-committees
 
-  # Output as JSON
-  regula search --source house-rules-119th.txt --committee banking --format json`,
+  # Output as JSON with limit
+  regula search --source house-rules-119th.txt --keyword amendment --format json --limit 5`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Handle --list-templates (no source required)
+			if listTemplates {
+				return outputTemplateList(formatOutput)
+			}
+
 			if sourcePath == "" {
 				return fmt.Errorf("--source flag is required")
 			}
@@ -5381,6 +5401,36 @@ Examples:
 				return fmt.Errorf("failed to read source file: %w", err)
 			}
 			text := string(data)
+
+			// Handle --keyword or --template search (procedural keyword navigator)
+			if keywordQuery != "" || templateName != "" {
+				searcher := extract.NewKeywordSearcher()
+				searcher.ParseHouseRules(text)
+
+				var matches []extract.KeywordMatch
+				var queryLabel string
+
+				if templateName != "" {
+					matches = searcher.SearchWithTemplate(templateName)
+					queryLabel = templateName + " (template)"
+				} else {
+					matches = searcher.Search(keywordQuery)
+					queryLabel = keywordQuery
+				}
+
+				if len(matches) == 0 {
+					fmt.Printf("No matches found for %q\n", queryLabel)
+					return nil
+				}
+
+				if limitResults > 0 && len(matches) > limitResults {
+					matches = matches[:limitResults]
+				}
+
+				return outputKeywordResults(matches, queryLabel, formatOutput)
+			}
+
+			// Handle committee-based search (original functionality)
 
 			// Find Rule X section
 			ruleXStart := strings.Index(text, "RULE X")
@@ -5413,7 +5463,7 @@ Examples:
 
 			// Handle --committee search
 			if committeeQuery == "" {
-				return fmt.Errorf("--committee flag is required (or use --list-committees)")
+				return fmt.Errorf("use --committee, --keyword, --template, --list-committees, or --list-templates")
 			}
 
 			matches := extract.SearchCommitteeByTopic(committees, committeeQuery)
@@ -5428,8 +5478,12 @@ Examples:
 
 	cmd.Flags().StringVar(&sourcePath, "source", "", "Path to House Rules source file")
 	cmd.Flags().StringVar(&committeeQuery, "committee", "", "Topic to search for in committee jurisdictions")
+	cmd.Flags().StringVar(&keywordQuery, "keyword", "", "Keyword to search across all House Rules")
+	cmd.Flags().StringVar(&templateName, "template", "", "Pre-built template (voting, quorum, amendments, debate, etc.)")
 	cmd.Flags().BoolVar(&listCommittees, "list-committees", false, "List all committees and their jurisdictions")
+	cmd.Flags().BoolVar(&listTemplates, "list-templates", false, "List available procedural keyword templates")
 	cmd.Flags().StringVar(&formatOutput, "format", "table", "Output format (table, json)")
+	cmd.Flags().IntVar(&limitResults, "limit", 0, "Limit number of results (0 for unlimited)")
 
 	return cmd
 }
@@ -5523,4 +5577,107 @@ func outputSearchResults(matches []extract.CommitteeJurisdictionMatch, query, fo
 
 	fmt.Printf("\nTotal: %d matches across %d committees\n", len(matches), len(byCommittee))
 	return nil
+}
+
+// outputKeywordResults prints keyword search results.
+func outputKeywordResults(matches []extract.KeywordMatch, query, format string) error {
+	if format == "json" {
+		type jsonMatch struct {
+			Rule        string `json:"rule"`
+			RuleTitle   string `json:"rule_title"`
+			Clause      string `json:"clause"`
+			ClauseTitle string `json:"clause_title,omitempty"`
+			Context     string `json:"context"`
+			Score       int    `json:"score"`
+			MatchCount  int    `json:"match_count"`
+		}
+		var jsonMatches []jsonMatch
+		for _, m := range matches {
+			jsonMatches = append(jsonMatches, jsonMatch{
+				Rule:        m.Rule,
+				RuleTitle:   m.RuleTitle,
+				Clause:      m.Clause,
+				ClauseTitle: m.ClauseTitle,
+				Context:     m.Context,
+				Score:       m.Score,
+				MatchCount:  m.MatchCount,
+			})
+		}
+		data, err := json.MarshalIndent(jsonMatches, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+
+	// Table format
+	fmt.Printf("Search results for %q\n", query)
+	fmt.Println(strings.Repeat("═", 70))
+
+	for i, m := range matches {
+		ruleRef := fmt.Sprintf("Rule %s, clause %s", m.Rule, m.Clause)
+		if m.ClauseTitle != "" {
+			fmt.Printf("\n[%d] %s: %s\n", i+1, ruleRef, m.ClauseTitle)
+		} else if m.RuleTitle != "" {
+			fmt.Printf("\n[%d] %s (%s)\n", i+1, ruleRef, m.RuleTitle)
+		} else {
+			fmt.Printf("\n[%d] %s\n", i+1, ruleRef)
+		}
+		fmt.Printf("    Context: %q\n", m.Context)
+		fmt.Printf("    Matches: %d (score: %d)\n", m.MatchCount, m.Score)
+	}
+
+	fmt.Printf("\nTotal: %d matches\n", len(matches))
+	return nil
+}
+
+// outputTemplateList prints the available procedural keyword templates.
+func outputTemplateList(format string) error {
+	templates := extract.GetTemplates()
+
+	if format == "json" {
+		type templateInfo struct {
+			Name     string   `json:"name"`
+			Keywords []string `json:"keywords"`
+		}
+		var templateList []templateInfo
+		for _, name := range templates {
+			templateList = append(templateList, templateInfo{
+				Name:     name,
+				Keywords: extract.ProceduralKeywords[name],
+			})
+		}
+		data, err := json.MarshalIndent(templateList, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+
+	// Table format
+	fmt.Println("Available Procedural Keyword Templates")
+	fmt.Println(strings.Repeat("═", 70))
+
+	for _, name := range templates {
+		keywords := extract.ProceduralKeywords[name]
+		keywordSummary := strings.Join(keywords[:min(len(keywords), 5)], ", ")
+		if len(keywords) > 5 {
+			keywordSummary += fmt.Sprintf(", ... (%d total)", len(keywords))
+		}
+		fmt.Printf("\n%s:\n", name)
+		fmt.Printf("  Keywords: %s\n", keywordSummary)
+	}
+
+	fmt.Printf("\nTotal: %d templates\n", len(templates))
+	fmt.Println("\nUsage: regula search --source <file> --template <template-name>")
+	return nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
