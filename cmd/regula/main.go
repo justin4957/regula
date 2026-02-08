@@ -1755,16 +1755,20 @@ Example:
 func compareCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "compare",
-		Short: "Compare multiple regulation documents",
+		Short: "Compare regulation documents or House Rules versions",
 		Long: `Compare two or more regulation documents to find shared definitions,
 rights, obligations, and external reference targets.
 
 Outputs structural comparison, concept overlaps, and external reference analysis.
 
+Commands:
+  rules     Compare two versions of House Rules (e.g., 118th vs 119th Congress)
+
 Example:
   regula compare --sources testdata/gdpr.txt,testdata/ccpa.txt
   regula compare --sources testdata/gdpr.txt,testdata/ccpa.txt --format json
-  regula compare --sources testdata/gdpr.txt,testdata/ccpa.txt,testdata/eu-ai-act.txt --format dot --output comparison.dot`,
+  regula compare --sources testdata/gdpr.txt,testdata/ccpa.txt,testdata/eu-ai-act.txt --format dot --output comparison.dot
+  regula compare rules --base house-rules-118th.txt --target house-rules-119th.txt`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sourcesStr, _ := cmd.Flags().GetString("sources")
 			formatStr, _ := cmd.Flags().GetString("format")
@@ -1918,7 +1922,134 @@ Example:
 	cmd.Flags().StringP("format", "f", "table", "Output format (table, json, dot)")
 	cmd.Flags().StringP("output", "o", "", "Output file path")
 
+	cmd.AddCommand(compareRulesCmd())
+
 	return cmd
+}
+
+func compareRulesCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "rules",
+		Short: "Compare two versions of House Rules",
+		Long: `Compare two versions of House Rules (e.g., 118th vs 119th Congress) to track
+rule changes, added/removed/modified clauses, and structural differences.
+
+The output shows:
+  - Summary of rules modified, clauses added/removed/modified
+  - Detailed changes organized by rule
+  - Similarity scores for modified clauses
+  - Change summaries (minor, moderate, substantial, major)
+
+Example:
+  regula compare rules --base house-rules-118th.txt --target house-rules-119th.txt
+  regula compare rules --base house-rules-118th.txt --target house-rules-119th.txt --format json
+  regula compare rules --base 118th.txt --target 119th.txt --threshold 80`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			basePath, _ := cmd.Flags().GetString("base")
+			targetPath, _ := cmd.Flags().GetString("target")
+			formatStr, _ := cmd.Flags().GetString("format")
+			output, _ := cmd.Flags().GetString("output")
+			threshold, _ := cmd.Flags().GetInt("threshold")
+
+			if basePath == "" || targetPath == "" {
+				return fmt.Errorf("both --base and --target flags are required")
+			}
+
+			// Read base file
+			baseContent, err := os.ReadFile(basePath)
+			if err != nil {
+				return fmt.Errorf("failed to read base file: %w", err)
+			}
+
+			// Read target file
+			targetContent, err := os.ReadFile(targetPath)
+			if err != nil {
+				return fmt.Errorf("failed to read target file: %w", err)
+			}
+
+			// Extract version labels from filenames
+			baseVersion := extractCongressLabel(basePath)
+			targetVersion := extractCongressLabel(targetPath)
+
+			// Create differ and compare
+			differ := extract.NewRulesDiffer(string(baseContent), string(targetContent))
+			report := differ.Compare(baseVersion, targetVersion)
+
+			var outputContent []byte
+
+			switch formatStr {
+			case "table", "text":
+				if threshold > 0 {
+					// Filter to significant changes only
+					significant := report.GetSignificantChanges(threshold)
+					fmt.Printf("Showing changes with similarity <= %d%%\n\n", threshold)
+					for _, change := range significant {
+						fmt.Printf("Rule %s, Clause %s: %s", change.Rule, change.Clause, change.Type)
+						if change.Summary != "" {
+							fmt.Printf(" - %s", change.Summary)
+						}
+						if change.SimilarityScore > 0 {
+							fmt.Printf(" (%d%% similar)", change.SimilarityScore)
+						}
+						fmt.Println()
+					}
+				} else {
+					fmt.Print(report.String())
+				}
+			case "json":
+				jsonData, err := report.ToJSON()
+				if err != nil {
+					return fmt.Errorf("failed to serialize JSON: %w", err)
+				}
+				outputContent = jsonData
+				if output == "" {
+					fmt.Println(string(jsonData))
+				}
+			default:
+				return fmt.Errorf("unknown format: %s (use table, text, or json)", formatStr)
+			}
+
+			if output != "" && len(outputContent) > 0 {
+				if err := os.WriteFile(output, outputContent, 0644); err != nil {
+					return fmt.Errorf("failed to write output file: %w", err)
+				}
+				fmt.Printf("Report written to: %s\n", output)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().String("base", "", "Path to the base (older) House Rules file")
+	cmd.Flags().String("target", "", "Path to the target (newer) House Rules file")
+	cmd.Flags().StringP("format", "f", "table", "Output format (table, text, json)")
+	cmd.Flags().StringP("output", "o", "", "Output file path")
+	cmd.Flags().Int("threshold", 0, "Show only changes with similarity <= threshold (0 = show all)")
+
+	return cmd
+}
+
+// extractCongressLabel extracts a Congress label from a filename.
+func extractCongressLabel(path string) string {
+	base := filepath.Base(path)
+	base = strings.TrimSuffix(base, filepath.Ext(base))
+
+	// Try to find congress number patterns like "118th", "119th"
+	for _, suffix := range []string{"th", "st", "nd", "rd"} {
+		if idx := strings.Index(base, suffix); idx > 0 {
+			// Find the start of the number
+			start := idx
+			for start > 0 && base[start-1] >= '0' && base[start-1] <= '9' {
+				start--
+			}
+			if start < idx {
+				return base[start:idx+len(suffix)] + " Congress"
+			}
+		}
+	}
+
+	// Fall back to filename
+	return base
 }
 
 func refsCmd() *cobra.Command {
