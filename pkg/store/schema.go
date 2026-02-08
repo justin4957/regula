@@ -474,6 +474,27 @@ const (
 	LegalBasisLegitimateInterest = "reg:LegitimateInterest"
 )
 
+// Congressional Committee Classes and Properties.
+const (
+	// ClassCommittee represents a congressional committee.
+	ClassCommittee = "reg:Committee"
+
+	// ClassJurisdictionTopic represents a committee jurisdiction topic.
+	ClassJurisdictionTopic = "reg:JurisdictionTopic"
+
+	// PropHasJurisdiction links a committee to its jurisdiction topics.
+	PropHasJurisdiction = "reg:hasJurisdiction"
+
+	// PropJurisdictionText contains the text of a jurisdiction topic.
+	PropJurisdictionText = "reg:jurisdictionText"
+
+	// PropCommitteeLetter is the rule letter (e.g., "a", "j").
+	PropCommitteeLetter = "reg:committeeLetter"
+
+	// PropSourceClause is the source clause reference (e.g., "Rule X, clause 1(j)(4)").
+	PropSourceClause = "reg:sourceClause"
+)
+
 // URIBuilder helps construct URIs for regulatory entities.
 type URIBuilder struct {
 	BaseURI string
