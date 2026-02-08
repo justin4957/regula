@@ -1928,10 +1928,16 @@ func refsCmd() *cobra.Command {
 
 Shows clustered external references, reference frequency, and per-provision details.
 
+For House Rules, use --format matrix to generate a rule-to-rule cross-reference
+adjacency matrix showing inter-rule dependencies.
+
 Example:
   regula refs --source testdata/gdpr.txt
   regula refs --source testdata/gdpr.txt --format json
-  regula refs --source testdata/eu-ai-act.txt --external-only`,
+  regula refs --source testdata/eu-ai-act.txt --external-only
+  regula refs --source house-rules-119th.txt --format matrix
+  regula refs --source house-rules-119th.txt --format matrix-csv
+  regula refs --source house-rules-119th.txt --format matrix-svg --output matrix.svg`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			source, _ := cmd.Flags().GetString("source")
 			formatStr, _ := cmd.Flags().GetString("format")
@@ -1981,6 +1987,46 @@ Example:
 
 			crossRefAnalyzer := analysis.NewCrossRefAnalyzer()
 			crossRefAnalyzer.AddDocument(docID, label, docStore)
+
+			// Handle matrix formats
+			if strings.HasPrefix(formatStr, "matrix") {
+				report := analysis.GenerateMatrixReport(docStore)
+
+				if report.Matrix.TotalRefs == 0 {
+					fmt.Println("No cross-references found for matrix visualization.")
+					fmt.Println("Matrix format works best with House Rules or similar documents with rule-to-rule references.")
+					return nil
+				}
+
+				var outputContent string
+				switch formatStr {
+				case "matrix":
+					// ASCII table format
+					outputContent = report.String()
+				case "matrix-csv":
+					outputContent = report.Matrix.ToCSV()
+				case "matrix-svg":
+					outputContent = report.Matrix.ToSVGHeatmap()
+				case "matrix-json":
+					jsonData, err := report.ToJSON()
+					if err != nil {
+						return fmt.Errorf("failed to serialize JSON: %w", err)
+					}
+					outputContent = string(jsonData)
+				default:
+					return fmt.Errorf("unknown matrix format: %s (use matrix, matrix-csv, matrix-svg, or matrix-json)", formatStr)
+				}
+
+				if output != "" {
+					if err := os.WriteFile(output, []byte(outputContent), 0644); err != nil {
+						return fmt.Errorf("failed to write file: %w", err)
+					}
+					fmt.Printf("Matrix report exported to: %s\n", output)
+				} else {
+					fmt.Print(outputContent)
+				}
+				return nil
+			}
 
 			if externalOnly {
 				report := crossRefAnalyzer.AnalyzeExternalRefs(docID)
@@ -2043,7 +2089,7 @@ Example:
 	}
 
 	cmd.Flags().StringP("source", "s", "", "Source document path")
-	cmd.Flags().StringP("format", "f", "table", "Output format (table, json)")
+	cmd.Flags().StringP("format", "f", "table", "Output format (table, json, matrix, matrix-csv, matrix-svg, matrix-json)")
 	cmd.Flags().StringP("output", "o", "", "Output file path")
 	cmd.Flags().Bool("external-only", false, "Show only external references")
 
