@@ -481,6 +481,259 @@ const (
 	LegalBasisLegitimateInterest = "reg:LegitimateInterest"
 )
 
+// Deliberation Classes - Types for meetings, decisions, and deliberation tracking.
+const (
+	// ClassMeeting represents a deliberation meeting.
+	ClassMeeting = "reg:Meeting"
+
+	// ClassAgendaItem represents an item on a meeting agenda.
+	ClassAgendaItem = "reg:AgendaItem"
+
+	// ClassMotion represents a formal motion or amendment.
+	ClassMotion = "reg:Motion"
+
+	// ClassDeliberationDecision represents a decision made during deliberations.
+	// Named to avoid conflict with existing ClassDecision (EU decision).
+	ClassDeliberationDecision = "reg:DeliberationDecision"
+
+	// ClassVoteRecord represents a vote record.
+	ClassVoteRecord = "reg:VoteRecord"
+
+	// ClassIndividualVote represents an individual stakeholder's vote.
+	ClassIndividualVote = "reg:IndividualVote"
+
+	// ClassIntervention represents a speaker's intervention.
+	ClassIntervention = "reg:Intervention"
+
+	// ClassActionItem represents an action item assigned during a meeting.
+	ClassActionItem = "reg:ActionItem"
+
+	// ClassStakeholder represents a participant in deliberations.
+	ClassStakeholder = "reg:Stakeholder"
+
+	// ClassDeliberationProcess represents an ongoing deliberation process.
+	ClassDeliberationProcess = "reg:DeliberationProcess"
+)
+
+// Deliberation Meeting Properties - Temporal anchors and meeting structure.
+const (
+	// PropMeetingDate is the date of a meeting.
+	PropMeetingDate = "reg:meetingDate"
+
+	// PropMeetingSequence is the meeting number within its series.
+	PropMeetingSequence = "reg:meetingSequence"
+
+	// PropMeetingSeries identifies the meeting series (e.g., "Working Group A").
+	PropMeetingSeries = "reg:meetingSeries"
+
+	// PropMeetingStatus indicates the meeting status (scheduled, completed, etc.).
+	PropMeetingStatus = "reg:meetingStatus"
+
+	// PropMeetingLocation is where the meeting is held.
+	PropMeetingLocation = "reg:meetingLocation"
+
+	// PropHasAgendaItem links a meeting to its agenda items.
+	PropHasAgendaItem = "reg:hasAgendaItem"
+
+	// PropPreviousMeeting links to the preceding meeting in the series.
+	PropPreviousMeeting = "reg:previousMeeting"
+
+	// PropNextMeeting links to the following meeting in the series.
+	PropNextMeeting = "reg:nextMeeting"
+
+	// PropChair indicates the meeting's presiding officer.
+	PropChair = "reg:chair"
+
+	// PropSecretary indicates the meeting's secretary/rapporteur.
+	PropSecretary = "reg:secretary"
+
+	// PropParticipant indicates a meeting participant.
+	PropParticipant = "reg:participant"
+)
+
+// Deliberation Agenda Properties - Agenda item structure and outcomes.
+const (
+	// PropAgendaItemNumber is the number/identifier of an agenda item.
+	PropAgendaItemNumber = "reg:agendaItemNumber"
+
+	// PropAgendaItemOutcome indicates what happened with the item.
+	PropAgendaItemOutcome = "reg:agendaItemOutcome"
+
+	// PropDocumentConsidered links an agenda item to documents discussed.
+	PropDocumentConsidered = "reg:documentConsidered"
+
+	// PropProvisionDiscussed links an agenda item to provisions discussed.
+	PropProvisionDiscussed = "reg:provisionDiscussed"
+
+	// PropDeferredTo indicates the meeting to which an item was deferred.
+	PropDeferredTo = "reg:deferredTo"
+)
+
+// Deliberation Motion Properties - Motions, amendments, and proposals.
+const (
+	// PropMotionStatus indicates the current status of a motion.
+	PropMotionStatus = "reg:motionStatus"
+
+	// PropMotionType classifies the motion (amendment, procedural, substantive).
+	PropMotionType = "reg:motionType"
+
+	// PropProposedBy indicates who proposed a motion or amendment.
+	PropProposedBy = "reg:proposedBy"
+
+	// PropSecondedBy indicates who seconded a motion.
+	PropSecondedBy = "reg:secondedBy"
+
+	// PropSupportedBy indicates stakeholders supporting a position.
+	PropSupportedBy = "reg:supportedBy"
+
+	// PropOpposedBy indicates stakeholders opposing a position.
+	PropOpposedBy = "reg:opposedBy"
+
+	// PropProposedText is the text proposed by an amendment.
+	PropProposedText = "reg:proposedText"
+
+	// PropExistingText is the current text being amended.
+	PropExistingText = "reg:existingText"
+
+	// PropTargetProvision links a motion to the provision it affects.
+	PropTargetProvision = "reg:targetProvision"
+)
+
+// Deliberation Vote Properties - Voting records and positions.
+const (
+	// PropVoteDate is when a vote was taken.
+	PropVoteDate = "reg:voteDate"
+
+	// PropVoteType classifies the vote (roll_call, voice, show_of_hands).
+	PropVoteType = "reg:voteType"
+
+	// PropVoteQuestion is the question put to the vote.
+	PropVoteQuestion = "reg:voteQuestion"
+
+	// PropVoteResult is the outcome of the vote.
+	PropVoteResult = "reg:voteResult"
+
+	// PropVoteFor is the count of votes in favor.
+	PropVoteFor = "reg:voteFor"
+
+	// PropVoteAgainst is the count of votes against.
+	PropVoteAgainst = "reg:voteAgainst"
+
+	// PropVoteAbstain is the count of abstentions.
+	PropVoteAbstain = "reg:voteAbstain"
+
+	// PropVoteAbsent is the count of absent/not voting.
+	PropVoteAbsent = "reg:voteAbsent"
+
+	// PropMajorityRequired indicates the threshold needed.
+	PropMajorityRequired = "reg:majorityRequired"
+
+	// PropVoter links an individual vote to the voter.
+	PropVoter = "reg:voter"
+
+	// PropVotePosition indicates how a stakeholder voted.
+	PropVotePosition = "reg:votePosition"
+
+	// PropVoteExplanation is an optional explanation of vote.
+	PropVoteExplanation = "reg:voteExplanation"
+
+	// PropOnVote links an individual vote to the vote record.
+	PropOnVote = "reg:onVote"
+)
+
+// Deliberation Decision Properties - Outcomes and their effects.
+const (
+	// PropDecisionType classifies the decision (adoption, amendment, rejection).
+	PropDecisionType = "reg:decisionType"
+
+	// PropDecidedAt links a provision to the meeting where it was decided.
+	PropDecidedAt = "reg:decidedAt"
+
+	// PropDiscussedAt links a provision to meetings where it was discussed.
+	PropDiscussedAt = "reg:discussedAt"
+
+	// PropAffectsProvision links a decision to provisions it affects.
+	PropAffectsProvision = "reg:affectsProvision"
+)
+
+// Deliberation Intervention Properties - Speaker contributions.
+const (
+	// PropSpeaker indicates who spoke.
+	PropSpeaker = "reg:speaker"
+
+	// PropSpeakerAffiliation indicates the speaker's organization.
+	PropSpeakerAffiliation = "reg:speakerAffiliation"
+
+	// PropInterventionPosition indicates the speaker's stance.
+	PropInterventionPosition = "reg:interventionPosition"
+
+	// PropInterventionSummary is a brief summary of the intervention.
+	PropInterventionSummary = "reg:interventionSummary"
+
+	// PropInterventionSequence is the order of interventions.
+	PropInterventionSequence = "reg:interventionSequence"
+)
+
+// Deliberation Action Properties - Action item tracking.
+const (
+	// PropActionAssignedTo indicates who is responsible for an action.
+	PropActionAssignedTo = "reg:actionAssignedTo"
+
+	// PropActionDueDate is the deadline for an action item.
+	PropActionDueDate = "reg:actionDueDate"
+
+	// PropActionStatus indicates the current status of an action.
+	PropActionStatus = "reg:actionStatus"
+
+	// PropActionAssignedAt links an action to the meeting where it was assigned.
+	PropActionAssignedAt = "reg:actionAssignedAt"
+
+	// PropActionCompletedAt links an action to the meeting where it was completed.
+	PropActionCompletedAt = "reg:actionCompletedAt"
+
+	// PropActionPriority indicates the urgency of an action.
+	PropActionPriority = "reg:actionPriority"
+
+	// PropActionRelatesTo links an action to related provisions.
+	PropActionRelatesTo = "reg:actionRelatesTo"
+)
+
+// Deliberation Process Properties - Multi-meeting process tracking.
+const (
+	// PropPartOfProcess links a meeting or decision to its parent process.
+	PropPartOfProcess = "reg:partOfProcess"
+
+	// PropProcessStatus indicates the status of a deliberation process.
+	PropProcessStatus = "reg:processStatus"
+
+	// PropProcessType classifies the process (legislation, treaty, policy).
+	PropProcessType = "reg:processType"
+
+	// PropProcessStartDate is when the process began.
+	PropProcessStartDate = "reg:processStartDate"
+
+	// PropProcessEndDate is when the process concluded.
+	PropProcessEndDate = "reg:processEndDate"
+)
+
+// Deliberation Stakeholder Properties - Participant information.
+const (
+	// PropStakeholderType classifies the stakeholder (individual, delegation, etc.).
+	PropStakeholderType = "reg:stakeholderType"
+
+	// PropStakeholderAlias is an alternative name for the stakeholder.
+	PropStakeholderAlias = "reg:stakeholderAlias"
+
+	// PropHasRole links a stakeholder to their roles.
+	PropHasRole = "reg:hasRole"
+
+	// PropRoleScope indicates where a role applies.
+	PropRoleScope = "reg:roleScope"
+
+	// PropMemberOf indicates group/organization membership.
+	PropMemberOf = "reg:memberOf"
+)
+
 // Congressional Committee Classes and Properties.
 const (
 	// ClassCommittee represents a congressional committee.
