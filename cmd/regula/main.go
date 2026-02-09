@@ -437,6 +437,7 @@ Available templates:
 			showTiming, _ := cmd.Flags().GetBool("timing")
 			source, _ := cmd.Flags().GetString("source")
 			listTemplates, _ := cmd.Flags().GetBool("list-templates")
+			fullURI, _ := cmd.Flags().GetBool("full-uri")
 
 			// List templates
 			if listTemplates {
@@ -500,6 +501,11 @@ Available templates:
 				return fmt.Errorf("query error: %w", err)
 			}
 
+			// Apply compact URIs by default unless --full-uri is specified
+			if !fullURI {
+				result = result.WithCompactURIs()
+			}
+
 			// Format output
 			format := query.OutputFormat(formatStr)
 			output, err := result.Format(format)
@@ -526,6 +532,7 @@ Available templates:
 	cmd.Flags().Bool("timing", false, "Show query execution timing")
 	cmd.Flags().StringP("source", "s", "", "Source document to ingest before querying")
 	cmd.Flags().Bool("list-templates", false, "List available query templates")
+	cmd.Flags().Bool("full-uri", false, "Display full URIs instead of compact form (e.g., https://regula.dev/regulations/GDPR:Art17 instead of GDPR:Art17)")
 
 	return cmd
 }
@@ -614,11 +621,11 @@ var queryTemplates = map[string]QueryTemplate{
 	},
 	"definitions": {
 		Name:        "definitions",
-		Description: "List all defined terms with their definitions",
-		Query: `SELECT ?term ?termText ?definition WHERE {
+		Description: "List all defined terms with their full definitions",
+		Query: `SELECT ?termText ?definition WHERE {
   ?term rdf:type reg:DefinedTerm .
   ?term reg:term ?termText .
-  OPTIONAL { ?term reg:definition ?definition . }
+  ?term reg:definition ?definition .
 } ORDER BY ?termText`,
 	},
 	"chapters": {

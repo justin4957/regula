@@ -1309,3 +1309,83 @@ func BenchmarkExecutor_DescribeVariableQuery(b *testing.B) {
 		_, _ = executor.ExecuteDescribeString(queryStr)
 	}
 }
+
+func TestCompactURI(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"https://regula.dev/regulations/GDPR:Art17", "GDPR:Art17"},
+		{"https://regula.dev/regulations/GDPR:Term:personal_data", "GDPR:Term:personal_data"},
+		{"https://regula.dev/ontology#Article", "reg:Article"},
+		{"http://www.w3.org/1999/02/22-rdf-syntax-ns#type", "rdf:type"},
+		{"http://www.w3.org/2000/01/rdf-schema#label", "rdfs:label"},
+		{"http://data.europa.eu/eli/ontology#LegalResource", "eli:LegalResource"},
+		{"some-other-uri", "some-other-uri"},
+		{"GDPR:Art17", "GDPR:Art17"},
+	}
+
+	for _, tc := range tests {
+		result := CompactURI(tc.input)
+		if result != tc.expected {
+			t.Errorf("CompactURI(%q) = %q, want %q", tc.input, result, tc.expected)
+		}
+	}
+}
+
+func TestCompactBindings(t *testing.T) {
+	bindings := []map[string]string{
+		{
+			"article": "https://regula.dev/regulations/GDPR:Art17",
+			"title":   "Right to erasure",
+		},
+		{
+			"article": "https://regula.dev/regulations/GDPR:Art6",
+			"title":   "Lawfulness of processing",
+		},
+	}
+
+	result := CompactBindings(bindings)
+
+	if len(result) != 2 {
+		t.Fatalf("Expected 2 bindings, got %d", len(result))
+	}
+
+	if result[0]["article"] != "GDPR:Art17" {
+		t.Errorf("Expected article to be compacted to GDPR:Art17, got %q", result[0]["article"])
+	}
+	if result[0]["title"] != "Right to erasure" {
+		t.Errorf("Expected title to remain unchanged, got %q", result[0]["title"])
+	}
+	if result[1]["article"] != "GDPR:Art6" {
+		t.Errorf("Expected article to be compacted to GDPR:Art6, got %q", result[1]["article"])
+	}
+}
+
+func TestQueryResult_WithCompactURIs(t *testing.T) {
+	result := &QueryResult{
+		Variables: []string{"article", "title"},
+		Bindings: []map[string]string{
+			{
+				"article": "https://regula.dev/regulations/GDPR:Art17",
+				"title":   "Right to erasure",
+			},
+		},
+		Count: 1,
+	}
+
+	compacted := result.WithCompactURIs()
+
+	// Original should be unchanged
+	if result.Bindings[0]["article"] != "https://regula.dev/regulations/GDPR:Art17" {
+		t.Error("Original result was modified")
+	}
+
+	// Compacted should have short URIs
+	if compacted.Bindings[0]["article"] != "GDPR:Art17" {
+		t.Errorf("Expected compacted article to be GDPR:Art17, got %q", compacted.Bindings[0]["article"])
+	}
+	if compacted.Count != 1 {
+		t.Errorf("Expected count to be preserved, got %d", compacted.Count)
+	}
+}
