@@ -1225,6 +1225,53 @@ const (
 	FormatNTriples OutputFormat = "ntriples"
 )
 
+// Common URI prefixes that can be compacted in output.
+var commonURIPrefixes = []struct {
+	prefix string
+	short  string
+}{
+	{"https://regula.dev/regulations/", ""},
+	{"https://regula.dev/ontology#", "reg:"},
+	{"http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:"},
+	{"http://www.w3.org/2000/01/rdf-schema#", "rdfs:"},
+	{"http://purl.org/dc/terms/", "dc:"},
+	{"http://data.europa.eu/eli/ontology#", "eli:"},
+}
+
+// CompactURI shortens a full URI to a more readable compact form.
+// For example: "https://regula.dev/regulations/GDPR:Art17" -> "GDPR:Art17"
+func CompactURI(uri string) string {
+	for _, p := range commonURIPrefixes {
+		if strings.HasPrefix(uri, p.prefix) {
+			return p.short + strings.TrimPrefix(uri, p.prefix)
+		}
+	}
+	return uri
+}
+
+// CompactBindings applies CompactURI to all values in the bindings.
+func CompactBindings(bindings []map[string]string) []map[string]string {
+	result := make([]map[string]string, len(bindings))
+	for i, binding := range bindings {
+		newBinding := make(map[string]string)
+		for k, v := range binding {
+			newBinding[k] = CompactURI(v)
+		}
+		result[i] = newBinding
+	}
+	return result
+}
+
+// WithCompactURIs returns a copy of the QueryResult with compacted URIs.
+func (r *QueryResult) WithCompactURIs() *QueryResult {
+	return &QueryResult{
+		Variables: r.Variables,
+		Bindings:  CompactBindings(r.Bindings),
+		Count:     r.Count,
+		Metrics:   r.Metrics,
+	}
+}
+
 // Format formats the query result in the specified format.
 func (r *QueryResult) Format(format OutputFormat) (string, error) {
 	switch format {
