@@ -1,0 +1,265 @@
+# International Treaty and Convention Format Pattern
+# Detects and parses international treaties, conventions, and model laws
+# Covers UN treaties, UNCITRAL model laws, WTO agreements, and bilateral treaties
+
+name: "International Treaty"
+format_id: "international-treaty"
+version: "1.0.0"
+jurisdiction: "INTL"
+
+detection:
+  required_indicators:
+    # UN and UNCITRAL indicators
+    - pattern: '(?i)\bUNCITRAL\b'
+      weight: 35
+    - pattern: '(?i)\bModel\s+Law\b'
+      weight: 25
+    - pattern: '(?i)\bUnited\s+Nations\b'
+      weight: 20
+    - pattern: '(?i)\bGeneral\s+Assembly\b'
+      weight: 18
+    - pattern: '(?i)\bConvention\s+on\b'
+      weight: 20
+    - pattern: '(?i)\bTreaty\s+(?:on|of|between)\b'
+      weight: 22
+
+  optional_indicators:
+    # UN system indicators
+    - pattern: '(?i)\bResolution\s+\d+/\d+\b'
+      weight: 15
+    - pattern: '(?i)\bInternational\s+Trade\s+Law\b'
+      weight: 12
+    - pattern: '(?i)\bContracting\s+(?:States?|Parties)\b'
+      weight: 12
+    - pattern: '(?i)\bStates?\s+Parties?\b'
+      weight: 10
+    - pattern: '(?i)\bSignatory\b'
+      weight: 8
+    - pattern: '(?i)\bRatification\b'
+      weight: 10
+    - pattern: '(?i)\bAccession\b'
+      weight: 8
+    - pattern: '(?i)\benacting\s+State\b'
+      weight: 12
+    # WTO indicators
+    - pattern: '(?i)\bWorld\s+Trade\s+Organization\b'
+      weight: 20
+    - pattern: '(?i)\bWTO\b'
+      weight: 18
+    - pattern: '(?i)\bGATT\b'
+      weight: 15
+    - pattern: '(?i)\bGATS\b'
+      weight: 15
+    - pattern: '(?i)\bTRIPS\b'
+      weight: 15
+    - pattern: '(?i)\bMember\s+States?\b'
+      weight: 8
+    # Bilateral treaty indicators
+    - pattern: '(?i)\bHigh\s+Contracting\s+Parties\b'
+      weight: 15
+    - pattern: '(?i)\bbilateral\b'
+      weight: 10
+    - pattern: '(?i)\bmultilateral\b'
+      weight: 10
+    # Structural indicators
+    - pattern: '(?i)\bPreamble\b'
+      weight: 5
+    - pattern: '(?m)^Article\s+\d+'
+      weight: 8
+    - pattern: '(?m)^CHAPTER\s+[IVX]+'
+      weight: 8
+    - pattern: '(?i)\bFinal\s+Clauses?\b'
+      weight: 10
+    - pattern: '(?i)\bEntry\s+into\s+Force\b'
+      weight: 12
+    - pattern: '(?i)\bDenunciation\b'
+      weight: 8
+    - pattern: '(?i)\bReservations?\b'
+      weight: 6
+    # Additional UN/international bodies
+    - pattern: '(?i)\bICAO\b'
+      weight: 12
+    - pattern: '(?i)\bIMO\b'
+      weight: 12
+    - pattern: '(?i)\bWIPO\b'
+      weight: 12
+    - pattern: '(?i)\bILO\b'
+      weight: 12
+    - pattern: '(?i)\bUNESCO\b'
+      weight: 12
+    - pattern: '(?i)\bHague\s+Conference\b'
+      weight: 15
+    - pattern: '(?i)\bVienna\s+Convention\b'
+      weight: 18
+
+  negative_indicators:
+    # EU-specific
+    - pattern: '(?i)\bEuropean\s+Parliament\b'
+      weight: -15
+    - pattern: '\bRegulation\s+\(EU\)\b'
+      weight: -20
+    - pattern: '\bDirective\s+\d+/\d+/E[CU]\b'
+      weight: -15
+    # US-specific
+    - pattern: '\bU\.?S\.?\s+Code\b'
+      weight: -20
+    - pattern: '\bCALIFORNIA\b'
+      weight: -15
+    - pattern: '\bSection\s+\d+\.\d+'
+      weight: -10
+    # UK-specific
+    - pattern: '(?i)\bBE\s+IT\s+ENACTED\b'
+      weight: -20
+    - pattern: '\[\d{4}\s+c\.\s*\d+\]'
+      weight: -15
+
+structure:
+  preamble:
+    start_pattern: '(?i)^The\s+(?:General\s+Assembly|Contracting\s+(?:States|Parties)|High\s+Contracting\s+Parties|States\s+Parties)'
+    end_pattern: '(?i)(?:HAVE\s+AGREED|HEREBY\s+AGREE|AS\s+FOLLOWS|CHAPTER\s+I)'
+    recital_pattern: '(?i)^(?:Recalling|Noting|Considering|Convinced|Recognizing|Desiring|Having\s+regard)'
+
+  hierarchy:
+    - type: "part"
+      pattern: '(?m)^PART\s+([IVXLCDM]+|[A-Z]|\d+)\s*[.:\-]?\s*$'
+      number_group: 1
+      title_follows: true
+
+    - type: "chapter"
+      pattern: '(?m)^CHAPTER\s+([IVXLCDM]+|\d+)\s*$'
+      number_group: 1
+      title_follows: true
+
+    - type: "section"
+      pattern: '(?m)^Section\s+(\d+)\s*[.:]?\s*$'
+      number_group: 1
+      title_follows: true
+
+    - type: "article"
+      pattern: '(?m)^Article\s+(\d+(?:\s+bis)?)\s*$'
+      number_group: 1
+      title_follows: true
+
+    - type: "paragraph"
+      pattern: '^(\d+)\.\s+'
+      number_group: 1
+
+    - type: "point"
+      pattern: '^\(([a-z])\)\s+'
+      number_group: 1
+
+    - type: "subpoint"
+      pattern: '^\(([ivx]+)\)\s+'
+      number_group: 1
+
+definitions:
+  location:
+    - section_title: '(?i)definitions?'
+    - section_title: '(?i)use\s+of\s+terms'
+    - section_number: 2
+
+  pattern: '^\((\d+)\)\s+[\x{2018}\x{2019}''"]([^\x{2018}\x{2019}''"]+)[\x{2018}\x{2019}''"](?:\s+of[^m]*?)?\s*means[:\s]'
+
+references:
+  internal:
+    # Article with optional paragraph: Article 6(1)
+    - pattern: 'Article\s+(\d+(?:\s+bis)?)\s*\((\d+)\)'
+      target: "article"
+      groups:
+        article: 1
+        paragraph: 2
+
+    # Simple article reference: Article 6
+    - pattern: 'Article\s+(\d+(?:\s+bis)?)'
+      target: "article"
+      groups:
+        article: 1
+
+    # Articles range: Articles 5 to 10
+    - pattern: 'Articles\s+(\d+)\s+(?:to|and)\s+(\d+)'
+      target: "article"
+      groups:
+        start_article: 1
+        end_article: 2
+
+    # Paragraph reference: paragraph 1
+    - pattern: '(?i)paragraph\s+(\d+)'
+      target: "paragraph"
+      groups:
+        paragraph: 1
+
+    # Chapter reference: Chapter III, chapter 2
+    - pattern: '(?i)Chapter\s+([IVXLCDM]+|\d+)'
+      target: "chapter"
+      groups:
+        number: 1
+
+    # Subparagraph reference: subparagraph (a)
+    - pattern: '(?i)subparagraph\s+\(([a-z])\)'
+      target: "point"
+      groups:
+        point: 1
+
+  external:
+    # UN Resolution reference: Resolution 51/162
+    - pattern: '(?i)Resolution\s+(\d+)/(\d+)'
+      type: "un_resolution"
+      uri_template: "https://undocs.org/A/RES/{session}/{number}"
+      groups:
+        session: 1
+        number: 2
+
+    # UN General Assembly Resolution with date
+    - pattern: '(?i)General\s+Assembly\s+[Rr]esolution\s+(\d+)/(\d+)'
+      type: "un_ga_resolution"
+      uri_template: "https://undocs.org/A/RES/{session}/{number}"
+      groups:
+        session: 1
+        number: 2
+
+    # UNCITRAL Model Law reference
+    - pattern: '(?i)UNCITRAL\s+Model\s+Law\s+on\s+([A-Za-z\s]+?)(?:\s+\((\d{4})\))?'
+      type: "uncitral_model_law"
+      uri_template: "https://uncitral.un.org/en/texts/{topic}"
+      groups:
+        topic: 1
+        year: 2
+
+    # Vienna Convention reference
+    - pattern: '(?i)Vienna\s+Convention\s+on\s+([A-Za-z\s]+?)(?:\s+\((\d{4})\))?'
+      type: "vienna_convention"
+      uri_template: ""
+      groups:
+        topic: 1
+        year: 2
+
+    # Hague Convention reference
+    - pattern: '(?i)Hague\s+Convention\s+(?:on\s+)?([A-Za-z\s]+?)(?:\s+\((\d{4})\))?'
+      type: "hague_convention"
+      uri_template: "https://www.hcch.net/en/instruments/conventions"
+      groups:
+        topic: 1
+        year: 2
+
+    # WTO Agreement reference
+    - pattern: '(?i)(?:WTO\s+)?Agreement\s+on\s+([A-Za-z\s]+)'
+      type: "wto_agreement"
+      uri_template: "https://www.wto.org/english/docs_e/legal_e/{agreement}_e.htm"
+      groups:
+        agreement: 1
+
+    # GATT reference
+    - pattern: '(?i)GATT\s+(?:Article\s+)?([IVXLCDM]+|\d+)?'
+      type: "gatt"
+      uri_template: "https://www.wto.org/english/docs_e/legal_e/gatt47_e.htm"
+      groups:
+        article: 1
+
+    # Generic treaty reference
+    - pattern: '(?i)(?:the\s+)?([A-Z][a-z]+)\s+(?:Convention|Treaty)\s+(?:on\s+)?([A-Za-z\s]+?)(?:\s+\((\d{4})\))?'
+      type: "treaty"
+      uri_template: ""
+      groups:
+        name: 1
+        topic: 2
+        year: 3
