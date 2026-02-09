@@ -364,6 +364,80 @@ const (
 
 	// PropTemporalDescription is the full matched text of the temporal qualifier.
 	PropTemporalDescription = "reg:temporalDescription"
+
+	// PropValidFrom indicates when an entity became valid.
+	PropValidFrom = "reg:validFrom"
+
+	// PropValidUntil indicates when an entity ceased to be valid.
+	PropValidUntil = "reg:validUntil"
+
+	// PropAdoptedDate is when an entity was formally adopted.
+	PropAdoptedDate = "reg:adoptedDate"
+
+	// PropSupersededDate is when an entity was superseded by a newer version.
+	PropSupersededDate = "reg:supersededDate"
+)
+
+// Version Properties - Document and entity versioning.
+const (
+	// PropVersionOf links a version to its canonical/abstract entity.
+	// Example: <GDPR:Art17:v2> reg:versionOf <GDPR:Art17>
+	PropVersionOf = "reg:versionOf"
+
+	// PropPreviousVersion links to the direct predecessor version.
+	PropPreviousVersion = "reg:previousVersion"
+
+	// PropNextVersion links to the direct successor version.
+	PropNextVersion = "reg:nextVersion"
+
+	// PropCurrentVersion marks the current/active version of an entity.
+	// Example: <GDPR:Art17> reg:currentVersion <GDPR:Art17:v3>
+	PropCurrentVersion = "reg:currentVersion"
+
+	// PropVersionNumber is the version number identifier.
+	PropVersionNumber = "reg:versionNumber"
+
+	// PropVersionStatus indicates the version status (draft, active, superseded).
+	PropVersionStatus = "reg:versionStatus"
+
+	// PropChangedFrom describes what changed from the previous version.
+	PropChangedFrom = "reg:changedFrom"
+
+	// PropDerivedFrom indicates derivation from another entity.
+	PropDerivedFrom = "reg:derivedFrom"
+)
+
+// Named Graph Properties - For temporal/versioned graph management.
+const (
+	// PropInGraph indicates which named graph contains a statement.
+	PropInGraph = "reg:inGraph"
+
+	// PropGraphVersion identifies the version of a named graph.
+	PropGraphVersion = "reg:graphVersion"
+
+	// PropGraphCreatedAt is when a named graph was created.
+	PropGraphCreatedAt = "reg:graphCreatedAt"
+
+	// PropGraphValidFrom is when a named graph became valid.
+	PropGraphValidFrom = "reg:graphValidFrom"
+
+	// PropGraphValidUntil is when a named graph ceased to be valid.
+	PropGraphValidUntil = "reg:graphValidUntil"
+)
+
+// Triple Provenance Properties - Metadata about individual triples.
+const (
+	// PropCreatedAt is when a triple was created.
+	PropCreatedAt = "reg:createdAt"
+
+	// PropModifiedAt is when a triple was last modified.
+	PropModifiedAt = "reg:modifiedAt"
+
+	// PropCreatedBy indicates who/what created a triple.
+	PropCreatedBy = "reg:createdBy"
+
+	// PropModifiedBy indicates who/what last modified a triple.
+	PropModifiedBy = "reg:modifiedBy"
 )
 
 // Provenance Properties - Source and origin tracking.
